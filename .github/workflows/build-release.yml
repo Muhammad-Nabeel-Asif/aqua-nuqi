@@ -137,16 +137,56 @@ jobs:
             release/*.deb
           if-no-files-found: error
 
+      # softprops with draft:false creates a *second* release for the same tag, then
+      # fails finalizing with already_exists. Upload into the Windows draft via gh,
+      # then undraft that single release.
       - name: Attach Ubuntu builds and publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.build-windows.outputs.version }}
-          draft: false
-          prerelease: ${{ needs.build-windows.outputs.prerelease }}
-          make_latest: ${{ needs.build-windows.outputs.prerelease == 'false' }}
-          files: |
-            release/*.AppImage
-            release/*.deb
-            release/latest-linux.yml
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.build-windows.outputs.version }}"
+          TAG="v${VERSION}"
+          PRERELEASE="${{ needs.build-windows.outputs.prerelease }}"
+
+          shopt -s nullglob
+          assets=(release/*.AppImage release/*.deb release/latest-linux.yml)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No Linux release assets found under release/" >&2
+            exit 1
+          fi
+
+          # Prefer the draft Windows created; fall back to any release with this tag.
+          RELEASE_ID=$(gh api "repos/${{ github.repository }}/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$TAG\" and .draft == true) | .id" | head -n1)
+          if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(gh api "repos/${{ github.repository }}/releases" --paginate \
+              --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+          fi
+          if [ -z "$RELEASE_ID" ]; then
+            echo "No GitHub release found for tag $TAG" >&2
+            exit 1
+          fi
+
+          for f in "${assets[@]}"; do
+            name=$(basename "$f")
+            existing=$(gh api "repos/${{ github.repository }}/releases/${RELEASE_ID}/assets" \
+              --jq ".[] | select(.name == \"$name\") | .id" | head -n1 || true)
+            if [ -n "${existing:-}" ]; then
+              gh api --method DELETE "repos/${{ github.repository }}/releases/assets/${existing}"
+            fi
+            gh api --method POST \
+              -H "Content-Type: application/octet-stream" \
+              "repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=${name}" \
+              --input "$f"
+          done
+
+          if [ "$PRERELEASE" = "true" ]; then
+            gh api --method PATCH "repos/${{ github.repository }}/releases/${RELEASE_ID}" \
+              -F draft=false -F prerelease=true -f make_latest=false
+          else
+            gh api --method PATCH "repos/${{ github.repository }}/releases/${RELEASE_ID}" \
+              -F draft=false -F prerelease=false -f make_latest=true
+          fi
+
+          echo "Published $TAG (release id $RELEASE_ID)"
