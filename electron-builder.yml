@@ -10,6 +10,7 @@ directories:
 asar: false
 
 files:
+  - package.json
   - out/**/*
   - drizzle/**/*
   - resources/**/*

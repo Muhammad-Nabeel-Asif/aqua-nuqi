@@ -4,6 +4,20 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Windows packaged install:** frozen identity check failed with
+  `package.json name must be "aqua-nuqi" (frozen). Found ""` because the app looked for
+  `package.json` in the wrong folder under `resources/`. Resolve from the app root and always
+  include `package.json` in the installer payload.
+
+### Changed
+
+- Phase 0B review hardening: draft-until-Linux publish, separate stable concurrency, quality runs
+  `npm run build`, release notes ignore stale `[Unreleased]` on dig builds.
+
+## [0.2.6] — 2026-07-31
+
 ### Added
 
 - **Phase 0B — CI/CD & releases:** GitHub Actions quality gate + Windows/Linux packaging on every

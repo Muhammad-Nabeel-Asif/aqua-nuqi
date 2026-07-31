@@ -31,7 +31,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     try {
-      assertAppIdentity(app.getName())
+      assertAppIdentity(app.getName(), undefined, app.getAppPath())
       assertUserDataPath(app.getPath('userData'))
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)

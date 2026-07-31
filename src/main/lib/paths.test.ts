@@ -12,6 +12,7 @@ import {
   assertUserDataPath,
   resolveAppPaths,
   resolveCanonicalUserData,
+  resolvePackageJsonPath,
 } from './paths'
 
 describe('frozen identity', () => {
@@ -36,6 +37,31 @@ describe('frozen identity', () => {
     expect(() => assertAppIdentity('Wrong Name', APP_ID)).toThrow(AppError)
     expect(() => assertAppIdentity(PRODUCT_NAME, 'com.other.app')).toThrow(AppError)
     expect(() => assertAppIdentity(PRODUCT_NAME, APP_ID)).not.toThrow()
+  })
+
+  it('resolves package.json from the packaged out/main layout (Windows/NSIS)', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aqua-pkg-layout-'))
+    try {
+      const appRoot = path.join(tmp, 'resources', 'app')
+      const mainDir = path.join(appRoot, 'out', 'main')
+      fs.mkdirSync(mainDir, { recursive: true })
+      fs.writeFileSync(
+        path.join(appRoot, 'package.json'),
+        JSON.stringify({ name: PACKAGE_NAME, version: '0.2.6' }),
+        'utf8',
+      )
+
+      // Packaged layout: out/main → ../../package.json (NOT ../../../ which lands in resources/)
+      const found = resolvePackageJsonPath(mainDir)
+      expect(found).toBe(path.resolve(appRoot, 'package.json'))
+      expect(JSON.parse(fs.readFileSync(found!, 'utf8')).name).toBe(PACKAGE_NAME)
+
+      // Also accepts Electron app.getAppPath() as an explicit root
+      const viaAppPath = resolvePackageJsonPath(path.join(tmp, 'missing'), [appRoot])
+      expect(viaAppPath).toBe(path.resolve(appRoot, 'package.json'))
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true })
+    }
   })
 
   it('forces userData basename to PRODUCT_NAME on every platform', () => {

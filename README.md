@@ -1,6 +1,6 @@
 # Aqua Nuqi — Water Plant Management System
 
-[![Latest build](https://img.shields.io/github/v/release/Muhammad-Nabeel-Asif/aqua-nuqi?include_prereleases&label=latest%20build)](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases)
+[![Latest stable](https://img.shields.io/github/v/release/Muhammad-Nabeel-Asif/aqua-nuqi?label=latest%20stable)](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest)
 
 **Download (stable — for the client):**
 

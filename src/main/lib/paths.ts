@@ -11,16 +11,37 @@ import {
 } from '@shared/constants'
 import { AppError } from '@shared/errors'
 
-function readPackageName(): string {
-  const pkgPath = path.join(__dirname, '../../../package.json')
-  const candidates = [pkgPath, path.join(process.cwd(), 'package.json')]
+/**
+ * Resolve package.json in both layouts:
+ * - packaged/bundled main: `…/resources/app/out/main` → `../../package.json`
+ * - source / vitest: `src/main/lib` → `../../../package.json`
+ * - optional Electron `app.getAppPath()` / cwd fallbacks
+ */
+export function resolvePackageJsonPath(
+  fromDir: string = __dirname,
+  extraRoots: string[] = [],
+): string | null {
+  const candidates = [
+    ...extraRoots.map((root) => path.join(root, 'package.json')),
+    path.join(fromDir, '../../package.json'),
+    path.join(fromDir, '../../../package.json'),
+    path.join(process.cwd(), 'package.json'),
+  ]
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      const pkg = JSON.parse(fs.readFileSync(candidate, 'utf8')) as { name?: string }
-      if (pkg.name) return pkg.name
-    }
+    if (fs.existsSync(candidate)) return path.resolve(candidate)
   }
-  return ''
+  return null
+}
+
+function readPackageName(extraRoots: string[] = []): string {
+  const pkgPath = resolvePackageJsonPath(__dirname, extraRoots)
+  if (!pkgPath) return ''
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { name?: string }
+    return pkg.name ?? ''
+  } catch {
+    return ''
+  }
 }
 
 export type AppPaths = {
@@ -39,8 +60,8 @@ export type PathConfig = {
   backupsDir?: string
 }
 
-export function assertFrozenIdentity(): void {
-  const name = readPackageName()
+export function assertFrozenIdentity(extraRoots: string[] = []): void {
+  const name = readPackageName(extraRoots)
   if (name !== PACKAGE_NAME) {
     throw new AppError(
       'FATAL_PATH',
@@ -53,9 +74,14 @@ export function assertFrozenIdentity(): void {
  * Assert runtime identity against frozen constants.
  * Pass Electron's `app.getName()` (and AppUserModelId on Windows) — never the constants
  * themselves, or the check is tautological.
+ * `appPath` should be Electron's `app.getAppPath()` so packaged installs resolve package.json.
  */
-export function assertAppIdentity(runtimeAppName: string, runtimeAppId?: string): void {
-  assertFrozenIdentity()
+export function assertAppIdentity(
+  runtimeAppName: string,
+  runtimeAppId?: string,
+  appPath?: string,
+): void {
+  assertFrozenIdentity(appPath ? [appPath] : [])
   if (runtimeAppName !== PRODUCT_NAME) {
     throw new AppError(
       'FATAL_PATH',

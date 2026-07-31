@@ -172,20 +172,23 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 
 ## Phase 0B — CI/CD, Automated Builds & Release Distribution
 
-**Date:** 2026-07-31 · **Status:** complete
+**Date:** 2026-07-31 · **Status:** partial
 
 ### Built
 
 - `electron-builder.yml` — fixed artifact names (`Aqua-Nuqi-Setup.${ext}`, `Aqua-Nuqi.${ext}`),
   `asar: false`, NSIS assisted/per-user, `deleteAppDataOnUninstall: false`, GitHub publish feed
-- `.github/workflows/build-release.yml` — quality → Windows (creates release) → Linux (appends);
-  concurrency cancel; `dev` (pre-release) vs `stable` (latest) channels
-- `.github/workflows/build-check.yml` — PR quality-only gate
-- `scripts/release-notes.mjs` — CHANGELOG `[Unreleased]` or filtered commits + client install footer
+- `.github/workflows/build-release.yml` — quality (incl. `npm run build`) → Windows (draft
+  release) → Linux (attach + publish); concurrency groups separate push vs stable so a docs
+  push cannot cancel a mid-flight stable; `dev` (pre-release) vs `stable` (latest) channels
+- `.github/workflows/build-check.yml` — PR quality gate (typecheck/lint/test/build)
+- `scripts/release-notes.ts` (+ `.mjs` launcher) — versioned CHANGELOG section, then
+  `[Unreleased]` on stable only, else filtered commits + client install footer
 - `docs/CLIENT-INSTALL-GUIDE.md` — one-page WhatsApp-friendly install guide
 - Packaging safety tests (`src/main/lib/packaging-safety.test.ts`) for frozen identity, fixed
   names, NSIS flags, no unwrapped `customUnInstall`, and `.gitignore` data exclusions
-- README “Getting a build” + latest-build badge + permanent download links
+- CI release safety + release-notes unit tests (`ci-release.test.ts`, `release-notes.test.ts`)
+- README “Getting a build” + latest-**stable** badge + permanent download links
 - `package.json` scripts: `dist:win`, `dist:linux`, `rebuild:electron`, `rebuild:node`
 - Minor version bumped to `0.2.0` (CI patch = `github.run_number`)
 
@@ -239,8 +242,29 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 ### Escalations / questions for the human
 
 - Confirm first stable release on a real Windows laptop (install, shortcuts, upgrade over previous
-  install, uninstall leaves `AppData\Roaming\Aqua Nuqi`).
-- Branch protection requiring the `quality` job should be set in the GitHub UI.
+  install, uninstall leaves `AppData\Roaming\Aqua Nuqi`). Run §0B.4 scenarios 1/4/7 + uninstall;
+  only then flip Status to complete.
+- Branch protection on `main` now requires the `quality` status check (enabled via GitHub API
+  2026-07-31). Confirm in the UI that PR merges cannot bypass it.
 - Code signing (~$70–200/year) still optional; SmartScreen “More info → Run anyway” remains.
 - Repo was switched from private → public so client download links work without auth — confirm
   that is acceptable.
+
+### Review fixes (2026-07-31)
+
+- Status set to **partial** — Windows install/upgrade/uninstall acceptance (#6–#8) still unproven.
+- Concurrency groups include `event_name` + channel; `cancel-in-progress` disabled for stable so
+  a push cannot cancel a mid-flight client release.
+- Windows creates a **draft** release; Linux attaches AppImage/deb then publishes (no half-complete
+  “latest” if Linux fails).
+- `npm run build` added to quality (and PR build-check); Linux artifact upload hard-fails on
+  missing `.deb`.
+- CHANGELOG: Phase 0B notes moved to `## [0.2.6]`; `[Unreleased]` cleared. Dig builds ignore
+  Unreleased so stale bullets cannot pollute notes.
+- README badge tracks latest **stable** only (dropped `include_prereleases`).
+- Branch protection on `main` enabled (required status check: `quality`).
+- Tests: `ci-release.test.ts`, `release-notes.test.ts`.
+- **Windows fatal fix:** packaged installs failed with `package.json name … Found ""`
+  because identity check looked three levels up from `out/main` (lands in `resources/`)
+  instead of two (`resources/app/package.json`). Also list `package.json` under
+  `electron-builder.yml` `files`. Needs a new stable build before retrying the Windows matrix.

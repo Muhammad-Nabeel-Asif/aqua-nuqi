@@ -23,6 +23,11 @@ describe('packaging data-safety (FR-CI-07)', () => {
     expect(yml).not.toMatch(/artifactName:.*\$\{version\}/)
   })
 
+  it('includes package.json in the packaged files (frozen name check on Windows)', () => {
+    const yml = fs.readFileSync(path.join(root, 'electron-builder.yml'), 'utf8')
+    expect(yml).toMatch(/^\s*-\s*package\.json\s*$/m)
+  })
+
   it('keeps deleteAppDataOnUninstall false (assisted installer; do not rely on it alone)', () => {
     const yml = fs.readFileSync(path.join(root, 'electron-builder.yml'), 'utf8')
     expect(yml).toMatch(/deleteAppDataOnUninstall:\s*false/)

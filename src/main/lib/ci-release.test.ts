@@ -1,0 +1,90 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+const root = process.cwd()
+
+function readWorkflow(): string {
+  return fs.readFileSync(path.join(root, '.github', 'workflows', 'build-release.yml'), 'utf8')
+}
+
+function readCheckWorkflow(): string {
+  return fs.readFileSync(path.join(root, '.github', 'workflows', 'build-check.yml'), 'utf8')
+}
+
+function readReadme(): string {
+  return fs.readFileSync(path.join(root, 'README.md'), 'utf8')
+}
+
+function readProgress(): string {
+  return fs.readFileSync(path.join(root, 'docs', 'phases', 'PROGRESS.md'), 'utf8')
+}
+
+describe('CI release safety (Phase 0B review)', () => {
+  it('keeps push and stable in separate concurrency groups; does not cancel stable', () => {
+    const yml = readWorkflow()
+    // Must include event_name / channel so workflow_dispatch stable ≠ push
+    expect(yml).toMatch(
+      /group:\s*build-release-\$\{\{\s*github\.ref\s*\}\}-\$\{\{\s*github\.event_name/,
+    )
+    expect(yml).toMatch(/github\.event\.inputs\.channel/)
+    // Unconditional cancel-in-progress: true would let a docs push kill a stable run
+    expect(yml).not.toMatch(/cancel-in-progress:\s*true\s*\n\nenv:/)
+    expect(yml).toMatch(
+      /cancel-in-progress:\s*\$\{\{\s*github\.event\.inputs\.channel\s*!=\s*'stable'\s*\}\}/,
+    )
+  })
+
+  it('publishes as draft on Windows and only undrafts after Linux assets attach', () => {
+    const yml = readWorkflow()
+    const windowsPublish = yml.slice(
+      yml.indexOf('Create draft release'),
+      yml.indexOf('build-linux:'),
+    )
+    const linuxPublish = yml.slice(yml.indexOf('Attach Ubuntu builds'))
+
+    expect(windowsPublish).toMatch(/draft:\s*true/)
+    expect(windowsPublish).toMatch(/make_latest:\s*false/)
+    expect(linuxPublish).toMatch(/draft:\s*false/)
+    expect(linuxPublish).toMatch(/make_latest:\s*\$\{\{/)
+  })
+
+  it('quality gate runs production build (FR-CI-03)', () => {
+    const release = readWorkflow()
+    const qualityBlock = release.slice(
+      release.indexOf('quality:'),
+      release.indexOf('build-windows:'),
+    )
+    expect(qualityBlock).toMatch(/npm run typecheck/)
+    expect(qualityBlock).toMatch(/npm run lint/)
+    expect(qualityBlock).toMatch(/npm run test/)
+    expect(qualityBlock).toMatch(/npm run build/)
+
+    const check = readCheckWorkflow()
+    expect(check).toMatch(/npm run build/)
+  })
+
+  it('Linux artifact upload hard-fails if .deb is missing', () => {
+    const yml = readWorkflow()
+    const linuxArtifact = yml.slice(
+      yml.indexOf('name: Aqua-Nuqi-Linux'),
+      yml.indexOf('Attach Ubuntu builds'),
+    )
+    expect(linuxArtifact).toMatch(/release\/\*\.AppImage/)
+    expect(linuxArtifact).toMatch(/release\/\*\.deb/)
+    expect(linuxArtifact).toMatch(/if-no-files-found:\s*error/)
+  })
+
+  it('README release badge tracks stable only (no include_prereleases)', () => {
+    const readme = readReadme()
+    expect(readme).toMatch(/img\.shields\.io\/github\/v\/release\/Muhammad-Nabeel-Asif\/aqua-nuqi/)
+    expect(readme).not.toMatch(/include_prereleases/)
+  })
+
+  it('PROGRESS marks Phase 0B partial until Windows upgrade matrix is proven', () => {
+    const progress = readProgress()
+    const phase0b = progress.slice(progress.indexOf('## Phase 0B'))
+    expect(phase0b).toMatch(/\*\*Status:\*\*\s*partial/)
+    expect(phase0b).not.toMatch(/\*\*Status:\*\*\s*complete/)
+  })
+})

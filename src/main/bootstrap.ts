@@ -50,7 +50,7 @@ export type BootstrapResult =
 
 export function bootstrapApp(): BootstrapResult {
   try {
-    assertAppIdentity(app.getName())
+    assertAppIdentity(app.getName(), undefined, app.getAppPath())
     const userData = app.getPath('userData')
     assertUserDataPath(userData)
 

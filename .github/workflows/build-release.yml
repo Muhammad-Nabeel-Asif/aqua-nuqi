@@ -14,10 +14,11 @@ on:
 permissions:
   contents: write
 
-# A newer push makes an in-flight build pointless; cancel it.
+# Push and stable must not share a group: a docs push must never cancel a
+# mid-flight stable publish. Only cancel overlapping push/dev runs.
 concurrency:
-  group: build-release-${{ github.ref }}
-  cancel-in-progress: true
+  group: build-release-${{ github.ref }}-${{ github.event_name }}-${{ github.event.inputs.channel || 'dev' }}
+  cancel-in-progress: ${{ github.event.inputs.channel != 'stable' }}
 
 env:
   NODE_VERSION: '24'
@@ -38,9 +39,12 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test
+      - run: npm run build
 
   # ---------------------------------------------------------------
-  # Windows: builds the installer AND creates the release.
+  # Windows: builds the installer AND creates a DRAFT release.
+  # Draft stays unpublished until Linux attaches its assets, so a
+  # cancelled/failed Linux job cannot leave a half-complete "latest".
   # ---------------------------------------------------------------
   build-windows:
     needs: quality
@@ -90,14 +94,15 @@ jobs:
           path: release/*.exe
           if-no-files-found: error
 
-      - name: Publish release
+      - name: Create draft release (Windows assets)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.APP_VERSION }}
           name: Aqua Nuqi v${{ env.APP_VERSION }}
           body_path: RELEASE_NOTES.md
+          draft: true
           prerelease: ${{ steps.version.outputs.prerelease }}
-          make_latest: ${{ steps.version.outputs.prerelease == 'false' }}
+          make_latest: false
           files: |
             release/*.exe
             release/*.exe.blockmap
@@ -106,7 +111,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------
-  # Ubuntu: appends its artifacts to the SAME release.
+  # Ubuntu: appends its artifacts, then publishes the draft.
   # ---------------------------------------------------------------
   build-linux:
     needs: build-windows
@@ -127,13 +132,16 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Aqua-Nuqi-Linux
-          path: release/*.AppImage
+          path: |
+            release/*.AppImage
+            release/*.deb
           if-no-files-found: error
 
-      - name: Attach Ubuntu builds to the same release
+      - name: Attach Ubuntu builds and publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.build-windows.outputs.version }}
+          draft: false
           prerelease: ${{ needs.build-windows.outputs.prerelease }}
           make_latest: ${{ needs.build-windows.outputs.prerelease == 'false' }}
           files: |
