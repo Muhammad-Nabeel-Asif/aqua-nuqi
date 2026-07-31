@@ -79,9 +79,11 @@ describe('release-notes (FR-CI-05)', () => {
     expect(body).toContain('Phase 1 customers')
   })
 
-  it('repo CHANGELOG has filed 0.2.6 notes and empty Unreleased (no stale bullets)', () => {
+  it('repo CHANGELOG has filed 0.2.6 notes; Unreleased must not re-advertise that stable', () => {
     const text = fs.readFileSync(path.join(process.cwd(), 'docs', 'CHANGELOG.md'), 'utf8')
     expect(readChangelogSection(text, '0.2.6')).toMatch(/Phase 0B/)
-    expect(readChangelogUnreleased(text)).toBe('')
+    // Unreleased may hold the next ship's notes; it must not still claim v0.2.6 is new.
+    const unreleased = readChangelogUnreleased(text)
+    expect(unreleased).not.toMatch(/First stable release:\s*\*\*v0\.2\.6\*\*/)
   })
 })
