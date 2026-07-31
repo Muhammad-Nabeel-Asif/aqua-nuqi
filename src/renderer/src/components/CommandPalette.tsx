@@ -55,9 +55,15 @@ export function CommandPalette({ items }: { items: Item[] }) {
           className="w-full border-b px-4 py-3 text-sm outline-none"
           onKeyDown={(e) => {
             if (e.key === 'Escape') setOpen(false)
-            if (e.key === 'Enter' && filtered[0]) {
-              navigate(filtered[0].to)
-              setOpen(false)
+            if (e.key === 'Enter') {
+              // Prefer customer hits over sidebar nav when search matches a customer.
+              if (customers[0]) {
+                navigate(`/customers/${customers[0].id}`)
+                setOpen(false)
+              } else if (filtered[0]) {
+                navigate(filtered[0].to)
+                setOpen(false)
+              }
             }
           }}
         />

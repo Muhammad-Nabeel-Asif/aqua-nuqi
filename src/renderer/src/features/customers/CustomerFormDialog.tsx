@@ -5,11 +5,14 @@ import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { api } from '@renderer/lib/api'
 import type { AreaDto, CreateCustomerInput, CustomerDto, RouteDto } from '@shared/contracts'
+import { todayBusinessDate } from '@shared/date'
 import { toPaisa } from '@shared/money'
 
 type CustomerFormState = {
   name: string
   customerType: CreateCustomerInput['customerType']
+  joinedOn: string
+  status: NonNullable<CreateCustomerInput['status']>
   phonePrimary: string
   phoneSecondary: string
   whatsappNumber: string
@@ -18,8 +21,14 @@ type CustomerFormState = {
   landmark: string
   areaId: string
   routeId: string
+  deliveryNotes: string
   billingMode: CreateCustomerInput['billingMode']
   rate: string
+  packageAmount: string
+  packageIncludedQty: string
+  packageExcessRate: string
+  billingDay: string
+  creditLimit: string
   securityDepositHeld: string
   openingBottles: string
   openingBalance: string
@@ -50,6 +59,8 @@ export function CustomerFormDialog({
   const [form, setForm] = useState<CustomerFormState>({
     name: customer?.name ?? '',
     customerType: customer?.customerType ?? 'residential',
+    joinedOn: customer?.joinedOn ?? todayBusinessDate(),
+    status: customer?.status ?? 'active',
     phonePrimary: customer?.phonePrimary ?? '',
     phoneSecondary: customer?.phoneSecondary ?? '',
     whatsappNumber: customer?.whatsappNumber ?? '',
@@ -58,12 +69,20 @@ export function CustomerFormDialog({
     landmark: customer?.landmark ?? '',
     areaId: customer?.areaId == null ? '' : String(customer.areaId),
     routeId: customer?.routeId == null ? '' : String(customer.routeId),
+    deliveryNotes: customer?.deliveryNotes ?? '',
     billingMode: customer?.billingMode ?? 'per_bottle',
-    rate: '',
-    securityDepositHeld: String(customer?.securityDepositHeld ?? 0),
+    rate: customer?.currentRate != null ? String(customer.currentRate / 100) : '',
+    packageAmount: customer?.packageAmount != null ? String(customer.packageAmount / 100) : '',
+    packageIncludedQty:
+      customer?.packageIncludedQty != null ? String(customer.packageIncludedQty) : '',
+    packageExcessRate:
+      customer?.packageExcessRate != null ? String(customer.packageExcessRate / 100) : '',
+    billingDay: customer?.billingDay != null ? String(customer.billingDay) : '',
+    creditLimit: customer?.creditLimit != null ? String(customer.creditLimit / 100) : '',
+    securityDepositHeld: String((customer?.securityDepositHeld ?? 0) / 100),
     openingBottles: String(customer?.openingBottles ?? 0),
     openingBalance: String(customer?.openingBalance ? customer.openingBalance / 100 : 0),
-    openingAsOf: customer?.openingAsOf ?? new Date().toISOString().slice(0, 10),
+    openingAsOf: customer?.openingAsOf ?? todayBusinessDate(),
     notes: customer?.notes ?? '',
     scheduleEnabled: Boolean(customer?.schedule),
     scheduleMode: customer?.schedule?.mode ?? 'weekdays',
@@ -78,39 +97,50 @@ export function CustomerFormDialog({
     })
     if (!editing) void api.customers.nextCode().then((r) => setCode(r.code))
   }, [editing])
-  function set(key: string, value: unknown) {
-    setForm((v) => ({ ...v, [key]: value }) as CustomerFormState)
+  function set<K extends keyof CustomerFormState>(key: K, value: CustomerFormState[K]) {
+    setForm((v) => ({ ...v, [key]: value }))
   }
   async function save() {
     try {
-      const {
-        rate,
-        securityDepositHeld,
-        openingBottles,
-        openingBalance,
-        scheduleEnabled,
-        scheduleMode,
-        scheduleWeekdays,
-        scheduleIntervalDays,
-        scheduleDefaultQty,
-        ...textFields
-      } = form
       const input: CreateCustomerInput = {
-        ...textFields,
+        name: form.name,
         code,
+        customerType: form.customerType,
+        joinedOn: form.joinedOn || null,
+        status: form.status,
+        phonePrimary: form.phonePrimary || null,
+        phoneSecondary: form.phoneSecondary || null,
+        whatsappNumber: form.whatsappNumber || null,
+        email: form.email || null,
+        addressLine: form.addressLine || null,
+        landmark: form.landmark || null,
         areaId: form.areaId ? Number(form.areaId) : null,
         routeId: form.routeId ? Number(form.routeId) : null,
-        securityDepositHeld: toPaisa(securityDepositHeld || 0),
-        openingBalance: toPaisa(openingBalance || 0),
-        openingBottles: Number(openingBottles || 0),
-        ...(rate ? { rate: toPaisa(rate) } : {}),
-        schedule: scheduleEnabled
+        deliveryNotes: form.deliveryNotes || null,
+        billingMode: form.billingMode,
+        packageAmount:
+          form.billingMode === 'monthly_package' ? toPaisa(form.packageAmount || 0) : null,
+        packageIncludedQty:
+          form.billingMode === 'monthly_package' ? Number(form.packageIncludedQty || 0) : null,
+        packageExcessRate:
+          form.billingMode === 'monthly_package' ? toPaisa(form.packageExcessRate || 0) : null,
+        billingDay: form.billingDay ? Number(form.billingDay) : null,
+        creditLimit: form.creditLimit ? toPaisa(form.creditLimit) : null,
+        securityDepositHeld: toPaisa(form.securityDepositHeld || 0),
+        openingBalance: toPaisa(form.openingBalance || 0),
+        openingBottles: Number(form.openingBottles || 0),
+        openingAsOf: form.openingAsOf || null,
+        notes: form.notes || null,
+        ...(form.rate && !editing ? { rate: toPaisa(form.rate) } : {}),
+        schedule: form.scheduleEnabled
           ? {
-              mode: scheduleMode,
-              weekdays: scheduleMode === 'weekdays' ? scheduleWeekdays : null,
+              mode: form.scheduleMode,
+              weekdays: form.scheduleMode === 'weekdays' ? form.scheduleWeekdays : null,
               intervalDays:
-                scheduleMode === 'interval_days' ? Number(scheduleIntervalDays || 1) : null,
-              defaultQty: Number(scheduleDefaultQty || 1),
+                form.scheduleMode === 'interval_days'
+                  ? Number(form.scheduleIntervalDays || 1)
+                  : null,
+              defaultQty: Number(form.scheduleDefaultQty || 1),
             }
           : null,
       }
@@ -146,8 +176,20 @@ export function CustomerFormDialog({
           <Select
             label="Type"
             value={form.customerType}
-            onChange={(v) => set('customerType', v)}
+            onChange={(v) => set('customerType', v as CustomerFormState['customerType'])}
             options={['residential', 'commercial', 'walk_in']}
+          />
+          <Field
+            label="Joining date"
+            value={form.joinedOn}
+            onChange={(v) => set('joinedOn', v)}
+            type="date"
+          />
+          <Select
+            label="Status"
+            value={form.status}
+            onChange={(v) => set('status', v as CustomerFormState['status'])}
+            options={['active', 'paused', 'inactive']}
           />
         </Section>
         <Section title="Contact">
@@ -172,8 +214,6 @@ export function CustomerFormDialog({
           <Field label="Email" value={form.email} onChange={(v) => set('email', v)} />
           <Field label="Address" value={form.addressLine} onChange={(v) => set('addressLine', v)} />
           <Field label="Landmark" value={form.landmark} onChange={(v) => set('landmark', v)} />
-        </Section>
-        <Section title="Billing">
           <Select
             label="Area"
             value={form.areaId}
@@ -188,20 +228,66 @@ export function CustomerFormDialog({
               .filter((r) => !form.areaId || r.areaId === Number(form.areaId))
               .map((r) => `${r.id}:${r.name}`)}
           />
+          <Field
+            label="Delivery notes"
+            value={form.deliveryNotes}
+            onChange={(v) => set('deliveryNotes', v)}
+          />
+        </Section>
+        <Section title="Billing">
           <Select
             label="Billing mode"
             value={form.billingMode}
-            onChange={(v) => set('billingMode', v)}
+            onChange={(v) => set('billingMode', v as CustomerFormState['billingMode'])}
             options={['per_bottle', 'monthly_package']}
           />
-          {!editing && (
-            <Field
-              label="Rate (Rs)"
-              value={form.rate}
-              onChange={(v) => set('rate', v)}
-              type="number"
-            />
+          {form.billingMode === 'per_bottle' ? (
+            !editing ? (
+              <Field
+                label="Rate (Rs)"
+                value={form.rate}
+                onChange={(v) => set('rate', v)}
+                type="number"
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground sm:col-span-2">
+                Change the per-bottle rate from the customer detail page (keeps history).
+              </p>
+            )
+          ) : (
+            <>
+              <Field
+                label="Package amount (Rs)"
+                value={form.packageAmount}
+                onChange={(v) => set('packageAmount', v)}
+                type="number"
+              />
+              <Field
+                label="Included quantity"
+                value={form.packageIncludedQty}
+                onChange={(v) => set('packageIncludedQty', v)}
+                type="number"
+              />
+              <Field
+                label="Excess rate (Rs)"
+                value={form.packageExcessRate}
+                onChange={(v) => set('packageExcessRate', v)}
+                type="number"
+              />
+            </>
           )}
+          <Field
+            label="Billing day (1–28)"
+            value={form.billingDay}
+            onChange={(v) => set('billingDay', v)}
+            type="number"
+          />
+          <Field
+            label="Credit limit (Rs)"
+            value={form.creditLimit}
+            onChange={(v) => set('creditLimit', v)}
+            type="number"
+          />
         </Section>
         <Section title="Opening balances">
           <Field
@@ -232,6 +318,11 @@ export function CustomerFormDialog({
             type="date"
             disabled={openingsLocked}
           />
+          {openingsLocked ? (
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              Openings are locked after the customer has invoices or payments.
+            </p>
+          ) : null}
         </Section>
         <Section title="Delivery schedule (optional)">
           <label className="flex items-center gap-2 text-sm sm:col-span-2">

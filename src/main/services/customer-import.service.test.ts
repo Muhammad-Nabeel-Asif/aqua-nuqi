@@ -110,4 +110,37 @@ describe('customerImportService', () => {
     expect(result.imported).toBe(4)
     expect(db.select().from(customers).where(isNull(customers.deletedAt)).all()).toHaveLength(4)
   })
+
+  it('imports monthly_package rows with included qty and excess rate', async () => {
+    const { importer, owner, db } = await setup()
+    const header =
+      'name,billing_mode,package_amount,package_included_qty,package_excess_rate,phone\n'
+    const body = 'Package Co,monthly_package,5000,30,80,03005556666\n'
+    const mapping = {
+      name: 'name' as const,
+      billing_mode: 'billingMode' as const,
+      package_amount: 'packageAmount' as const,
+      package_included_qty: 'packageIncludedQty' as const,
+      package_excess_rate: 'packageExcessRate' as const,
+      phone: 'phone' as const,
+    }
+
+    const validated = importer.validate('pkg.csv', csvBase64(header + body), mapping, {
+      createMissingAreas: false,
+      createMissingRoutes: false,
+    })
+    expect(validated.errorCount).toBe(0)
+
+    const result = importer.commit('pkg.csv', csvBase64(header + body), mapping, {
+      createMissingAreas: false,
+      createMissingRoutes: false,
+      userId: owner.id,
+    })
+    expect(result.imported).toBe(1)
+    const row = db.select().from(customers).where(isNull(customers.deletedAt)).get()!
+    expect(row.billingMode).toBe('monthly_package')
+    expect(row.packageAmount).toBe(500000)
+    expect(row.packageIncludedQty).toBe(30)
+    expect(row.packageExcessRate).toBe(8000)
+  })
 })

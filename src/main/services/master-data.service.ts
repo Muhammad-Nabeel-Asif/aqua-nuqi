@@ -95,26 +95,31 @@ export function createMasterDataService(db: AppDatabase, audit: AuditService) {
     if (clash) throw new AppError('CONFLICT', `Area "${name}" already exists`)
 
     const now = nowIsoUtc()
-    const row = db
-      .insert(areas)
-      .values({
-        uuid: newUuid(),
-        name,
-        notes: input.notes ?? null,
-        isActive: 1,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning()
-      .get()
-
-    audit.record({
-      userId,
-      action: 'create',
-      entityTable: 'areas',
-      entityId: row.id,
-      summary: `Created area ${name}`,
-      after: toAreaDto(row),
+    const row = db.transaction((tx) => {
+      const inserted = tx
+        .insert(areas)
+        .values({
+          uuid: newUuid(),
+          name,
+          notes: input.notes ?? null,
+          isActive: 1,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .get()
+      audit.record(
+        {
+          userId,
+          action: 'create',
+          entityTable: 'areas',
+          entityId: inserted.id,
+          summary: `Created area ${name}`,
+          after: toAreaDto(inserted),
+        },
+        tx,
+      )
+      return inserted
     })
     return toAreaDto(row, 0)
   }
@@ -162,26 +167,31 @@ export function createMasterDataService(db: AppDatabase, audit: AuditService) {
     }
 
     const before = toAreaDto(existing)
-    const updated = db
-      .update(areas)
-      .set({
-        name: input.name?.trim() ?? existing.name,
-        notes: input.notes !== undefined ? input.notes : existing.notes,
-        isActive: input.isActive !== undefined ? (input.isActive ? 1 : 0) : existing.isActive,
-        updatedAt: nowIsoUtc(),
-      })
-      .where(eq(areas.id, input.id))
-      .returning()
-      .get()
-
-    audit.record({
-      userId,
-      action: 'update',
-      entityTable: 'areas',
-      entityId: updated.id,
-      summary: `Updated area ${updated.name}`,
-      before,
-      after: toAreaDto(updated),
+    const updated = db.transaction((tx) => {
+      const row = tx
+        .update(areas)
+        .set({
+          name: input.name?.trim() ?? existing.name,
+          notes: input.notes !== undefined ? input.notes : existing.notes,
+          isActive: input.isActive !== undefined ? (input.isActive ? 1 : 0) : existing.isActive,
+          updatedAt: nowIsoUtc(),
+        })
+        .where(eq(areas.id, input.id))
+        .returning()
+        .get()
+      audit.record(
+        {
+          userId,
+          action: 'update',
+          entityTable: 'areas',
+          entityId: row.id,
+          summary: `Updated area ${row.name}`,
+          before,
+          after: toAreaDto(row),
+        },
+        tx,
+      )
+      return row
     })
     return toAreaDto(updated)
   }
@@ -240,28 +250,33 @@ export function createMasterDataService(db: AppDatabase, audit: AuditService) {
     const sortOrder = input.sortOrder ?? maxSort.reduce((m, r) => Math.max(m, r.sortOrder), -1) + 1
 
     const now = nowIsoUtc()
-    const row = db
-      .insert(routes)
-      .values({
-        uuid: newUuid(),
-        name,
-        areaId: input.areaId ?? null,
-        notes: input.notes ?? null,
-        sortOrder,
-        isActive: 1,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning()
-      .get()
-
-    audit.record({
-      userId,
-      action: 'create',
-      entityTable: 'routes',
-      entityId: row.id,
-      summary: `Created route ${name}`,
-      after: toRouteDto(row),
+    const row = db.transaction((tx) => {
+      const inserted = tx
+        .insert(routes)
+        .values({
+          uuid: newUuid(),
+          name,
+          areaId: input.areaId ?? null,
+          notes: input.notes ?? null,
+          sortOrder,
+          isActive: 1,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .get()
+      audit.record(
+        {
+          userId,
+          action: 'create',
+          entityTable: 'routes',
+          entityId: inserted.id,
+          summary: `Created route ${name}`,
+          after: toRouteDto(inserted),
+        },
+        tx,
+      )
+      return inserted
     })
     return toRouteDto(row, { activeCustomerCount: 0 })
   }
@@ -320,28 +335,33 @@ export function createMasterDataService(db: AppDatabase, audit: AuditService) {
     }
 
     const before = toRouteDto(existing)
-    const updated = db
-      .update(routes)
-      .set({
-        name: input.name?.trim() ?? existing.name,
-        areaId: input.areaId !== undefined ? input.areaId : existing.areaId,
-        notes: input.notes !== undefined ? input.notes : existing.notes,
-        isActive: input.isActive !== undefined ? (input.isActive ? 1 : 0) : existing.isActive,
-        sortOrder: input.sortOrder ?? existing.sortOrder,
-        updatedAt: nowIsoUtc(),
-      })
-      .where(eq(routes.id, input.id))
-      .returning()
-      .get()
-
-    audit.record({
-      userId,
-      action: 'update',
-      entityTable: 'routes',
-      entityId: updated.id,
-      summary: `Updated route ${updated.name}`,
-      before,
-      after: toRouteDto(updated),
+    const updated = db.transaction((tx) => {
+      const row = tx
+        .update(routes)
+        .set({
+          name: input.name?.trim() ?? existing.name,
+          areaId: input.areaId !== undefined ? input.areaId : existing.areaId,
+          notes: input.notes !== undefined ? input.notes : existing.notes,
+          isActive: input.isActive !== undefined ? (input.isActive ? 1 : 0) : existing.isActive,
+          sortOrder: input.sortOrder ?? existing.sortOrder,
+          updatedAt: nowIsoUtc(),
+        })
+        .where(eq(routes.id, input.id))
+        .returning()
+        .get()
+      audit.record(
+        {
+          userId,
+          action: 'update',
+          entityTable: 'routes',
+          entityId: row.id,
+          summary: `Updated route ${row.name}`,
+          before,
+          after: toRouteDto(row),
+        },
+        tx,
+      )
+      return row
     })
     return toRouteDto(updated)
   }
@@ -387,33 +407,38 @@ export function createMasterDataService(db: AppDatabase, audit: AuditService) {
     userId?: number | null,
   ): ProductDto {
     const now = nowIsoUtc()
-    const row = db
-      .insert(products)
-      .values({
-        uuid: newUuid(),
-        name: input.name.trim(),
-        sku: input.sku?.trim() || null,
-        sizeLiters: input.sizeLiters ?? null,
-        kind: input.kind,
-        isReturnable: input.isReturnable ? 1 : 0,
-        defaultRate: input.defaultRate,
-        defaultDeposit: input.defaultDeposit,
-        trackStock: input.trackStock ? 1 : 0,
-        isDefault: 0,
-        isActive: 1,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning()
-      .get()
-
-    audit.record({
-      userId,
-      action: 'create',
-      entityTable: 'products',
-      entityId: row.id,
-      summary: `Created product ${row.name}`,
-      after: toProductDto(row),
+    const row = db.transaction((tx) => {
+      const inserted = tx
+        .insert(products)
+        .values({
+          uuid: newUuid(),
+          name: input.name.trim(),
+          sku: input.sku?.trim() || null,
+          sizeLiters: input.sizeLiters ?? null,
+          kind: input.kind,
+          isReturnable: input.isReturnable ? 1 : 0,
+          defaultRate: input.defaultRate,
+          defaultDeposit: input.defaultDeposit,
+          trackStock: input.trackStock ? 1 : 0,
+          isDefault: 0,
+          isActive: 1,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .get()
+      audit.record(
+        {
+          userId,
+          action: 'create',
+          entityTable: 'products',
+          entityId: inserted.id,
+          summary: `Created product ${inserted.name}`,
+          after: toProductDto(inserted),
+        },
+        tx,
+      )
+      return inserted
     })
     return toProductDto(row)
   }
@@ -441,34 +466,39 @@ export function createMasterDataService(db: AppDatabase, audit: AuditService) {
     }
 
     const before = toProductDto(existing)
-    const updated = db
-      .update(products)
-      .set({
-        name: input.name?.trim() ?? existing.name,
-        sku: input.sku !== undefined ? input.sku?.trim() || null : existing.sku,
-        sizeLiters: input.sizeLiters !== undefined ? input.sizeLiters : existing.sizeLiters,
-        kind: input.kind ?? existing.kind,
-        isReturnable:
-          input.isReturnable !== undefined ? (input.isReturnable ? 1 : 0) : existing.isReturnable,
-        defaultRate: input.defaultRate ?? existing.defaultRate,
-        defaultDeposit: input.defaultDeposit ?? existing.defaultDeposit,
-        trackStock:
-          input.trackStock !== undefined ? (input.trackStock ? 1 : 0) : existing.trackStock,
-        isActive: input.isActive !== undefined ? (input.isActive ? 1 : 0) : existing.isActive,
-        updatedAt: nowIsoUtc(),
-      })
-      .where(eq(products.id, input.id))
-      .returning()
-      .get()
-
-    audit.record({
-      userId,
-      action: 'update',
-      entityTable: 'products',
-      entityId: updated.id,
-      summary: `Updated product ${updated.name}`,
-      before,
-      after: toProductDto(updated),
+    const updated = db.transaction((tx) => {
+      const row = tx
+        .update(products)
+        .set({
+          name: input.name?.trim() ?? existing.name,
+          sku: input.sku !== undefined ? input.sku?.trim() || null : existing.sku,
+          sizeLiters: input.sizeLiters !== undefined ? input.sizeLiters : existing.sizeLiters,
+          kind: input.kind ?? existing.kind,
+          isReturnable:
+            input.isReturnable !== undefined ? (input.isReturnable ? 1 : 0) : existing.isReturnable,
+          defaultRate: input.defaultRate ?? existing.defaultRate,
+          defaultDeposit: input.defaultDeposit ?? existing.defaultDeposit,
+          trackStock:
+            input.trackStock !== undefined ? (input.trackStock ? 1 : 0) : existing.trackStock,
+          isActive: input.isActive !== undefined ? (input.isActive ? 1 : 0) : existing.isActive,
+          updatedAt: nowIsoUtc(),
+        })
+        .where(eq(products.id, input.id))
+        .returning()
+        .get()
+      audit.record(
+        {
+          userId,
+          action: 'update',
+          entityTable: 'products',
+          entityId: row.id,
+          summary: `Updated product ${row.name}`,
+          before,
+          after: toProductDto(row),
+        },
+        tx,
+      )
+      return row
     })
     return toProductDto(updated)
   }

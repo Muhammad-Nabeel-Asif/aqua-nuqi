@@ -12,6 +12,8 @@ export const importColumnKeySchema = z.enum([
   'rate',
   'billingMode',
   'packageAmount',
+  'packageIncludedQty',
+  'packageExcessRate',
   'openingBalance',
   'openingBottles',
   'openingAsOf',

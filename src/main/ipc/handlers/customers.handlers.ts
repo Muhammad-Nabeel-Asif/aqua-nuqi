@@ -142,7 +142,8 @@ export function registerCustomerHandlers(): void {
     input: exportCustomersInput,
     output: exportCustomersOutput,
     roles: ['owner', 'operator'],
-    handler: (input) => getAppContext().customers.exportRows(input.format ?? 'csv'),
+    handler: (input, ctx) =>
+      getAppContext().customers.exportRows(input.format ?? 'csv', ctx.userId),
   })
 
   defineHandler({

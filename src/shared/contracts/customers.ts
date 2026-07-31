@@ -277,10 +277,12 @@ export const bulkChangeRateInput = z.object({
   rate: z.number().int().min(0),
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   reason: z.string().trim().max(500).optional().nullable(),
+  forceClosedPeriod: z.boolean().optional(),
 })
 export const bulkChangeRateOutput = z.object({
   created: z.number().int(),
   items: z.array(customerRateDto),
+  warning: z.string().nullable(),
 })
 
 export const previewBulkRateInput = z.object({

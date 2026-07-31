@@ -104,6 +104,7 @@ export const customerSchedules = sqliteTable(
     defaultQty: integer('default_qty').notNull().default(1),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
+    deletedAt: text('deleted_at'),
   },
   (t) => ({
     modeCheck: check(

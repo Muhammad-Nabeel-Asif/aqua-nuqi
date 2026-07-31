@@ -18,6 +18,10 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ### Fixed
 
+- **Phase 1 review:** join-based customer list (NFR-02); full Master Data / customer /
+  bulk-rate UI; openings/schedules no longer hard-deleted; `deposit_received` ledger;
+  full audit before/after + export audit; monthly_package import columns; WhatsApp E.164;
+  Ctrl+K Enter prefers customers; closed-period rate confirm.
 - **Windows packaged install:** frozen identity check failed with
   `package.json name must be "aqua-nuqi" (frozen). Found ""` because the app looked for
   `package.json` in the wrong folder under `resources/`. Resolve from the app root and always

@@ -19,6 +19,8 @@ export function CustomersPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<ListCustomersInput['status']>()
   const [type, setType] = useState<ListCustomersInput['customerType']>()
+  const [hasOutstanding, setHasOutstanding] = useState(false)
+  const [holdsBottles, setHoldsBottles] = useState(false)
   const [bulkArea, setBulkArea] = useState('')
   const [bulkRoute, setBulkRoute] = useState('')
   const [areaId, setAreaId] = useState('')
@@ -32,7 +34,10 @@ export function CustomersPage() {
   const areas = useQuery({ queryKey: ['areas'], queryFn: () => api.areas.list() })
   const routes = useQuery({ queryKey: ['routes'], queryFn: () => api.routes.list() })
   const query = useQuery({
-    queryKey: ['customers', { search, status, type, areaId, routeId, sortBy, sortDir }],
+    queryKey: [
+      'customers',
+      { search, status, type, areaId, routeId, hasOutstanding, holdsBottles, sortBy, sortDir },
+    ],
     queryFn: () =>
       api.customers.list({
         search: search || undefined,
@@ -40,6 +45,8 @@ export function CustomersPage() {
         customerType: type,
         areaId: areaId ? Number(areaId) : undefined,
         routeId: routeId ? Number(routeId) : undefined,
+        hasOutstanding: hasOutstanding || undefined,
+        holdsBottles: holdsBottles || undefined,
         sortBy,
         sortDir,
         limit: 5000,
@@ -147,6 +154,22 @@ export function CustomersPage() {
           options={['residential', 'commercial', 'walk_in'].map((x) => [x, x])}
           placeholder="All types"
         />
+        <label className="flex items-center gap-2 self-center text-sm">
+          <input
+            type="checkbox"
+            checked={hasOutstanding}
+            onChange={(e) => setHasOutstanding(e.target.checked)}
+          />
+          Has outstanding
+        </label>
+        <label className="flex items-center gap-2 self-center text-sm">
+          <input
+            type="checkbox"
+            checked={holdsBottles}
+            onChange={(e) => setHoldsBottles(e.target.checked)}
+          />
+          Holds bottles
+        </label>
         <Button variant="outline" onClick={() => setImportOpen(true)}>
           Import
         </Button>

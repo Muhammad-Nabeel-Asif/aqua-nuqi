@@ -183,10 +183,28 @@ export function createRateService(db: AppDatabase, audit: AuditService, period: 
     rate: number
     effectiveFrom: string
     reason?: string | null
+    forceClosedPeriod?: boolean
     userId?: number | null
-  }): { created: number; items: CustomerRateDto[] } {
+  }): { created: number; items: CustomerRateDto[]; warning: string | null } {
     assertBusinessDate(input.effectiveFrom)
-    period.guardPeriodOpen(input.effectiveFrom)
+
+    let warning: string | null = null
+    try {
+      period.guardPeriodOpen(input.effectiveFrom)
+    } catch (err) {
+      if (err instanceof AppError && err.code === 'PERIOD_LOCKED') {
+        warning = `Effective date ${input.effectiveFrom} falls in a closed period.`
+        if (!input.forceClosedPeriod) {
+          throw new AppError(
+            'PERIOD_LOCKED',
+            `${warning} Confirm to proceed anyway, or choose another date.`,
+            { warning },
+          )
+        }
+      } else {
+        throw err
+      }
+    }
 
     const items: CustomerRateDto[] = []
     db.transaction((tx) => {
@@ -198,14 +216,16 @@ export function createRateService(db: AppDatabase, audit: AuditService, period: 
             rate: input.rate,
             effectiveFrom: input.effectiveFrom,
             reason: input.reason,
+            forceClosedPeriod: true, // already checked above
             userId: input.userId,
           },
           tx,
         )
         items.push(result.item)
+        if (result.warning) warning = result.warning
       }
     })
-    return { created: items.length, items }
+    return { created: items.length, items, warning }
   }
 
   return { getRateFor, listHistory, changeRate, bulkChangeRate, resolveDefaultProductId }

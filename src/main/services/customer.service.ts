@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, isNull, lte, or } from 'drizzle-orm'
 import type { AppDatabase } from '@main/db/client'
 import {
   areas,
@@ -8,6 +8,7 @@ import {
   customers,
   customerSchedules,
   ledgerEntries,
+  products,
   routes,
   sequences,
 } from '@main/db/schema'
@@ -57,8 +58,19 @@ function validateBilling(input: {
     if (input.packageIncludedQty == null) {
       throw new AppError('VALIDATION_FAILED', 'Included quantity is required for monthly package')
     }
+    if (input.packageExcessRate == null) {
+      throw new AppError('VALIDATION_FAILED', 'Excess rate is required for monthly package')
+    }
   }
 }
+
+const AR_ENTRY_TYPES = new Set([
+  'invoice',
+  'payment',
+  'adjustment_debit',
+  'adjustment_credit',
+  'write_off',
+])
 
 function validateOpenings(input: {
   openingBalance?: number
@@ -132,7 +144,7 @@ export function createCustomerService(
     const row = db
       .select()
       .from(customerSchedules)
-      .where(eq(customerSchedules.customerId, customerId))
+      .where(and(eq(customerSchedules.customerId, customerId), isNull(customerSchedules.deletedAt)))
       .get()
     if (!row) return null
     return {
@@ -154,13 +166,17 @@ export function createCustomerService(
       .where(eq(customerSchedules.customerId, customerId))
       .get()
     if (schedule === undefined) return
+    const now = nowIsoUtc()
     if (schedule === null) {
-      if (existing) {
-        tx.delete(customerSchedules).where(eq(customerSchedules.customerId, customerId)).run()
+      // Soft-clear — never hard-delete schedule rows.
+      if (existing && !existing.deletedAt) {
+        tx.update(customerSchedules)
+          .set({ deletedAt: now, updatedAt: now })
+          .where(eq(customerSchedules.id, existing.id))
+          .run()
       }
       return
     }
-    const now = nowIsoUtc()
     if (existing) {
       tx.update(customerSchedules)
         .set({
@@ -168,9 +184,10 @@ export function createCustomerService(
           weekdays: schedule.weekdays,
           intervalDays: schedule.intervalDays,
           defaultQty: schedule.defaultQty,
+          deletedAt: null,
           updatedAt: now,
         })
-        .where(eq(customerSchedules.customerId, customerId))
+        .where(eq(customerSchedules.id, existing.id))
         .run()
     } else {
       tx.insert(customerSchedules)
@@ -182,6 +199,144 @@ export function createCustomerService(
           defaultQty: schedule.defaultQty,
           createdAt: now,
           updatedAt: now,
+          deletedAt: null,
+        })
+        .run()
+    }
+  }
+
+  function appendVoidReversal(
+    entry: typeof ledgerEntries.$inferSelect,
+    balanceAfter: number,
+    userId: number | null | undefined,
+    tx: AppDatabase,
+  ): void {
+    tx.insert(ledgerEntries)
+      .values({
+        uuid: newUuid(),
+        customerId: entry.customerId,
+        entryDate: entry.entryDate,
+        entryType: 'void_reversal',
+        debit: entry.credit,
+        credit: entry.debit,
+        balanceAfter,
+        description: `Void: ${entry.description}`,
+        refTable: 'ledger_entries',
+        refId: entry.id,
+        createdAt: nowIsoUtc(),
+        createdBy: userId ?? null,
+      })
+      .run()
+  }
+
+  function isLedgerVoided(entryId: number, tx: AppDatabase): boolean {
+    return Boolean(
+      tx
+        .select({ id: ledgerEntries.id })
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.entryType, 'void_reversal'),
+            eq(ledgerEntries.refTable, 'ledger_entries'),
+            eq(ledgerEntries.refId, entryId),
+          ),
+        )
+        .get(),
+    )
+  }
+
+  /** Replace opening_balance rows via void_reversal + new insert — never DELETE. */
+  function replaceOpeningLedger(
+    customerId: number,
+    openingBalance: number,
+    openingAsOf: string | null,
+    userId: number | null | undefined,
+    tx: AppDatabase,
+  ): void {
+    const openingRows = tx
+      .select()
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.customerId, customerId),
+          eq(ledgerEntries.entryType, 'opening_balance'),
+        ),
+      )
+      .all()
+
+    for (const r of openingRows) {
+      if (isLedgerVoided(r.id, tx)) continue
+      const afterVoid = balanceService.computeLiveBalance(customerId, tx) - r.debit + r.credit
+      appendVoidReversal(r, afterVoid, userId, tx)
+    }
+
+    if (openingBalance !== 0 && openingAsOf) {
+      period.guardPeriodOpen(openingAsOf)
+      const debit = openingBalance > 0 ? openingBalance : 0
+      const credit = openingBalance < 0 ? -openingBalance : 0
+      tx.insert(ledgerEntries)
+        .values({
+          uuid: newUuid(),
+          customerId,
+          entryDate: openingAsOf,
+          entryType: 'opening_balance',
+          debit,
+          credit,
+          balanceAfter: openingBalance,
+          description: 'Opening balance',
+          refTable: 'customers',
+          refId: customerId,
+          createdAt: nowIsoUtc(),
+          createdBy: userId ?? null,
+        })
+        .run()
+    }
+  }
+
+  /**
+   * Keep deposit_received ledger in sync with security_deposit_held.
+   * Deposit types are excluded from AR balance (see balanceService).
+   */
+  function syncDepositLedger(
+    customerId: number,
+    depositHeld: number,
+    asOf: string,
+    userId: number | null | undefined,
+    tx: AppDatabase,
+  ): void {
+    const depositRows = tx
+      .select()
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.customerId, customerId),
+          eq(ledgerEntries.entryType, 'deposit_received'),
+        ),
+      )
+      .all()
+
+    for (const r of depositRows) {
+      if (isLedgerVoided(r.id, tx)) continue
+      const ar = balanceService.computeLiveBalance(customerId, tx)
+      appendVoidReversal(r, ar, userId, tx)
+    }
+
+    if (depositHeld > 0) {
+      const ar = balanceService.computeLiveBalance(customerId, tx)
+      tx.insert(ledgerEntries)
+        .values({
+          uuid: newUuid(),
+          customerId,
+          entryDate: asOf,
+          entryType: 'deposit_received',
+          debit: 0,
+          credit: depositHeld,
+          balanceAfter: ar,
+          description: 'Security deposit received',
+          refTable: 'customers',
+          refId: customerId,
+          createdAt: nowIsoUtc(),
+          createdBy: userId ?? null,
         })
         .run()
     }
@@ -248,38 +403,14 @@ export function createCustomerService(
     }
   }
 
-  function toListItem(dto: CustomerDto): CustomerListItemDto {
-    return {
-      id: dto.id,
-      uuid: dto.uuid,
-      code: dto.code,
-      name: dto.name,
-      customerType: dto.customerType,
-      phonePrimary: dto.phonePrimary,
-      areaId: dto.areaId,
-      areaName: dto.areaName,
-      routeId: dto.routeId,
-      routeName: dto.routeName,
-      status: dto.status,
-      balance: dto.balance,
-      bottlesWithCustomer: dto.bottlesWithCustomer,
-      currentRate: dto.currentRate,
-      billingMode: dto.billingMode,
-    }
-  }
-
   function hasTransactions(customerId: number): boolean {
-    const ledger = db
-      .select()
+    // Openings, deposits, and their void_reversals do not lock further opening edits.
+    const rows = db
+      .select({ entryType: ledgerEntries.entryType })
       .from(ledgerEntries)
-      .where(
-        and(
-          eq(ledgerEntries.customerId, customerId),
-          sql`${ledgerEntries.entryType} != 'opening_balance'`,
-        ),
-      )
-      .get()
-    return Boolean(ledger)
+      .where(eq(ledgerEntries.customerId, customerId))
+      .all()
+    return rows.some((r) => AR_ENTRY_TYPES.has(r.entryType))
   }
 
   function create(rawInput: CreateCustomerInput, userId?: number | null): CustomerDto {
@@ -378,6 +509,12 @@ export function createCustomerService(
           .run()
       }
 
+      const depositHeld = input.securityDepositHeld ?? 0
+      if (depositHeld > 0) {
+        const depositDate = openingAsOf ?? input.joinedOn ?? todayBusinessDate()
+        syncDepositLedger(row.id, depositHeld, depositDate, userId, tx)
+      }
+
       balanceService.upsertSummary(
         row.id,
         { balance: openingBalance, bottlesWithCustomer: openingBottles },
@@ -409,7 +546,7 @@ export function createCustomerService(
           entityTable: 'customers',
           entityId: row.id,
           summary: `Created customer ${code} — ${row.name}`,
-          after: { id: row.id, code, name: row.name, openingBalance, openingBottles },
+          after: toDto(row),
         },
         tx,
       )
@@ -567,44 +704,31 @@ export function createCustomerService(
       upsertSchedule(existing.id, input.schedule, tx)
 
       if (openingsEditable) {
-        // Replace opening ledger entry
-        const openingRows = tx
-          .select()
-          .from(ledgerEntries)
-          .where(
-            and(
-              eq(ledgerEntries.customerId, existing.id),
-              eq(ledgerEntries.entryType, 'opening_balance'),
-            ),
-          )
-          .all()
-        for (const r of openingRows) {
-          tx.delete(ledgerEntries).where(eq(ledgerEntries.id, r.id)).run()
+        const openingsChanged =
+          input.openingBalance !== undefined ||
+          input.openingBottles !== undefined ||
+          input.openingAsOf !== undefined
+        const depositChanged = input.securityDepositHeld !== undefined
+
+        if (openingsChanged) {
+          replaceOpeningLedger(existing.id, nextOpeningBalance, nextOpeningAsOf, userId, tx)
         }
-        if (nextOpeningBalance !== 0 && nextOpeningAsOf) {
-          period.guardPeriodOpen(nextOpeningAsOf)
-          const debit = nextOpeningBalance > 0 ? nextOpeningBalance : 0
-          const credit = nextOpeningBalance < 0 ? -nextOpeningBalance : 0
-          tx.insert(ledgerEntries)
-            .values({
-              uuid: newUuid(),
-              customerId: existing.id,
-              entryDate: nextOpeningAsOf,
-              entryType: 'opening_balance',
-              debit,
-              credit,
-              balanceAfter: nextOpeningBalance,
-              description: 'Opening balance',
-              refTable: 'customers',
-              refId: existing.id,
-              createdAt: nowIsoUtc(),
-              createdBy: userId ?? null,
-            })
-            .run()
+
+        if (depositChanged) {
+          const nextDeposit =
+            input.securityDepositHeld !== undefined
+              ? input.securityDepositHeld
+              : existing.securityDepositHeld
+          const depositDate = nextOpeningAsOf ?? existing.joinedOn ?? todayBusinessDate()
+          syncDepositLedger(existing.id, nextDeposit, depositDate, userId, tx)
         }
-        balanceService.syncFromSources(existing.id, tx)
+
+        if (openingsChanged || depositChanged) {
+          balanceService.syncFromSources(existing.id, tx)
+        }
       }
 
+      const updatedRow = tx.select().from(customers).where(eq(customers.id, existing.id)).get()!
       audit.record(
         {
           userId,
@@ -613,7 +737,7 @@ export function createCustomerService(
           entityId: existing.id,
           summary: `Updated customer ${existing.code}`,
           before,
-          after: { id: existing.id, code: input.code ?? existing.code },
+          after: toDto(updatedRow),
         },
         tx,
       )
@@ -684,84 +808,171 @@ export function createCustomerService(
   }
 
   function list(input: ListCustomersInput): { items: CustomerListItemDto[]; total: number } {
-    const all = db.select().from(customers).where(isNull(customers.deletedAt)).all()
-    const needle = input.search?.trim().toLowerCase()
+    // Single join query + one rates batch — no per-row toDto (NFR-02).
+    const joined = db
+      .select({
+        id: customers.id,
+        uuid: customers.uuid,
+        code: customers.code,
+        name: customers.name,
+        customerType: customers.customerType,
+        phonePrimary: customers.phonePrimary,
+        phoneSecondary: customers.phoneSecondary,
+        whatsappNumber: customers.whatsappNumber,
+        addressLine: customers.addressLine,
+        landmark: customers.landmark,
+        areaId: customers.areaId,
+        areaName: areas.name,
+        routeId: customers.routeId,
+        routeName: routes.name,
+        status: customers.status,
+        billingMode: customers.billingMode,
+        openingBottles: customers.openingBottles,
+        balance: customerBalances.balance,
+        bottlesWithCustomer: customerBalances.bottlesWithCustomer,
+      })
+      .from(customers)
+      .leftJoin(areas, eq(customers.areaId, areas.id))
+      .leftJoin(routes, eq(customers.routeId, routes.id))
+      .leftJoin(customerBalances, eq(customers.id, customerBalances.customerId))
+      .where(isNull(customers.deletedAt))
+      .all()
 
-    let filtered = all.filter((c) => {
-      if (input.areaId && c.areaId !== input.areaId) return false
-      if (input.routeId && c.routeId !== input.routeId) return false
-      if (input.status && c.status !== input.status) return false
-      if (input.customerType && c.customerType !== input.customerType) return false
+    const today = todayBusinessDate()
+    let productId: number | null = null
+    let defaultRate = 0
+    try {
+      productId = rateService.resolveDefaultProductId()
+      const product = db.select().from(products).where(eq(products.id, productId)).get()
+      defaultRate = product?.defaultRate ?? 0
+    } catch {
+      productId = null
+    }
 
-      const bal = db
+    const rateByCustomer = new Map<number, number>()
+    if (productId != null) {
+      const openRates = db
         .select()
-        .from(customerBalances)
-        .where(eq(customerBalances.customerId, c.id))
-        .get()
-      if (input.hasOutstanding && !(bal && bal.balance > 0)) return false
-      if (input.holdsBottles && !(bal && bal.bottlesWithCustomer > 0)) return false
-
-      if (needle) {
-        const area = c.areaId ? db.select().from(areas).where(eq(areas.id, c.areaId)).get() : null
-        const hay = [
-          c.name,
-          c.code,
-          c.phonePrimary,
-          c.phoneSecondary,
-          c.whatsappNumber,
-          c.addressLine,
-          c.landmark,
-          area?.name,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-        if (!hay.includes(needle)) return false
+        .from(customerRates)
+        .where(
+          and(
+            eq(customerRates.productId, productId),
+            lte(customerRates.effectiveFrom, today),
+            or(isNull(customerRates.effectiveTo), gte(customerRates.effectiveTo, today)),
+          ),
+        )
+        .orderBy(desc(customerRates.effectiveFrom))
+        .all()
+      for (const r of openRates) {
+        if (!rateByCustomer.has(r.customerId)) rateByCustomer.set(r.customerId, r.rate)
       }
-      return true
-    })
+    }
+
+    const needle = input.search?.trim().toLowerCase()
+    type ListRow = {
+      id: number
+      uuid: string
+      code: string
+      name: string
+      customerType: CustomerListItemDto['customerType']
+      phonePrimary: string | null
+      areaId: number | null
+      areaName: string | null
+      routeId: number | null
+      routeName: string | null
+      status: CustomerListItemDto['status']
+      billingMode: CustomerListItemDto['billingMode']
+      balance: number
+      bottlesWithCustomer: number
+      currentRate: number | null
+    }
+
+    const filtered: ListRow[] = joined
+      .map((c) => {
+        const balance = c.balance ?? 0
+        const bottles = c.bottlesWithCustomer ?? c.openingBottles
+        return {
+          id: c.id,
+          uuid: c.uuid,
+          code: c.code,
+          name: c.name,
+          customerType: c.customerType as CustomerListItemDto['customerType'],
+          phonePrimary: c.phonePrimary,
+          areaId: c.areaId,
+          areaName: c.areaName ?? null,
+          routeId: c.routeId,
+          routeName: c.routeName ?? null,
+          status: c.status as CustomerListItemDto['status'],
+          billingMode: c.billingMode as CustomerListItemDto['billingMode'],
+          balance,
+          bottlesWithCustomer: bottles,
+          currentRate: rateByCustomer.get(c.id) ?? (productId != null ? defaultRate : null),
+          _searchHay: [
+            c.name,
+            c.code,
+            c.phonePrimary,
+            c.phoneSecondary,
+            c.whatsappNumber,
+            c.addressLine,
+            c.landmark,
+            c.areaName,
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase(),
+        }
+      })
+      .filter((c) => {
+        if (input.areaId && c.areaId !== input.areaId) return false
+        if (input.routeId && c.routeId !== input.routeId) return false
+        if (input.status && c.status !== input.status) return false
+        if (input.customerType && c.customerType !== input.customerType) return false
+        if (input.hasOutstanding && !(c.balance > 0)) return false
+        if (input.holdsBottles && !(c.bottlesWithCustomer > 0)) return false
+        if (needle && !c._searchHay.includes(needle)) return false
+        return true
+      })
+      .map(({ _searchHay: _, ...rest }) => rest)
 
     const sortBy = input.sortBy ?? 'name'
     const dir = input.sortDir === 'desc' ? -1 : 1
-    filtered = filtered.sort((a, b) => {
-      const da = toDto(a)
-      const db_ = toDto(b)
+    filtered.sort((a, b) => {
       const av =
         sortBy === 'code'
-          ? da.code
+          ? a.code
           : sortBy === 'name'
-            ? da.name
+            ? a.name
             : sortBy === 'phone'
-              ? (da.phonePrimary ?? '')
+              ? (a.phonePrimary ?? '')
               : sortBy === 'area'
-                ? (da.areaName ?? '')
+                ? (a.areaName ?? '')
                 : sortBy === 'route'
-                  ? (da.routeName ?? '')
+                  ? (a.routeName ?? '')
                   : sortBy === 'rate'
-                    ? (da.currentRate ?? 0)
+                    ? (a.currentRate ?? 0)
                     : sortBy === 'bottles'
-                      ? da.bottlesWithCustomer
+                      ? a.bottlesWithCustomer
                       : sortBy === 'balance'
-                        ? da.balance
-                        : da.status
+                        ? a.balance
+                        : a.status
       const bv =
         sortBy === 'code'
-          ? db_.code
+          ? b.code
           : sortBy === 'name'
-            ? db_.name
+            ? b.name
             : sortBy === 'phone'
-              ? (db_.phonePrimary ?? '')
+              ? (b.phonePrimary ?? '')
               : sortBy === 'area'
-                ? (db_.areaName ?? '')
+                ? (b.areaName ?? '')
                 : sortBy === 'route'
-                  ? (db_.routeName ?? '')
+                  ? (b.routeName ?? '')
                   : sortBy === 'rate'
-                    ? (db_.currentRate ?? 0)
+                    ? (b.currentRate ?? 0)
                     : sortBy === 'bottles'
-                      ? db_.bottlesWithCustomer
+                      ? b.bottlesWithCustomer
                       : sortBy === 'balance'
-                        ? db_.balance
-                        : db_.status
+                        ? b.balance
+                        : b.status
       if (av < bv) return -1 * dir
       if (av > bv) return 1 * dir
       return 0
@@ -770,7 +981,7 @@ export function createCustomerService(
     const total = filtered.length
     const offset = input.offset ?? 0
     const limit = input.limit ?? 1000
-    const page = filtered.slice(offset, offset + limit).map((c) => toListItem(toDto(c)))
+    const page = filtered.slice(offset, offset + limit)
     return { items: page, total }
   }
 
@@ -810,28 +1021,40 @@ export function createCustomerService(
       for (const id of input.ids) {
         const existing = tx.select().from(customers).where(eq(customers.id, id)).get()
         if (!existing || existing.deletedAt) continue
+        const before = {
+          id: existing.id,
+          code: existing.code,
+          areaId: existing.areaId,
+          routeId: existing.routeId,
+          status: existing.status,
+        }
+        const next = {
+          areaId: input.areaId !== undefined ? input.areaId : existing.areaId,
+          routeId: input.routeId !== undefined ? input.routeId : existing.routeId,
+          status: input.status ?? existing.status,
+        }
         tx.update(customers)
           .set({
-            areaId: input.areaId !== undefined ? input.areaId : existing.areaId,
-            routeId: input.routeId !== undefined ? input.routeId : existing.routeId,
-            status: input.status ?? existing.status,
+            ...next,
             updatedAt: nowIsoUtc(),
             updatedBy: userId ?? null,
           })
           .where(eq(customers.id, id))
           .run()
+        audit.record(
+          {
+            userId,
+            action: 'update',
+            entityTable: 'customers',
+            entityId: id,
+            summary: `Bulk updated customer ${existing.code}`,
+            before,
+            after: { id, code: existing.code, ...next },
+          },
+          tx,
+        )
         updated += 1
       }
-      audit.record(
-        {
-          userId,
-          action: 'update',
-          entityTable: 'customers',
-          summary: `Bulk updated ${updated} customers`,
-          after: input,
-        },
-        tx,
-      )
     })
     return { updated }
   }
@@ -901,7 +1124,10 @@ export function createCustomerService(
       }))
   }
 
-  function exportRows(format: 'csv' | 'xlsx'): {
+  function exportRows(
+    format: 'csv' | 'xlsx',
+    userId?: number | null,
+  ): {
     fileName: string
     mimeType: string
     base64: string
@@ -934,28 +1160,39 @@ export function createCustomerService(
       '',
     ])
 
+    let result: { fileName: string; mimeType: string; base64: string }
     if (format === 'csv') {
       const lines = [headers.join(','), ...data.map((r) => r.map(csvEscape).join(','))]
       const base64 = Buffer.from(lines.join('\n'), 'utf8').toString('base64')
-      return {
+      result = {
         fileName: `customers-${todayBusinessDate()}.csv`,
         mimeType: 'text/csv',
         base64,
       }
+    } else {
+      // Lazy require to keep service free of Electron; xlsx is a plain dep.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const XLSX = require('xlsx') as typeof import('xlsx')
+      const sheet = XLSX.utils.aoa_to_sheet([headers, ...data])
+      const book = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(book, sheet, 'Customers')
+      const buf = XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+      result = {
+        fileName: `customers-${todayBusinessDate()}.xlsx`,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        base64: buf.toString('base64'),
+      }
     }
 
-    // Lazy require to keep service free of Electron; xlsx is a plain dep.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const XLSX = require('xlsx') as typeof import('xlsx')
-    const sheet = XLSX.utils.aoa_to_sheet([headers, ...data])
-    const book = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(book, sheet, 'Customers')
-    const buf = XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }) as Buffer
-    return {
-      fileName: `customers-${todayBusinessDate()}.xlsx`,
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      base64: buf.toString('base64'),
-    }
+    audit.record({
+      userId,
+      action: 'export',
+      entityTable: 'customers',
+      summary: `Exported ${items.length} customers as ${format.toUpperCase()}`,
+      after: { format, count: items.length, fileName: result.fileName },
+    })
+
+    return result
   }
 
   return {

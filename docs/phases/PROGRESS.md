@@ -290,25 +290,31 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 
 ## Phase 1 — Customers, Master Data & Pricing
 
-**Date:** 2026-07-31 · **Status:** complete · **package.json:** `0.3.0`
+**Date:** 2026-07-31 · **Status:** partial · **package.json:** `0.3.0`
 
 ### Built
 
 - Migration `drizzle/0001_friendly_christian_walker.sql` — `areas`, `routes`, `customers`,
   `customer_rates`, `customer_schedules`, `customer_balances`, `ledger_entries`
+- Migration `drizzle/0002_schedule_soft_delete.sql` — `customer_schedules.deleted_at`
 - Services: `master-data`, `rate`, `balance`, `customer`, `customer-import`; demo seed
   `seed-demo.ts` (~200 customers / 6 areas / 10 routes) behind `dev:seedDemo`
-- Settings → Master Data (areas / routes / products); Customers list (virtualised) + detail
-  (overview, rate history, schedule, audit; delivery/ledger/invoice tabs placeholder)
+- Settings → Master Data (areas / routes with area + reorder / products with full fields);
+  Customers list (virtualised join-based list) + detail (overview, rate history, schedule,
+  audit; delivery/ledger/invoice tabs placeholder)
 - CSV/Excel import wizard (map → validate with row errors → all-or-nothing commit) + template
-- Bulk rate change; Ctrl+K customer search; Recalculate balances on Settings → About
+  including monthly_package columns
+- Bulk rate change (area/route/type/current-rate filters, effective date, reason); Ctrl+K
+  customer search; Recalculate balances on Settings → About
 - Unit tests: rate history (criteria 3–4), bulk rollback, balances vs aggregate, import
-  all-or-nothing, area deactivate blocked
+  all-or-nothing + monthly_package, area deactivate blocked, list@1000, openings void,
+  deposit ledger, audit before/after, export audit, schedule soft-delete
 
 ### Migrations added
 
 - `drizzle/0001_friendly_christian_walker.sql` — tables above; `routes.default_employee_id`
   column **without** FK (employees arrive in Phase 6)
+- `drizzle/0002_schedule_soft_delete.sql` — `customer_schedules.deleted_at`
 
 ### IPC channels added
 
@@ -327,13 +333,17 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 
 ### Deviations from the spec
 
-- Added deps not in stack §1: `xlsx`, `@tanstack/react-table`, `@tanstack/react-virtual`
-  (needed for Excel import/export and virtualised list).
-- Money balance truth = `Σ ledger.debit − Σ ledger.credit` (includes `opening_balance` entry).
+- Added deps not in stack §1: `xlsx`, `@tanstack/react-virtual` (Excel import/export +
+  virtualised list). `@tanstack/react-table` is also in `package.json` but unused — list uses
+  react-virtual only.
+- Money AR truth = `Σ ledger.debit − Σ ledger.credit` excluding `deposit_received` /
+  `deposit_refunded` (those stay in the ledger for audit + `security_deposit_held`).
   Docs §J formula that also adds `customers.opening_balance` would double-count; column remains
   the go-live snapshot. Bottles = `opening_bottles` (+ deliveries/adjustments when those tables
   exist; Phase 2/3).
 - `routes.default_employee_id` stored without FK until Phase 6.
+- Opening edits append `void_reversal` + new `opening_balance` (never DELETE ledger rows).
+  Schedules soft-clear via `deleted_at` (migration 0002).
 
 ### What the next phase must know
 
@@ -343,10 +353,12 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 rates.getRateFor(customerId: number, productId: number, onDate: string /* YYYY-MM-DD */): number // paisa
 // Fallback: covering customer_rates row → products.default_rate
 // Changing a rate closes the open row (effective_to = from − 1 day) and inserts a new row. Never UPDATE rate.
+// forceClosedPeriod on changeRate / bulkChangeRate after UI confirm when PERIOD_LOCKED.
 ```
 
 **`ledger_entries`:** created in this phase. Opening balance writes
-`entry_type = 'opening_balance'` immediately when non-zero.
+`entry_type = 'opening_balance'` when non-zero. Non-zero security deposit writes
+`deposit_received` (excluded from AR). Opening edits void via `void_reversal`.
 
 **`customer_balances` sync:** created with the customer; updated in the same transaction as
 opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. Maintenance:
@@ -406,5 +418,25 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 
 ### Escalations / questions for the human
 
-- Re-run Windows upgrade scenario **#4** (older-than-data) now that schema is 2.
-- Confirm `xlsx` / TanStack Table+Virtual may stay in the stack doc.
+- Re-run Windows upgrade scenario **#4** (older-than-data) now that schema is ≥2
+  (migrations 0001 + 0002).
+- Confirm `xlsx` / TanStack Virtual may stay in the stack doc; drop unused react-table?
+- **Stable 0.3.x release not shipped yet** — push `main` → Actions → Build & Release
+  (`channel: stable`), then record version + URL and re-run upgrade matrix.
+
+### Review fixes (2026-08-01)
+
+- Customer list: join + batched rates (no per-row `toDto`); NFR-02 list@1000 test.
+- Master Data UI: product fields (size/kind/returnable/rate/deposit/stock); routes area +
+  up/down reorder via `routes:reorder`.
+- Customer form: identity/contact/billing/package/credit-limit/joining/status/delivery notes.
+- List filters: has outstanding / holds bottles.
+- Bulk rate UI: area/route/type/current-rate, effective-from + “1st of next month”, reason,
+  `<Money>` preview; closed-period confirm → `forceClosedPeriod`.
+- Ledger append-only: openings voided (not DELETE); schedules soft-deleted; deposit_received
+  on create/edit; deposits excluded from AR.
+- Audits: full customer before/after; per-id bulk audits; `export` action; master-data
+  mutation+audit in one transaction.
+- Import: `packageIncludedQty` / `packageExcessRate`; WhatsApp E.164 (`92…`); Ctrl+K Enter
+  prefers customer hit.
+- Status set to **partial** until stable `0.3.x` release + Windows upgrade matrix recorded.

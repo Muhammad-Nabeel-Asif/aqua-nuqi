@@ -29,6 +29,12 @@ const HEADER_ALIASES: Record<string, ImportColumnKey> = {
   billingmode: 'billingMode',
   package_amount: 'packageAmount',
   packageamount: 'packageAmount',
+  package_included_qty: 'packageIncludedQty',
+  packageincludedqty: 'packageIncludedQty',
+  included_qty: 'packageIncludedQty',
+  package_excess_rate: 'packageExcessRate',
+  packageexcessrate: 'packageExcessRate',
+  excess_rate: 'packageExcessRate',
   opening_balance: 'openingBalance',
   openingbalance: 'openingBalance',
   opening_bottles: 'openingBottles',
@@ -199,10 +205,19 @@ export function createCustomerImportService(
         const rate = parseMoneyCell(get('rate'))
         const deposit = parseMoneyCell(get('deposit'))
         const packageAmount = parseMoneyCell(get('packageAmount'))
+        const packageExcessRate = parseMoneyCell(get('packageExcessRate'))
         const openingBottlesRaw = get('openingBottles').trim()
         const openingBottles = openingBottlesRaw ? Number(openingBottlesRaw) : 0
         if (openingBottlesRaw && (!Number.isInteger(openingBottles) || openingBottles < 0)) {
           throw new Error('Opening bottles must be a non-negative integer')
+        }
+        const includedQtyRaw = get('packageIncludedQty').trim()
+        const packageIncludedQty = includedQtyRaw ? Number(includedQtyRaw) : null
+        if (
+          includedQtyRaw &&
+          (!Number.isInteger(packageIncludedQty) || (packageIncludedQty ?? 0) < 0)
+        ) {
+          throw new Error('Package included quantity must be a non-negative integer')
         }
 
         const openingAsOf = get('openingAsOf').trim() || null
@@ -223,6 +238,19 @@ export function createCustomerImportService(
           throw new Error('Joining date must be YYYY-MM-DD')
         }
 
+        const billingMode = parseBillingMode(get('billingMode'))
+        if (billingMode === 'monthly_package') {
+          if (packageAmount == null) {
+            throw new Error('Package amount is required for monthly_package')
+          }
+          if (packageIncludedQty == null) {
+            throw new Error('Package included quantity is required for monthly_package')
+          }
+          if (packageExcessRate == null) {
+            throw new Error('Package excess rate is required for monthly_package')
+          }
+        }
+
         const input: CreateCustomerInput = {
           name,
           code: get('code').trim() || undefined,
@@ -233,8 +261,10 @@ export function createCustomerImportService(
           email: get('email').trim() || null,
           addressLine: get('address').trim() || null,
           landmark: get('landmark').trim() || null,
-          billingMode: parseBillingMode(get('billingMode')),
+          billingMode,
           packageAmount,
+          packageIncludedQty,
+          packageExcessRate,
           openingBalance: openingBalance ?? 0,
           openingBottles,
           openingAsOf,
@@ -420,6 +450,8 @@ export function createCustomerImportService(
       'rate',
       'billing_mode',
       'package_amount',
+      'package_included_qty',
+      'package_excess_rate',
       'opening_balance',
       'opening_bottles',
       'opening_as_of',
@@ -438,6 +470,8 @@ export function createCustomerImportService(
       'Gulberg Morning',
       '60',
       'per_bottle',
+      '',
+      '',
       '',
       '3500',
       '4',

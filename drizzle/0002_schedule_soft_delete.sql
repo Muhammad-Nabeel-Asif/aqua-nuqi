@@ -1,0 +1,1 @@
+ALTER TABLE `customer_schedules` ADD `deleted_at` text;

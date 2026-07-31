@@ -265,11 +265,13 @@ export const api = {
       rate: number
       effectiveFrom: string
       reason?: string | null
+      forceClosedPeriod?: boolean
     }) =>
-      invoke<{ created: number; items: import('@shared/contracts').CustomerRateDto[] }>(
-        'rates:bulkChange',
-        input,
-      ),
+      invoke<{
+        created: number
+        items: import('@shared/contracts').CustomerRateDto[]
+        warning: string | null
+      }>('rates:bulkChange', input),
     previewBulk: (
       input: {
         areaId?: number

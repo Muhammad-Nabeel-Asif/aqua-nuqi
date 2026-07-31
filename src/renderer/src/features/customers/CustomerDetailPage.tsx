@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { confirmDialog } from '@renderer/components/ConfirmDialog'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
@@ -11,7 +12,9 @@ import { Label } from '@renderer/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { api } from '@renderer/lib/api'
 import { todayBusinessDate, firstOfNextMonth } from '@shared/date'
+import { AppError } from '@shared/errors'
 import { toPaisa } from '@shared/money'
+import { toWhatsAppE164 } from '@shared/phone'
 import { CustomerFormDialog } from './CustomerFormDialog'
 
 export function CustomerDetailPage() {
@@ -100,7 +103,7 @@ export function CustomerDetailPage() {
                   {c.whatsappNumber ? (
                     <a
                       className="text-sky-700"
-                      href={`https://wa.me/${c.whatsappNumber.replace(/\D/g, '')}`}
+                      href={`https://wa.me/${toWhatsAppE164(c.whatsappNumber)}`}
                     >
                       Open WhatsApp
                     </a>
@@ -281,16 +284,38 @@ function RateDialog({
           </Button>
           <Button
             onClick={() =>
-              void api.rates
-                .change({ customerId, rate: toPaisa(rate), effectiveFrom: date, reason })
-                .then(onSaved)
-                .catch((e) =>
-                  toast({
-                    title: 'Rate change failed',
-                    description: e instanceof Error ? e.message : 'Error',
-                    variant: 'error',
-                  }),
-                )
+              void (async () => {
+                async function apply(forceClosedPeriod = false) {
+                  try {
+                    // TODO(phase-3): warn when effective date falls inside an already-invoiced period
+                    await api.rates.change({
+                      customerId,
+                      rate: toPaisa(rate),
+                      effectiveFrom: date,
+                      reason,
+                      forceClosedPeriod,
+                    })
+                    onSaved()
+                  } catch (e) {
+                    if (e instanceof AppError && e.code === 'PERIOD_LOCKED' && !forceClosedPeriod) {
+                      const ok = await confirmDialog({
+                        title: 'Closed period',
+                        description: e.message,
+                        confirmLabel: 'Apply anyway',
+                        danger: true,
+                      })
+                      if (ok) await apply(true)
+                      return
+                    }
+                    toast({
+                      title: 'Rate change failed',
+                      description: e instanceof Error ? e.message : 'Error',
+                      variant: 'error',
+                    })
+                  }
+                }
+                await apply()
+              })()
             }
           >
             Apply
