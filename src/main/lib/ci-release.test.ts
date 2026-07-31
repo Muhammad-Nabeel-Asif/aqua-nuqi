@@ -45,11 +45,12 @@ describe('CI release safety (Phase 0B review)', () => {
 
     expect(windowsPublish).toMatch(/draft:\s*true/)
     expect(windowsPublish).toMatch(/make_latest:\s*false/)
-    // Linux must update the Windows draft (gh api), not softprops draft:false
-    // which creates a second release and fails with tag already_exists.
+    // Linux must update the Windows draft via `gh release upload/edit`, not
+    // softprops draft:false (creates a second release → tag already_exists).
     expect(linuxPublish).not.toMatch(/uses:\s*softprops\/action-gh-release/)
-    expect(linuxPublish).toMatch(/draft=false/)
-    expect(linuxPublish).toMatch(/make_latest/)
+    expect(linuxPublish).toMatch(/gh release upload/)
+    expect(linuxPublish).toMatch(/gh release edit/)
+    expect(linuxPublish).toMatch(/--draft=false/)
   })
 
   it('quality gate runs production build (FR-CI-03)', () => {
