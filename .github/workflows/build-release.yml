@@ -1,0 +1,144 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Release channel'
+        type: choice
+        options: [dev, stable]
+        default: dev
+
+permissions:
+  contents: write
+
+# A newer push makes an in-flight build pointless; cancel it.
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  # ---------------------------------------------------------------
+  # Gate: nothing gets built, let alone released, if this fails.
+  # ---------------------------------------------------------------
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+
+  # ---------------------------------------------------------------
+  # Windows: builds the installer AND creates the release.
+  # ---------------------------------------------------------------
+  build-windows:
+    needs: quality
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed for commit-based release notes
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Derive version and channel
+        id: version
+        shell: bash
+        run: |
+          # Base version comes from package.json (e.g. 0.4.0 after Phase 4);
+          # the patch position is the build number so it always increases.
+          BASE=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
+          VERSION="${BASE}.${{ github.run_number }}"
+          CHANNEL="${{ github.event.inputs.channel || 'dev' }}"
+          if [ "$CHANNEL" = "stable" ]; then PRERELEASE=false; else PRERELEASE=true; fi
+          echo "version=$VERSION"       >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "APP_VERSION=$VERSION"   >> "$GITHUB_ENV"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - run: npm ci
+      - name: Build Windows installer
+        run: npm run dist:win
+
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        env:
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: node scripts/release-notes.mjs "$APP_VERSION" > RELEASE_NOTES.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Aqua-Nuqi-Windows
+          path: release/*.exe
+          if-no-files-found: error
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.APP_VERSION }}
+          name: Aqua Nuqi v${{ env.APP_VERSION }}
+          body_path: RELEASE_NOTES.md
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          make_latest: ${{ steps.version.outputs.prerelease == 'false' }}
+          files: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/latest.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------
+  # Ubuntu: appends its artifacts to the SAME release.
+  # ---------------------------------------------------------------
+  build-linux:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Apply the same version
+        run: npm version "${{ needs.build-windows.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - run: npm ci
+      - run: npm run dist:linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Aqua-Nuqi-Linux
+          path: release/*.AppImage
+          if-no-files-found: error
+
+      - name: Attach Ubuntu builds to the same release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build-windows.outputs.version }}
+          prerelease: ${{ needs.build-windows.outputs.prerelease }}
+          make_latest: ${{ needs.build-windows.outputs.prerelease == 'false' }}
+          files: |
+            release/*.AppImage
+            release/*.deb
+            release/latest-linux.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

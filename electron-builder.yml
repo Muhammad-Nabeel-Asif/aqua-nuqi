@@ -1,0 +1,47 @@
+appId: com.aquanuqi.app
+productName: Aqua Nuqi
+copyright: Copyright © Aqua Nuqi
+directories:
+  output: release
+  buildResources: resources
+
+# better-sqlite3 is a native module. Keeping asar off avoids the
+# "cannot find module" class of packaging bugs seen in MA Traders.
+asar: false
+
+files:
+  - out/**/*
+  - drizzle/**/*
+  - resources/**/*
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false # per-user install, no admin rights (NFR-08)
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Aqua Nuqi
+  deleteAppDataOnUninstall: false # CRITICAL: never delete the client's data
+  artifactName: Aqua-Nuqi-Setup.${ext}
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  installerHeaderIcon: resources/icon.ico
+
+linux:
+  target: [AppImage, deb]
+  category: Office
+  icon: resources/icon.png
+  maintainer: Muhammad Nabeel Asif <nabeel.asif362@gmail.com>
+  artifactName: Aqua-Nuqi.${ext}
+
+publish:
+  - provider: github
+    releaseType: release
+
+npmRebuild: true

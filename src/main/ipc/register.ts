@@ -1,0 +1,15 @@
+import { registerAuthHandlers } from './handlers/auth.handlers'
+import { registerBackupHandlers } from './handlers/backup.handlers'
+import { registerDiagnosticsHandlers } from './handlers/diagnostics.handlers'
+import { registerPeriodHandlers } from './handlers/period.handlers'
+import { registerSettingsHandlers } from './handlers/settings.handlers'
+import { registerSetupHandlers } from './handlers/setup.handlers'
+
+export function registerAllHandlers(): void {
+  registerAuthHandlers()
+  registerSettingsHandlers()
+  registerPeriodHandlers()
+  registerBackupHandlers()
+  registerSetupHandlers()
+  registerDiagnosticsHandlers()
+}

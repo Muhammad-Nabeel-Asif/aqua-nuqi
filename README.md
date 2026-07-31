@@ -1,5 +1,14 @@
 # Aqua Nuqi — Water Plant Management System
 
+[![Latest build](https://img.shields.io/github/v/release/Muhammad-Nabeel-Asif/aqua-nuqi?include_prereleases&label=latest%20build)](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases)
+
+**Download (stable — for the client):**
+
+- Windows: https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe
+- Ubuntu: https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.AppImage
+
+Client install steps: [`docs/CLIENT-INSTALL-GUIDE.md`](docs/CLIENT-INSTALL-GUIDE.md)
+
 An offline-first **Electron + SQLite desktop application** for a water purification plant that
 delivers 19-litre returnable bottles to customers across a city.
 
@@ -7,25 +16,71 @@ It replaces paper delivery cards with digital tracking, generates monthly invoic
 tracks expenses and staff salaries, keeps count of every bottle, and shows the owner what he
 actually earns.
 
-> **Status:** requirements complete, implementation not started.
+> **Status:** Phase 0B (CI/CD & releases). Next: Phase 1 (Customers & master data).
+
+---
+
+## Getting a build
+
+### Permanent download links
+
+| Platform          | URL                                                                                            |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| Windows installer | https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe |
+| Ubuntu AppImage   | https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.AppImage  |
+| Debian package    | https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.deb       |
+
+These URLs always serve the newest **stable** release. Every push to `main` also publishes a
+**pre-release** (dev channel) that does **not** move `/releases/latest`.
+
+### Trigger a build
+
+1. **Dev (automatic):** push to `main`. The workflow runs quality → Windows → Linux and publishes a
+   pre-release tagged `v0.<phase>.<run_number>`.
+2. **Stable (manual):** GitHub → Actions → **Build & Release** → Run workflow → channel **stable**.
+   That marks the release as latest and moves the client's download links.
+
+### Local packaging
+
+```bash
+npm ci
+npm run dist:win     # Windows NSIS installer → release/Aqua-Nuqi-Setup.exe
+npm run dist:linux   # AppImage + deb → release/Aqua-Nuqi.AppImage / .deb
+```
+
+### Native module rebuild (better-sqlite3 ABI)
+
+`better-sqlite3` must match the runtime ABI:
+
+| When                                 | Command                    |
+| ------------------------------------ | -------------------------- |
+| Running unit tests / Node scripts    | `npm run rebuild:node`     |
+| Packaging / running the Electron app | `npm run rebuild:electron` |
+
+CI installs cleanly per job, so this rarely matters there. Locally, if tests fail with a native
+module error after packaging (or the reverse), run the matching rebuild script.
+
+**Versioning:** `package.json` holds `0.<phase>.0`. CI sets the patch to `github.run_number`
+(e.g. `0.2.14`). Bump the minor version at the end of every phase.
 
 ---
 
 ## Documentation map
 
-| Document | Read it when |
-|---|---|
-| [`docs/00-project-overview.md`](docs/00-project-overview.md) | Always first — business context and glossary |
-| [`docs/01-functional-requirements.md`](docs/01-functional-requirements.md) | You need the full requirement catalogue (`FR-` IDs) |
-| [`docs/02-architecture-and-stack.md`](docs/02-architecture-and-stack.md) | Before writing any code — binding technical decisions |
-| [`docs/03-data-model.md`](docs/03-data-model.md) | Any time you touch the database — authoritative schema |
-| [`docs/04-ui-ux-guidelines.md`](docs/04-ui-ux-guidelines.md) | Before writing any UI |
-| [`docs/05-open-questions-and-recommendations.md`](docs/05-open-questions-and-recommendations.md) | **Before the next client meeting** — gaps, risks and questions |
-| [`docs/06-client-questionnaire.md`](docs/06-client-questionnaire.md) | **In the client meeting** — a plain-language script with blanks to fill in |
-| [`docs/07-data-lifecycle-and-upgrades.md`](docs/07-data-lifecycle-and-upgrades.md) | Before touching the database path, packaging config, migrations or the installer — how client data survives updates |
-| [`docs/phases/PROMPTS.md`](docs/phases/PROMPTS.md) | **Copy-paste prompts** — one per phase, plus review, resume, bug-fix and client-answer prompts |
-| [`docs/phases/AGENT-BRIEF.md`](docs/phases/AGENT-BRIEF.md) | Start of every coding session |
-| [`docs/phases/PROGRESS.md`](docs/phases/PROGRESS.md) | Start and end of every phase |
+| Document                                                                                         | Read it when                                                                                                        |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| [`docs/00-project-overview.md`](docs/00-project-overview.md)                                     | Always first — business context and glossary                                                                        |
+| [`docs/01-functional-requirements.md`](docs/01-functional-requirements.md)                       | You need the full requirement catalogue (`FR-` IDs)                                                                 |
+| [`docs/02-architecture-and-stack.md`](docs/02-architecture-and-stack.md)                         | Before writing any code — binding technical decisions                                                               |
+| [`docs/03-data-model.md`](docs/03-data-model.md)                                                 | Any time you touch the database — authoritative schema                                                              |
+| [`docs/04-ui-ux-guidelines.md`](docs/04-ui-ux-guidelines.md)                                     | Before writing any UI                                                                                               |
+| [`docs/05-open-questions-and-recommendations.md`](docs/05-open-questions-and-recommendations.md) | **Before the next client meeting** — gaps, risks and questions                                                      |
+| [`docs/06-client-questionnaire.md`](docs/06-client-questionnaire.md)                             | **In the client meeting** — a plain-language script with blanks to fill in                                          |
+| [`docs/07-data-lifecycle-and-upgrades.md`](docs/07-data-lifecycle-and-upgrades.md)               | Before touching the database path, packaging config, migrations or the installer — how client data survives updates |
+| [`docs/CLIENT-INSTALL-GUIDE.md`](docs/CLIENT-INSTALL-GUIDE.md)                                   | Send to the client over WhatsApp                                                                                    |
+| [`docs/phases/PROMPTS.md`](docs/phases/PROMPTS.md)                                               | **Copy-paste prompts** — one per phase, plus review, resume, bug-fix and client-answer prompts                      |
+| [`docs/phases/AGENT-BRIEF.md`](docs/phases/AGENT-BRIEF.md)                                       | Start of every coding session                                                                                       |
+| [`docs/phases/PROGRESS.md`](docs/phases/PROGRESS.md)                                             | Start and end of every phase                                                                                        |
 
 ---
 
@@ -34,19 +89,19 @@ actually earns.
 Each phase is sized to be implemented in a single AI-agent context window. Start a fresh context
 per phase and point the agent at `docs/phases/AGENT-BRIEF.md` plus that phase's file.
 
-| # | Phase | Delivers | Depends on |
-|---|---|---|---|
-| 0 | [Foundation](docs/phases/phase-00-foundation.md) | Electron shell, SQLite, migrations, IPC, auth, settings, audit, period lock, installer | — |
-| 0B | [CI/CD & releases](docs/phases/phase-00b-ci-cd-and-releases.md) | GitHub Actions building Windows `.exe` + Ubuntu `.AppImage`/`.deb` on every push, published to GitHub Releases behind permanent download links | 0 |
-| 1 | [Customers & master data](docs/phases/phase-01-customers-and-master-data.md) | Customers, areas, routes, products, dated rates, opening balances, CSV import | 0 |
-| 2 | [Delivery tracking](docs/phases/phase-02-delivery-tracking.md) | Daily entry, month matrix, digital customer card, bottle balances | 0, 1 |
-| 3 | [Billing, ledger & payments](docs/phases/phase-03-billing-ledger-and-payments.md) | Invoices, customer ledger, payments, receivables, period close | 0–2 |
-| 4 | [PDF documents & sharing](docs/phases/phase-04-pdf-documents-and-sharing.md) | Invoice/receipt/statement PDFs, printing, WhatsApp sharing | 3 |
-| 5 | [Expense management](docs/phases/phase-05-expense-management.md) | Expenses, categories, recurring expenses, receipts | 0, 4 |
-| 6 | [Employees & payroll](docs/phases/phase-06-employees-and-payroll.md) | Staff records, attendance, advances, monthly payroll, salary slips | 2, 5 |
-| 7 | [Inventory & trip reconciliation](docs/phases/phase-07-inventory-and-trip-reconciliation.md) | Bottle stock, vehicles, van load/cash reconciliation, bottles-out recovery list | 1, 2, 5, 6 |
-| 8 | [Dashboard & reports](docs/phases/phase-08-dashboard-and-reports.md) | Dashboard, profit & loss, sales/money/operations reports | 2–7 |
-| 9 | [Backup, audit, hardening & release](docs/phases/phase-09-backup-audit-hardening-and-release.md) | Full backup/restore, audit viewer, integrity tools, installer, handover | all |
+| #   | Phase                                                                                            | Delivers                                                                                                                                       | Depends on |
+| --- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 0   | [Foundation](docs/phases/phase-00-foundation.md)                                                 | Electron shell, SQLite, migrations, IPC, auth, settings, audit, period lock, installer                                                         | —          |
+| 0B  | [CI/CD & releases](docs/phases/phase-00b-ci-cd-and-releases.md)                                  | GitHub Actions building Windows `.exe` + Ubuntu `.AppImage`/`.deb` on every push, published to GitHub Releases behind permanent download links | 0          |
+| 1   | [Customers & master data](docs/phases/phase-01-customers-and-master-data.md)                     | Customers, areas, routes, products, dated rates, opening balances, CSV import                                                                  | 0          |
+| 2   | [Delivery tracking](docs/phases/phase-02-delivery-tracking.md)                                   | Daily entry, month matrix, digital customer card, bottle balances                                                                              | 0, 1       |
+| 3   | [Billing, ledger & payments](docs/phases/phase-03-billing-ledger-and-payments.md)                | Invoices, customer ledger, payments, receivables, period close                                                                                 | 0–2        |
+| 4   | [PDF documents & sharing](docs/phases/phase-04-pdf-documents-and-sharing.md)                     | Invoice/receipt/statement PDFs, printing, WhatsApp sharing                                                                                     | 3          |
+| 5   | [Expense management](docs/phases/phase-05-expense-management.md)                                 | Expenses, categories, recurring expenses, receipts                                                                                             | 0, 4       |
+| 6   | [Employees & payroll](docs/phases/phase-06-employees-and-payroll.md)                             | Staff records, attendance, advances, monthly payroll, salary slips                                                                             | 2, 5       |
+| 7   | [Inventory & trip reconciliation](docs/phases/phase-07-inventory-and-trip-reconciliation.md)     | Bottle stock, vehicles, van load/cash reconciliation, bottles-out recovery list                                                                | 1, 2, 5, 6 |
+| 8   | [Dashboard & reports](docs/phases/phase-08-dashboard-and-reports.md)                             | Dashboard, profit & loss, sales/money/operations reports                                                                                       | 2–7        |
+| 9   | [Backup, audit, hardening & release](docs/phases/phase-09-backup-audit-hardening-and-release.md) | Full backup/restore, audit viewer, integrity tools, installer, handover                                                                        | all        |
 
 **Minimum shippable product:** Phases 0–4. That alone replaces the paper card and the hand-written
 bill, which is the client's actual pain.
