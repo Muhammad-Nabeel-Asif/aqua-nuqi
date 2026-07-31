@@ -7,6 +7,7 @@ import {
   endOfMonth,
   addMonths,
   subMonths,
+  addDays,
 } from 'date-fns'
 
 const BUSINESS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -90,4 +91,18 @@ export function previousPeriod(period: string): string {
   assertPeriod(period)
   const d = parse(`${period}-01`, 'yyyy-MM-dd', new Date())
   return format(subMonths(d, 1), 'yyyy-MM')
+}
+
+/** Add (or subtract) whole calendar days from a business date. */
+export function addBusinessDays(date: string, days: number): string {
+  assertBusinessDate(date)
+  const d = parse(date, 'yyyy-MM-dd', new Date())
+  return format(addDays(d, days), 'yyyy-MM-dd')
+}
+
+/** First day of the next calendar month after `date` (or after today if omitted). */
+export function firstOfNextMonth(date?: string): string {
+  const base = date ? parse(date, 'yyyy-MM-dd', new Date()) : new Date()
+  if (date) assertBusinessDate(date)
+  return format(startOfMonth(addMonths(base, 1)), 'yyyy-MM-dd')
 }

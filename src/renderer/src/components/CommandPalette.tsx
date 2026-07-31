@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { api } from '@renderer/lib/api'
 import { useUiStore } from '@renderer/stores/ui'
 
 type Item = { to: string; label: string }
@@ -9,6 +10,9 @@ export function CommandPalette({ items }: { items: Item[] }) {
   const setOpen = useUiStore((s) => s.setCommandOpen)
   const [q, setQ] = useState('')
   const navigate = useNavigate()
+  const [customers, setCustomers] = useState<
+    { id: number; code: string; name: string; phonePrimary: string | null }[]
+  >([])
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -19,6 +23,18 @@ export function CommandPalette({ items }: { items: Item[] }) {
   useEffect(() => {
     if (!open) setQ('')
   }, [open])
+  useEffect(() => {
+    const query = q.trim()
+    if (query.length < 2) {
+      setCustomers([])
+      return
+    }
+    const timer = window.setTimeout(
+      () => void api.customers.search(query).then((r) => setCustomers(r.items)),
+      250,
+    )
+    return () => window.clearTimeout(timer)
+  }, [q])
 
   if (!open) return null
 
@@ -60,7 +76,21 @@ export function CommandPalette({ items }: { items: Item[] }) {
               </button>
             </li>
           ))}
-          {filtered.length === 0 ? (
+          {customers.map((customer) => (
+            <li key={`customer-${customer.id}`}>
+              <button
+                type="button"
+                className="flex w-full rounded-md px-3 py-2 text-left text-sm hover:bg-sky-50"
+                onClick={() => {
+                  navigate(`/customers/${customer.id}`)
+                  setOpen(false)
+                }}
+              >
+                {customer.code} — {customer.name} — {customer.phonePrimary ?? 'No phone'}
+              </button>
+            </li>
+          ))}
+          {filtered.length === 0 && customers.length === 0 ? (
             <li className="px-3 py-6 text-center text-sm text-muted-foreground">No matches</li>
           ) : null}
         </ul>

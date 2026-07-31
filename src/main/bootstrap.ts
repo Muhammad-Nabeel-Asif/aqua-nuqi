@@ -23,7 +23,12 @@ import {
 import { createAuditService } from './services/audit.service'
 import { createAuthService } from './services/auth.service'
 import { createBackupService } from './services/backup.service'
+import { createBalanceService } from './services/balance.service'
+import { createCustomerImportService } from './services/customer-import.service'
+import { createCustomerService } from './services/customer.service'
+import { createMasterDataService } from './services/master-data.service'
 import { createPeriodService } from './services/period.service'
+import { createRateService } from './services/rate.service'
 import { createSettingsService } from './services/settings.service'
 
 function readAppVersion(): string {
@@ -116,6 +121,11 @@ export function bootstrapApp(): BootstrapResult {
         return configured || paths.backupsDir
       },
     })
+    const masterData = createMasterDataService(db, audit)
+    const rates = createRateService(db, audit, period)
+    const balances = createBalanceService(db, raw)
+    const customers = createCustomerService(db, audit, period, rates, balances)
+    const customerImport = createCustomerImportService(db, customers, masterData)
 
     const setupRequired = dbMissing || !auth.hasAnyUser()
     const schemaVersion =
@@ -134,6 +144,11 @@ export function bootstrapApp(): BootstrapResult {
       audit,
       period,
       backup,
+      masterData,
+      rates,
+      balances,
+      customers,
+      customerImport,
       appVersion,
       schemaVersion: schemaVersion || getSchemaVersion(),
       setupRequired,

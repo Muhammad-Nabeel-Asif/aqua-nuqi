@@ -1,6 +1,8 @@
 import { Navigate, createHashRouter } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { LoginPage } from './features/auth/LoginPage'
+import { CustomerDetailPage } from './features/customers/CustomerDetailPage'
+import { CustomersPage } from './features/customers/CustomersPage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { ComingSoonPage } from './features/placeholder/ComingSoonPage'
 import { SettingsPage } from './features/settings/SettingsPage'
@@ -51,8 +53,8 @@ export const router = createHashRouter([
       { index: true, element: <DashboardPage /> },
       { path: 'deliveries/daily', element: <ComingSoonPage title="Daily deliveries" phase={2} /> },
       { path: 'deliveries/matrix', element: <ComingSoonPage title="Month matrix" phase={2} /> },
-      { path: 'customers', element: <ComingSoonPage title="Customers" phase={1} /> },
-      { path: 'customers/:id', element: <ComingSoonPage title="Customer detail" phase={1} /> },
+      { path: 'customers', element: <CustomersPage /> },
+      { path: 'customers/:id', element: <CustomerDetailPage /> },
       { path: 'billing/generate', element: <ComingSoonPage title="Generate invoices" phase={3} /> },
       { path: 'billing/invoices', element: <ComingSoonPage title="Invoices" phase={3} /> },
       {

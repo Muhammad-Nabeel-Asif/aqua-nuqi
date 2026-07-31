@@ -4,6 +4,18 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 1 — Customers & master data:** areas, routes, products management; customer CRUD with
+  dated rate history (`rateService.getRateFor`); opening balances via `ledger_entries`;
+  materialised `customer_balances` + recalculate; CSV/Excel import with column mapping and
+  all-or-nothing commit; bulk rate change; Ctrl+K customer search; ~200-customer dev seed.
+
+### Dependencies
+
+- Added `xlsx`, `@tanstack/react-table`, `@tanstack/react-virtual` for import/export and list
+  virtualisation (noted in `PROGRESS.md`).
+
 ### Fixed
 
 - **Windows packaged install:** frozen identity check failed with

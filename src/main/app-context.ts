@@ -3,7 +3,12 @@ import type { AppPaths } from '@main/lib/paths'
 import type { AuditService } from '@main/services/audit.service'
 import type { AuthService } from '@main/services/auth.service'
 import type { BackupService } from '@main/services/backup.service'
+import type { BalanceService } from '@main/services/balance.service'
+import type { CustomerImportService } from '@main/services/customer-import.service'
+import type { CustomerService } from '@main/services/customer.service'
+import type { MasterDataService } from '@main/services/master-data.service'
 import type { PeriodService } from '@main/services/period.service'
+import type { RateService } from '@main/services/rate.service'
 import type { SettingsService } from '@main/services/settings.service'
 
 export type BootFatal =
@@ -20,6 +25,11 @@ export type AppContext = {
   audit: AuditService
   period: PeriodService
   backup: BackupService
+  masterData: MasterDataService
+  rates: RateService
+  balances: BalanceService
+  customers: CustomerService
+  customerImport: CustomerImportService
   appVersion: string
   schemaVersion: number
   setupRequired: boolean

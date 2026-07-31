@@ -16,7 +16,7 @@ It replaces paper delivery cards with digital tracking, generates monthly invoic
 tracks expenses and staff salaries, keeps count of every bottle, and shows the owner what he
 actually earns.
 
-> **Status:** Phase 0B (CI/CD & releases). Next: Phase 1 (Customers & master data).
+> **Status:** Phase 1 (Customers & master data). Next: Phase 2 (Deliveries).
 
 ---
 

@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/u
 import { api } from '@renderer/lib/api'
 import { useSessionStore } from '@renderer/stores/session'
 import { AppError } from '@shared/errors'
+import { MasterDataPanel } from './MasterDataPanel'
 
 export function SettingsPage() {
   const user = useSessionStore((s) => s.user)
@@ -157,9 +158,7 @@ export function SettingsPage() {
           <TabsTrigger value="backup" disabled>
             Backup
           </TabsTrigger>
-          <TabsTrigger value="master" disabled>
-            Master data
-          </TabsTrigger>
+          <TabsTrigger value="master">Master data</TabsTrigger>
           <TabsTrigger value="about">About</TabsTrigger>
         </TabsList>
 
@@ -190,6 +189,10 @@ export function SettingsPage() {
             onChange={(v) => setBusiness({ ...business, bankDetails: v })}
           />
           <Button onClick={() => void saveBusiness()}>Save</Button>
+        </TabsContent>
+
+        <TabsContent value="master">
+          <MasterDataPanel />
         </TabsContent>
 
         <TabsContent value="locale" className="max-w-xl space-y-3">
@@ -288,6 +291,44 @@ export function SettingsPage() {
             <Button className="mt-4" variant="secondary" onClick={() => void exportDiagnostics()}>
               Export diagnostics
             </Button>
+            {user?.role === 'owner' ? (
+              <Button
+                className="ml-2 mt-4"
+                variant="outline"
+                onClick={() =>
+                  void api.balances
+                    .recalculate()
+                    .then((r) =>
+                      toast({ title: `Recalculated ${r.updated} balances`, variant: 'success' }),
+                    )
+                    .catch((err: unknown) =>
+                      toast({
+                        title: 'Recalculation failed',
+                        description: err instanceof AppError ? err.message : 'Error',
+                        variant: 'error',
+                      }),
+                    )
+                }
+              >
+                Recalculate balances
+              </Button>
+            ) : null}
+            {import.meta.env.DEV ? (
+              <Button
+                className="ml-2 mt-4"
+                variant="outline"
+                onClick={() =>
+                  void api.dev?.seedDemo().then((r) =>
+                    toast({
+                      title: `Seeded ${r.customers} customers, ${r.areas} areas, ${r.routes} routes`,
+                      variant: 'success',
+                    }),
+                  )
+                }
+              >
+                Seed demo customers
+              </Button>
+            ) : null}
           </div>
 
           {user?.role === 'owner' ? (

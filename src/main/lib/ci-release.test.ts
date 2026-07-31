@@ -81,10 +81,11 @@ describe('CI release safety (Phase 0B review)', () => {
     expect(readme).not.toMatch(/include_prereleases/)
   })
 
-  it('PROGRESS marks Phase 0B partial until Windows upgrade matrix is proven', () => {
+  it('PROGRESS marks Phase 0B complete after Windows matrix (v0.2.11)', () => {
     const progress = readProgress()
     const phase0b = progress.slice(progress.indexOf('## Phase 0B'))
-    expect(phase0b).toMatch(/\*\*Status:\*\*\s*partial/)
-    expect(phase0b).not.toMatch(/\*\*Status:\*\*\s*complete/)
+    expect(phase0b).toMatch(/\*\*Status:\*\*\s*complete/)
+    expect(phase0b).toMatch(/Windows upgrade matrix/)
+    expect(phase0b).toMatch(/v0\.2\.11/)
   })
 })

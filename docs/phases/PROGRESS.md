@@ -172,7 +172,7 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 
 ## Phase 0B — CI/CD, Automated Builds & Release Distribution
 
-**Date:** 2026-07-31 · **Status:** partial
+**Date:** 2026-07-31 · **Status:** complete
 
 ### Built
 
@@ -196,11 +196,28 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 
 - **Repo (public):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi
 - **First stable release:** [v0.2.6](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.2.6)
+- **Current stable (Windows-tested):** [v0.2.11](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.2.11)
   — assets: `Aqua-Nuqi-Setup.exe`, `Aqua-Nuqi.AppImage`, `Aqua-Nuqi.deb`, `latest.yml`,
-  `latest-linux.yml`, blockmap. Dev pre-release `v0.2.5` published earlier.
+  `latest-linux.yml`, blockmap. Includes packaged `package.json` identity fix.
 - **Windows (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe
 - **Ubuntu (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.AppImage
 - **Debian (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.deb
+
+### Windows upgrade matrix (2026-07-31)
+
+| Check                                           | Result      |
+| ----------------------------------------------- | ----------- |
+| #6 Fresh install (no admin, shortcuts, launch)  | **PASS**    |
+| #7 Upgrade over previous (data/settings intact) | **PASS**    |
+| #4 Downgrade refusal (older-than-data screen)   | **PENDING** |
+| #8 Uninstall leaves `AppData\Roaming\Aqua Nuqi` | **PASS**    |
+
+- **Installer used:** stable **v0.2.11** (after Windows `package.json` identity fix).
+- **Business name used:** Aqua Nuqi.
+- **#4 note:** not exercised on-device. All current `0.2.x` builds share schema `1`, so installing
+  an older build over a newer one will not hit `APP_OLDER_THAN_DATA` until a later phase ships a
+  real migration. Unit coverage for refused downgrade remains; **re-run scenario 4 on Windows after
+  the next schema-bumping phase.**
 
 ### Versioning scheme actually used
 
@@ -226,45 +243,168 @@ audit.withAudit(tx, input, () => { /* mutation */ })
   wasm32 resolver binding so GitHub Actions `npm ci` accepts the lockfile.
 - Repo made **public** (phase said private): anonymous `/releases/latest/download/…` links 404 on
   private repos, which blocks the client's permanent download URLs. Source has no customer data.
-- AppImage from `v0.2.6` downloads and starts on this Ubuntu host (`chmod +x` + launch). Windows
-  upgrade matrix (§0B.4 scenarios 1/4/7) still needs a human on a Windows laptop.
+- AppImage from `v0.2.6` downloads and starts on this Ubuntu host (`chmod +x` + launch).
+- Windows matrix run on a real laptop against **v0.2.11** (see table above). Scenario **#4**
+  deferred until a schema-bumping release (same schema across current 0.2.x).
 
 ### What the next phase must know
 
-- Permanent links above are what you send the client (stable channel only).
+- Permanent links above are what you send the client (stable channel only). Current latest is
+  **v0.2.11**.
 - End of every phase: bump minor in `package.json` → push `main` → Actions → **Build & Release**
   → channel **stable** → run upgrade tests 1/4/7 from `docs/07` §7 → record version + release URL
   here → send the Windows link.
+- **After the first Phase 1+ migration:** re-run Windows scenario #4 (install older over newer →
+  “older than your data” screen).
 - `DOWNLOAD_LATEST_URL` points at the permanent Setup.exe download.
 - Do not rename artifacts, `appId`, `productName`, or `package.json` `name`.
 - `latest.yml` / `latest-linux.yml` / blockmaps are already uploaded for Phase 9 electron-updater.
+- **Next phase is Phase 1 (Customers & master data).**
 
 ### Escalations / questions for the human
 
-- Confirm first stable release on a real Windows laptop (install, shortcuts, upgrade over previous
-  install, uninstall leaves `AppData\Roaming\Aqua Nuqi`). Run §0B.4 scenarios 1/4/7 + uninstall;
-  only then flip Status to complete.
-- Branch protection on `main` now requires the `quality` status check (enabled via GitHub API
-  2026-07-31). Confirm in the UI that PR merges cannot bypass it.
+- Scenario #4 (downgrade refusal) still PENDING on Windows — retest after next schema migration.
 - Code signing (~$70–200/year) still optional; SmartScreen “More info → Run anyway” remains.
 - Repo was switched from private → public so client download links work without auth — confirm
   that is acceptable.
 
 ### Review fixes (2026-07-31)
 
-- Status set to **partial** — Windows install/upgrade/uninstall acceptance (#6–#8) still unproven.
 - Concurrency groups include `event_name` + channel; `cancel-in-progress` disabled for stable so
   a push cannot cancel a mid-flight client release.
 - Windows creates a **draft** release; Linux attaches AppImage/deb then publishes (no half-complete
   “latest” if Linux fails).
 - `npm run build` added to quality (and PR build-check); Linux artifact upload hard-fails on
   missing `.deb`.
-- CHANGELOG: Phase 0B notes moved to `## [0.2.6]`; `[Unreleased]` cleared. Dig builds ignore
-  Unreleased so stale bullets cannot pollute notes.
+- CHANGELOG: Phase 0B notes moved to `## [0.2.6]`; dig builds ignore Unreleased so stale bullets
+  cannot pollute notes.
 - README badge tracks latest **stable** only (dropped `include_prereleases`).
 - Branch protection on `main` enabled (required status check: `quality`).
 - Tests: `ci-release.test.ts`, `release-notes.test.ts`.
-- **Windows fatal fix:** packaged installs failed with `package.json name … Found ""`
-  because identity check looked three levels up from `out/main` (lands in `resources/`)
-  instead of two (`resources/app/package.json`). Also list `package.json` under
-  `electron-builder.yml` `files`. Needs a new stable build before retrying the Windows matrix.
+- **Windows fatal fix (shipped in v0.2.11):** packaged installs failed with
+  `package.json name … Found ""` because identity check looked three levels up from `out/main`.
+  Resolve from app root; include `package.json` in `electron-builder.yml` `files`.
+- Windows matrix recorded; Status → **complete** (with #4 deferred as above).
+
+---
+
+## Phase 1 — Customers, Master Data & Pricing
+
+**Date:** 2026-07-31 · **Status:** complete · **package.json:** `0.3.0`
+
+### Built
+
+- Migration `drizzle/0001_friendly_christian_walker.sql` — `areas`, `routes`, `customers`,
+  `customer_rates`, `customer_schedules`, `customer_balances`, `ledger_entries`
+- Services: `master-data`, `rate`, `balance`, `customer`, `customer-import`; demo seed
+  `seed-demo.ts` (~200 customers / 6 areas / 10 routes) behind `dev:seedDemo`
+- Settings → Master Data (areas / routes / products); Customers list (virtualised) + detail
+  (overview, rate history, schedule, audit; delivery/ledger/invoice tabs placeholder)
+- CSV/Excel import wizard (map → validate with row errors → all-or-nothing commit) + template
+- Bulk rate change; Ctrl+K customer search; Recalculate balances on Settings → About
+- Unit tests: rate history (criteria 3–4), bulk rollback, balances vs aggregate, import
+  all-or-nothing, area deactivate blocked
+
+### Migrations added
+
+- `drizzle/0001_friendly_christian_walker.sql` — tables above; `routes.default_employee_id`
+  column **without** FK (employees arrive in Phase 6)
+
+### IPC channels added
+
+- `areas:list|create|update`, `routes:list|create|update|reorder`, `products:list|create|update`
+- `customers:list|get|nextCode|create|update|setStatus|bulkUpdate|search|audit|export`
+- `customers:importParse|importValidate|importCommit|importTemplate`
+- `rates:getFor|change|bulkChange|previewBulk`, `balances:recalculate`, `dev:seedDemo`
+
+### Settings keys added
+
+- None
+
+### Error codes added
+
+- None (reused `VALIDATION_FAILED`, `NOT_FOUND`, `CONFLICT`, `PERIOD_LOCKED`, `FORBIDDEN`)
+
+### Deviations from the spec
+
+- Added deps not in stack §1: `xlsx`, `@tanstack/react-table`, `@tanstack/react-virtual`
+  (needed for Excel import/export and virtualised list).
+- Money balance truth = `Σ ledger.debit − Σ ledger.credit` (includes `opening_balance` entry).
+  Docs §J formula that also adds `customers.opening_balance` would double-count; column remains
+  the go-live snapshot. Bottles = `opening_bottles` (+ deliveries/adjustments when those tables
+  exist; Phase 2/3).
+- `routes.default_employee_id` stored without FK until Phase 6.
+
+### What the next phase must know
+
+**`rateService.getRateFor` signature:**
+
+```ts
+rates.getRateFor(customerId: number, productId: number, onDate: string /* YYYY-MM-DD */): number // paisa
+// Fallback: covering customer_rates row → products.default_rate
+// Changing a rate closes the open row (effective_to = from − 1 day) and inserts a new row. Never UPDATE rate.
+```
+
+**`ledger_entries`:** created in this phase. Opening balance writes
+`entry_type = 'opening_balance'` immediately when non-zero.
+
+**`customer_balances` sync:** created with the customer; updated in the same transaction as
+opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. Maintenance:
+`balances.recalculate(customerId?)` (Settings → About). Unit test asserts summary ≡ live aggregate.
+
+**Customer DTO shape** (`customerDto` in `src/shared/contracts/customers.ts`):
+
+```ts
+{
+  ;(id,
+    uuid,
+    code,
+    name,
+    customerType,
+    phonePrimary,
+    phoneSecondary,
+    whatsappNumber,
+    email,
+    addressLine,
+    landmark,
+    areaId,
+    areaName,
+    routeId,
+    routeName,
+    deliveryNotes,
+    billingMode,
+    packageAmount,
+    packageIncludedQty,
+    packageExcessRate,
+    billingDay,
+    creditLimit,
+    securityDepositHeld,
+    openingBottles,
+    openingBalance,
+    openingAsOf,
+    status,
+    pausedFrom,
+    pausedTo,
+    statusReason,
+    joinedOn,
+    notes,
+    balance,
+    bottlesWithCustomer,
+    currentRate,
+    schedule,
+    createdAt,
+    updatedAt)
+}
+// get also returns { rateHistory, openingsEditable }
+```
+
+- Default product `19 L Bottle` already seeded; list/create/edit under Master Data.
+- Period lock applies to opening as-of and rate effective-from dates.
+- **Next phase is Phase 2 (Deliveries).** Extend `balanceService.computeLiveBottles` once
+  `deliveries` exists (already probes for the table). Snapshot rate onto each delivery via
+  `rates.getRateFor(customerId, productId, deliveryDate)`.
+
+### Escalations / questions for the human
+
+- Re-run Windows upgrade scenario **#4** (older-than-data) now that schema is 2.
+- Confirm `xlsx` / TanStack Table+Virtual may stay in the stack doc.
