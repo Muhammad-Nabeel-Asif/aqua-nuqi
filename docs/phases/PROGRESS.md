@@ -214,6 +214,10 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 - Kept NSIS icon fields from Phase 0 (`installerIcon` / `uninstallerIcon` / `installerHeaderIcon`).
 - Release-notes step passes `PRERELEASE` env so the dev banner appears (workflow body otherwise
   matches the phase file).
+- Upgraded `better-sqlite3` `^11.7.0` → `^12.10.0` (same as MA Traders) so Node 24 Windows has
+  prebuilds; v11 falls through to node-gyp and fails on `windows-latest`.
+- Lockfile includes nested `@emnapi/core@1.10.0` / `@emnapi/runtime@1.10.0` under the optional
+  wasm32 resolver binding so GitHub Actions `npm ci` accepts the lockfile.
 - Manual Windows upgrade matrix (§0B.4 scenarios 1/4/7) and AppImage launch on Ubuntu still need
   a human on the target OS after the first CI artifacts land; automated tripwires cover identity,
   paths, and installer config.
