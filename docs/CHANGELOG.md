@@ -10,7 +10,7 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
   push to `main`; fixed artifact names (`Aqua-Nuqi-Setup.exe`, `Aqua-Nuqi.AppImage`);
   dev (pre-release) vs stable channels; `latest.yml` / `latest-linux.yml` / blockmaps for
   electron-updater; auto release notes; client install guide
-  (`docs/CLIENT-INSTALL-GUIDE.md`).
+  (`docs/CLIENT-INSTALL-GUIDE.md`). First stable release: **v0.2.6**.
 
 ## [0.1.0] — 2026-07-31
 

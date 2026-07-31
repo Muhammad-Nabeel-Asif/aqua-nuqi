@@ -191,7 +191,10 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 
 ### Repository & download links
 
-- **Repo (private):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi
+- **Repo (public):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi
+- **First stable release:** [v0.2.6](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.2.6)
+  — assets: `Aqua-Nuqi-Setup.exe`, `Aqua-Nuqi.AppImage`, `Aqua-Nuqi.deb`, `latest.yml`,
+  `latest-linux.yml`, blockmap. Dev pre-release `v0.2.5` published earlier.
 - **Windows (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe
 - **Ubuntu (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.AppImage
 - **Debian (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.deb
@@ -199,7 +202,7 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 ### Versioning scheme actually used
 
 - `package.json` holds `0.<phase>.0` (currently `0.2.0` after Phase 0B).
-- CI derives `VERSION = <major>.<minor>.<github.run_number>` (e.g. `0.2.3`).
+- CI derives `VERSION = <major>.<minor>.<github.run_number>` (e.g. `0.2.6`).
 - Pushes to `main` → **pre-release** (dev). Manual workflow with `channel: stable` → marks
   `/releases/latest` for the client.
 - **Reminder:** bump the minor version in `package.json` at the end of every later phase.
@@ -218,9 +221,10 @@ audit.withAudit(tx, input, () => { /* mutation */ })
   prebuilds; v11 falls through to node-gyp and fails on `windows-latest`.
 - Lockfile includes nested `@emnapi/core@1.10.0` / `@emnapi/runtime@1.10.0` under the optional
   wasm32 resolver binding so GitHub Actions `npm ci` accepts the lockfile.
-- Manual Windows upgrade matrix (§0B.4 scenarios 1/4/7) and AppImage launch on Ubuntu still need
-  a human on the target OS after the first CI artifacts land; automated tripwires cover identity,
-  paths, and installer config.
+- Repo made **public** (phase said private): anonymous `/releases/latest/download/…` links 404 on
+  private repos, which blocks the client's permanent download URLs. Source has no customer data.
+- AppImage from `v0.2.6` downloads and starts on this Ubuntu host (`chmod +x` + launch). Windows
+  upgrade matrix (§0B.4 scenarios 1/4/7) still needs a human on a Windows laptop.
 
 ### What the next phase must know
 
@@ -234,8 +238,9 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 
 ### Escalations / questions for the human
 
-- Confirm first stable release on a real Windows laptop (install, shortcuts, data folder survives
-  uninstall). Confirm AppImage: `chmod +x` + launch on Ubuntu.
-- Branch protection requiring the `quality` job is recommended but may need to be set in the
-  GitHub UI (private repo rulesets).
+- Confirm first stable release on a real Windows laptop (install, shortcuts, upgrade over previous
+  install, uninstall leaves `AppData\Roaming\Aqua Nuqi`).
+- Branch protection requiring the `quality` job should be set in the GitHub UI.
 - Code signing (~$70–200/year) still optional; SmartScreen “More info → Run anyway” remains.
+- Repo was switched from private → public so client download links work without auth — confirm
+  that is acceptable.
