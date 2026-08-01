@@ -450,4 +450,4 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 - Linux release publish: `gh release upload` / `edit` (softprops draft:false tag race).
 - Customer list filters: empty select option no longer sends `""` to Zod (list went blank when
   clearing / re-selecting “All …” filters).
-- Stable **v0.3.17** shipped; Windows matrix recorded; status → **complete**.
+- Stable **v0.3.17** Windows-tested; **v0.3.21** ships the filter fix; status → **complete**.
