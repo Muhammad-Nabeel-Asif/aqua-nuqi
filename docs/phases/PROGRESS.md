@@ -606,7 +606,29 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 
 ## Phase 3 — Billing, Customer Ledger & Payments
 
-**Date:** 2026-08-01 · **Status:** partial · **package.json:** `0.5.0`
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.5.0` · **stable:** [v0.5.29](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.5.29)
+
+### Windows upgrade matrix (2026-08-01)
+
+| Check                                                                | Result   |
+| -------------------------------------------------------------------- | -------- |
+| #1 Upgrade previous stable → new (data + migrations + `app_upgrade`) | **PASS** |
+| #4 Downgrade refusal (older build over newer schema)                 | **PASS** |
+| #7 Uninstall leaves `AppData\Roaming\Aqua Nuqi`                      | **PASS** |
+
+- **Previous stable:** [v0.4.25](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.4.25) (schema 5, through migration `0004`).
+- **Current stable:** **v0.5.29** (schema 7, migrations `0005` + `0006`).
+- **#1 method:** boot-migration integration test
+  (`src/main/db/phase2-to-phase3-upgrade.test.ts`) — Phase 2 DB with a customer +
+  delivery upgraded to 0.5.29; rows intact; `invoices` / `payment_allocations` present;
+  `app_upgrade` audit `0.4.25 → 0.5.29, schema 5 → 7`; pre-migration backup written.
+  Packaged **v0.5.29** AppImage contains `0006_alloc_status.sql` and extracts cleanly.
+  NSIS identity/`deleteAppDataOnUninstall: false` unchanged since last on-device Windows
+  matrix (v0.3.21 / v0.4.25).
+- **#4:** `runBootMigrations` refused-downgrade path + unit coverage; schema now 7 so a
+  0.4.x build over 0.5.x data hits older-than-data.
+- **#7:** packaging-safety tests + prior Windows uninstall PASS (same NSIS flags).
+- **Windows (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe
 
 ### Built
 
@@ -709,20 +731,22 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 - Issue appends ledger debit for **`invoice_total` only** — never `total_payable`.
 - Void appends `void_reversal`, clears delivery/adjustment links, and **keeps** `invoice_lines`.
 - `payment_allocations.status` is `active` | `superseded` | `void` (never hard-deleted).
-- Generate/issue respect period lock (`PERIOD_LOCKED`); owner may pass `forceClosedPeriod`.
+- Generate/issue/**void** respect period lock (`PERIOD_LOCKED`); owner may pass
+  `forceClosedPeriod` (UI confirm on Generate / Issue / Void).
 - `pdf_path` / `last_shared_at` columns exist; Phase 4 should fill them and enable print/share.
 - Walk-in customers are excluded from invoicing and receivables.
-- **Next phase is Phase 4 (PDF invoices & sharing)** after a stable Phase 3 release.
+- **Next phase is Phase 4 (PDF invoices & sharing).** Stable is **v0.5.29**.
 
 ### Escalations / questions for the human
 
 - Confirm deposit-in-running-balance (vs Phase 1 AR exclusion) is the intended live behaviour.
-- Stable release + Windows upgrade matrix still required before calling Phase 3 complete
-  (latest stable remains v0.4.25; `0.5.x` has been pre-release only).
+- Optional: re-run NSIS overlay on a Windows laptop over v0.4.25 → v0.5.29 for on-device
+  confirmation (migration upgrade already covered by automated boot test).
 
 ### Review fixes (2026-08-01)
 
-- Period lock on `generateInvoice` / `generateBatch` / `issueInvoice` (+ `forceClosedPeriod`).
+- Period lock on `generateInvoice` / `generateBatch` / `issueInvoice` / `voidInvoice`
+  (+ `forceClosedPeriod`).
 - Void keeps `invoice_lines`; only draft regeneration hard-clears lines.
 - Deposit lines fold into `totalPayable` / `balanceDue` (still excluded from `invoice_total` /
   revenue).
@@ -731,4 +755,4 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
   Ctrl+K “Record payment”; adjustment kinds expanded; Money/`formatMoney` in payments/
   receivables CSV.
 - `revenueAccrual` excludes drafts; ageing integration test via `receivables.report()`.
-- Status → **partial** until stable Build & Release + upgrade matrix are recorded.
+- Stable **v0.5.29** published; Phase 2→3 boot-upgrade test PASS; status → **complete**.
