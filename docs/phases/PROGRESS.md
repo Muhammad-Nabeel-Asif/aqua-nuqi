@@ -951,7 +951,7 @@ exportTable({
 
 ## Phase 5 — Expense Management
 
-**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.7.0` · **stable:** [v0.7.40](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.7.40)
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.7.0` · **stable:** [v0.7.43](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.7.43)
 
 ### Built
 
@@ -1085,3 +1085,5 @@ Addressed Phase 5 review findings without expanding scope:
 - **Employee Advance:** toast warning when picked manually; Phase 6 still must net advances.
 - Regression tests: void×recurring, cash-book deposits, previousEquivalentRange, attachments,
   UI period-lock guards, `paisaToDecimalString`.
+- Stable **[v0.7.43](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.7.43)**
+  published after review fixes (`package.json` remains `0.7.0`). Phase 5 done — next is Phase 6.
