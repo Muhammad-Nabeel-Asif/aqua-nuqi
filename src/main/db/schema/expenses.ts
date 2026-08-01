@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { employees } from './employees'
 import { users } from './system'
 
 export const expenseCategories = sqliteTable(
@@ -36,8 +37,7 @@ export const expenses = sqliteTable(
     description: text('description'),
     referenceNo: text('reference_no'),
     attachmentPath: text('attachment_path'),
-    /** FK added in Phase 6 when employees table exists. */
-    employeeId: integer('employee_id'),
+    employeeId: integer('employee_id').references(() => employees.id),
     /** FK added in Phase 7 when vehicles table exists. */
     vehicleId: integer('vehicle_id'),
     source: text('source').notNull().default('manual'),

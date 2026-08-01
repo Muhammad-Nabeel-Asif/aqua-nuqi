@@ -12,6 +12,10 @@ import { BottlesOutPage } from './features/deliveries/BottlesOutPage'
 import { CustomerCardPage } from './features/deliveries/CustomerCardPage'
 import { DailyEntryPage } from './features/deliveries/DailyEntryPage'
 import { MonthMatrixPage } from './features/deliveries/MonthMatrixPage'
+import { AttendancePage } from './features/employees/AttendancePage'
+import { EmployeeDetailPage } from './features/employees/EmployeeDetailPage'
+import { EmployeesPage } from './features/employees/EmployeesPage'
+import { PayrollPage } from './features/employees/PayrollPage'
 import { ExpenseCategoriesPage } from './features/expenses/ExpenseCategoriesPage'
 import { ExpensesPage } from './features/expenses/ExpensesPage'
 import { PaymentsPage } from './features/payments/PaymentsPage'
@@ -96,10 +100,38 @@ export const router = createHashRouter([
           </RequireOwner>
         ),
       },
-      { path: 'employees', element: <ComingSoonPage title="Employees" phase={6} /> },
-      { path: 'employees/:id', element: <ComingSoonPage title="Employee detail" phase={6} /> },
-      { path: 'employees/attendance', element: <ComingSoonPage title="Attendance" phase={6} /> },
-      { path: 'payroll', element: <ComingSoonPage title="Payroll" phase={6} /> },
+      {
+        path: 'employees',
+        element: (
+          <RequireOwner>
+            <EmployeesPage />
+          </RequireOwner>
+        ),
+      },
+      {
+        path: 'employees/attendance',
+        element: (
+          <RequireOwner>
+            <AttendancePage />
+          </RequireOwner>
+        ),
+      },
+      {
+        path: 'employees/:id',
+        element: (
+          <RequireOwner>
+            <EmployeeDetailPage />
+          </RequireOwner>
+        ),
+      },
+      {
+        path: 'payroll',
+        element: (
+          <RequireOwner>
+            <PayrollPage />
+          </RequireOwner>
+        ),
+      },
       { path: 'inventory', element: <ComingSoonPage title="Inventory" phase={7} /> },
       { path: 'inventory/trips', element: <ComingSoonPage title="Trips" phase={7} /> },
       { path: 'inventory/bottles-out', element: <ComingSoonPage title="Bottles out" phase={7} /> },

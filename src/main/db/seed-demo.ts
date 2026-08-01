@@ -10,6 +10,7 @@ import type { AuditService } from '@main/services/audit.service'
 import type { BalanceService } from '@main/services/balance.service'
 import { createCustomerService } from '@main/services/customer.service'
 import { createDeliveryService } from '@main/services/delivery.service'
+import { createEmployeeService } from '@main/services/employee.service'
 import { createMasterDataService } from '@main/services/master-data.service'
 import type { PeriodService } from '@main/services/period.service'
 import type { RateService } from '@main/services/rate.service'
@@ -222,12 +223,44 @@ export function seedDemoCustomers(
   }
 
   const deliveryCount = seedDemoDeliveries(db, deliveryService, deps.userId)
+  seedDemoEmployees(db, deps)
 
   return {
     areas: areasCreated || AREA_NAMES.length,
     routes: routesCreated || ROUTE_DEFS.length,
     customers: createdCount,
     deliveries: deliveryCount,
+  }
+}
+
+function seedDemoEmployees(
+  db: AppDatabase,
+  deps: { audit: AuditService; period: PeriodService; userId?: number | null },
+): void {
+  const employees = createEmployeeService(db, deps.audit, deps.period)
+  const existing = employees.list({ status: 'all' }).total
+  if (existing > 0) return
+  const uid = deps.userId ?? 0
+  const demo = [
+    { name: 'Ahmed Khan', role: 'delivery' as const, base: 30_000, commission: 2 },
+    { name: 'Bilal Hussain', role: 'delivery' as const, base: 28_000, commission: 2 },
+    { name: 'Usman Ali', role: 'delivery' as const, base: 26_000, commission: 2 },
+    { name: 'Plant Operator', role: 'plant' as const, base: 35_000, commission: 0 },
+    { name: 'Office Clerk', role: 'admin' as const, base: 25_000, commission: 0 },
+  ]
+  for (const d of demo) {
+    employees.create(
+      {
+        name: d.name,
+        role: d.role,
+        joiningDate: '2026-01-01',
+        salaryType: d.commission > 0 ? 'monthly_plus_commission' : 'monthly',
+        baseAmount: Number(toPaisa(d.base)),
+        commissionPerBottle: Number(toPaisa(d.commission)),
+        salaryEffectiveFrom: '2026-01-01',
+      },
+      uid,
+    )
   }
 }
 

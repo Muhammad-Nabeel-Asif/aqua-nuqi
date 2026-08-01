@@ -415,7 +415,11 @@ export function createExpenseService(
     }
   }
 
-  function createExpense(input: CreateExpenseInput, userId: number): ExpenseDto {
+  function createExpense(
+    input: CreateExpenseInput,
+    userId: number,
+    outerTx?: AppDatabase,
+  ): ExpenseDto {
     assertBusinessDate(input.expenseDate)
     if (!input.forceClosedPeriod) {
       period.guardPeriodOpen(input.expenseDate)
@@ -440,7 +444,7 @@ export function createExpenseService(
       input.sourceRefId ?? (input.recurringExpenseId != null ? input.recurringExpenseId : null)
 
     const now = nowIsoUtc()
-    const expenseId = db.transaction((tx) => {
+    const run = (tx: AppDatabase): number => {
       const inserted = tx
         .insert(expenses)
         .values({
@@ -508,8 +512,68 @@ export function createExpenseService(
         tx,
       )
       return inserted.id
-    })
-    return getById(expenseId)
+    }
+
+    const expenseId = outerTx ? run(outerTx) : db.transaction(run)
+    // Within an outer txn, read via the same connection so the new row is visible.
+    const row = (outerTx ?? db).select().from(expenses).where(eq(expenses.id, expenseId)).get()
+    if (!row) throw new AppError('INTERNAL', `Expense ${expenseId} missing after insert`)
+    return toExpenseDto(row)
+  }
+
+  /**
+   * Void a system-generated expense (payroll / purchase). Used by originating modules only —
+   * the public voidExpense path still rejects non-manual sources.
+   */
+  function voidSystemExpense(
+    id: number,
+    reason: string,
+    userId: number,
+    outerTx?: AppDatabase,
+    opts: { forceClosedPeriod?: boolean } = {},
+  ): ExpenseDto {
+    if (!reason.trim()) throw new AppError('VALIDATION_FAILED', 'Void reason is required')
+    const row = (outerTx ?? db).select().from(expenses).where(eq(expenses.id, id)).get()
+    if (!row) throw new AppError('NOT_FOUND', `Expense ${id} not found`)
+    if (row.status === 'void') throw new AppError('CONFLICT', 'Expense already void')
+    if (row.source === 'manual') {
+      throw new AppError('CONFLICT', 'Use voidExpense for manual expenses')
+    }
+    if (!opts.forceClosedPeriod) {
+      period.guardPeriodOpen(row.expenseDate)
+    }
+
+    const now = nowIsoUtc()
+    const run = (tx: AppDatabase): void => {
+      tx.update(expenses)
+        .set({
+          status: 'void',
+          description: row.description
+            ? `${row.description} [voided: ${reason.trim()}]`
+            : `[voided: ${reason.trim()}]`,
+          updatedAt: now,
+          updatedBy: userId,
+        })
+        .where(eq(expenses.id, id))
+        .run()
+      audit.record(
+        {
+          userId,
+          action: 'void',
+          entityTable: 'expenses',
+          entityId: id,
+          summary: `Voided system expense #${id}: ${reason.trim()}`,
+          before: { amount: row.amount, status: row.status, source: row.source },
+          after: { status: 'void', reason: reason.trim() },
+        },
+        tx,
+      )
+    }
+    if (outerTx) run(outerTx)
+    else db.transaction(run)
+
+    const updated = (outerTx ?? db).select().from(expenses).where(eq(expenses.id, id)).get()!
+    return toExpenseDto(updated)
   }
 
   function updateExpense(input: UpdateExpenseInput, userId: number): ExpenseDto {
@@ -1132,6 +1196,7 @@ export function createExpenseService(
     createExpense,
     updateExpense,
     voidExpense,
+    voidSystemExpense,
     listExpenses,
     getById,
     summaryByCategory,

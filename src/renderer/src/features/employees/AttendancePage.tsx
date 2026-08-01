@@ -1,0 +1,243 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { PageHeader } from '@renderer/components/PageHeader'
+import { toast } from '@renderer/components/Toast'
+import { Button } from '@renderer/components/ui/button'
+import { Input } from '@renderer/components/ui/input'
+import { api } from '@renderer/lib/api'
+import type { AttendanceStatus } from '@shared/contracts'
+import { todayBusinessDate } from '@shared/date'
+import { AppError } from '@shared/errors'
+
+const ORDER: AttendanceStatus[] = [
+  'present',
+  'absent',
+  'half_day',
+  'paid_leave',
+  'unpaid_leave',
+  'holiday',
+]
+const BADGES: Record<AttendanceStatus, { letter: string; className: string }> = {
+  present: { letter: 'P', className: 'bg-emerald-100 text-emerald-800' },
+  absent: { letter: 'A', className: 'bg-red-100 text-red-800' },
+  half_day: { letter: 'H', className: 'bg-amber-100 text-amber-800' },
+  paid_leave: { letter: 'L', className: 'bg-blue-100 text-blue-800' },
+  unpaid_leave: { letter: 'U', className: 'bg-orange-100 text-orange-800' },
+  holiday: { letter: 'O', className: 'bg-slate-200 text-slate-700' },
+}
+const currentPeriod = todayBusinessDate().slice(0, 7)
+
+export function AttendancePage() {
+  const qc = useQueryClient()
+  const [period, setPeriod] = useState(currentPeriod)
+  const monthQ = useQuery({
+    queryKey: ['attendance', period],
+    queryFn: () => api.attendance.getMonth(period),
+  })
+  const todayQ = useQuery({
+    queryKey: ['attendance', 'today'],
+    queryFn: () => api.attendance.today(),
+  })
+  const month = monthQ.data
+  const days = useMemo(
+    () => Array.from({ length: month?.daysInMonth ?? 0 }, (_, i) => i + 1),
+    [month?.daysInMonth],
+  )
+  const closed = month?.periodClosed ?? false
+  const today = todayBusinessDate()
+
+  async function invalidate() {
+    await qc.invalidateQueries({ queryKey: ['attendance'] })
+  }
+  async function setCell(employeeId: number, date: string, status: AttendanceStatus) {
+    if (closed) return
+    try {
+      await api.attendance.set({ employeeId, date, status })
+      await invalidate()
+    } catch (err) {
+      toast({
+        title: err instanceof AppError ? err.message : 'Attendance update failed',
+        variant: 'error',
+      })
+    }
+  }
+  async function markPresent(input: { date?: string; period?: string }) {
+    try {
+      const result = await api.attendance.markAllPresent(input)
+      toast({ title: `Marked ${result.updated} attendance records present`, variant: 'success' })
+      await invalidate()
+    } catch (err) {
+      toast({
+        title: err instanceof AppError ? err.message : 'Bulk update failed',
+        variant: 'error',
+      })
+    }
+  }
+  async function markHoliday() {
+    const date = window.prompt('Holiday date (YYYY-MM-DD)', today)
+    if (!date) return
+    try {
+      const result = await api.attendance.markHoliday({ date })
+      toast({ title: `Marked ${result.updated} records as holiday`, variant: 'success' })
+      await invalidate()
+    } catch (err) {
+      toast({
+        title: err instanceof AppError ? err.message : 'Could not mark holiday',
+        variant: 'error',
+      })
+    }
+  }
+
+  return (
+    <div>
+      <PageHeader
+        title="Attendance"
+        subtitle="Click a cell to cycle P → A → H → L → U → O → P"
+        actions={
+          <Button variant="outline" asChild>
+            <Link to="/employees">Employees</Link>
+          </Button>
+        }
+      />
+      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border bg-white p-3">
+        <label className="text-sm">
+          <span className="mb-1 block text-muted-foreground">Month</span>
+          <Input
+            className="w-40"
+            type="month"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+          />
+        </label>
+        <div className="text-sm">
+          <span className="block text-muted-foreground">Working-days basis</span>
+          <strong>{month?.workingDaysBasis?.replaceAll('_', ' ') ?? 'Loading…'}</strong>
+        </div>
+        {closed ? (
+          <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-900">
+            Period locked — read only
+          </span>
+        ) : null}
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={closed}
+            onClick={() => void markPresent({ date: today })}
+          >
+            Present today
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={closed}
+            onClick={() => void markPresent({ period })}
+          >
+            Present month
+          </Button>
+          <Button size="sm" variant="outline" disabled={closed} onClick={() => void markHoliday()}>
+            Mark holiday
+          </Button>
+        </div>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[1fr_280px]">
+        <div className="overflow-auto rounded-lg border bg-white">
+          <table className="min-w-max text-center text-xs">
+            <thead className="sticky top-0 bg-sky-50 text-slate-600">
+              <tr>
+                <th className="sticky left-0 z-10 min-w-48 bg-sky-50 px-3 py-3 text-left">
+                  Employee
+                </th>
+                {days.map((day) => (
+                  <th key={day} className="min-w-8 px-1">
+                    {day}
+                  </th>
+                ))}
+                <th className="px-2">P</th>
+                <th className="px-2">A</th>
+                <th className="px-2">H</th>
+              </tr>
+            </thead>
+            <tbody>
+              {monthQ.isLoading ? (
+                <tr>
+                  <td className="p-8 text-left" colSpan={days.length + 4}>
+                    Loading attendance…
+                  </td>
+                </tr>
+              ) : (
+                (month?.rows ?? []).map((row) => (
+                  <tr key={row.employeeId} className="border-t hover:bg-sky-50/50">
+                    <td className="sticky left-0 bg-white px-3 py-2 text-left text-sm">
+                      <Link
+                        className="font-medium text-sky-800"
+                        to={`/employees/${row.employeeId}`}
+                      >
+                        {row.code}
+                      </Link>{' '}
+                      <span>{row.name}</span>
+                    </td>
+                    {row.cells.map((cell) => {
+                      const status = cell.status ?? 'present'
+                      const next = ORDER[(ORDER.indexOf(status) + 1) % ORDER.length]!
+                      return (
+                        <td key={cell.date} className="p-0.5">
+                          <button
+                            type="button"
+                            disabled={closed}
+                            title={`${cell.date}: ${cell.status ?? 'not set'}`}
+                            onClick={() => void setCell(row.employeeId, cell.date, next)}
+                            className={`h-7 w-7 rounded text-xs font-bold disabled:cursor-not-allowed disabled:opacity-70 ${BADGES[status].className}`}
+                          >
+                            {cell.status ? BADGES[status].letter : '—'}
+                          </button>
+                        </td>
+                      )
+                    })}
+                    <td>{row.present}</td>
+                    <td>{row.absent}</td>
+                    <td>{row.halfDays}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <aside className="rounded-lg border bg-white p-4">
+          <h2 className="font-semibold">Today’s attendance</h2>
+          <p className="mt-1 text-xs text-muted-foreground">{todayQ.data?.date ?? today}</p>
+          <div className="mt-3 space-y-2">
+            {(todayQ.data?.items ?? []).map((item) => {
+              const badge = item.status ? BADGES[item.status] : null
+              return (
+                <div
+                  key={item.employeeId}
+                  className="flex items-center justify-between gap-2 border-b pb-2 text-sm"
+                >
+                  <Link
+                    to={`/employees/${item.employeeId}`}
+                    className="min-w-0 truncate text-sky-800"
+                  >
+                    {item.code} · {item.name}
+                  </Link>
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs font-bold ${badge?.className ?? 'bg-slate-100 text-slate-600'}`}
+                  >
+                    {badge?.letter ?? '—'}
+                  </span>
+                </div>
+              )
+            })}
+            {!todayQ.data?.items.length ? (
+              <p className="text-sm text-muted-foreground">No active employees.</p>
+            ) : null}
+          </div>
+        </aside>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        P present · A absent · H half day · L paid leave · U unpaid leave · O holiday
+      </p>
+    </div>
+  )
+}

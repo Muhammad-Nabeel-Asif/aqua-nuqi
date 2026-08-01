@@ -106,3 +106,20 @@ export function firstOfNextMonth(date?: string): string {
   if (date) assertBusinessDate(date)
   return format(startOfMonth(addMonths(base, 1)), 'yyyy-MM-dd')
 }
+
+/** Number of calendar days in a `YYYY-MM` period. */
+export function daysInPeriod(period: string): number {
+  assertPeriod(period)
+  const start = parse(`${period}-01`, 'yyyy-MM-dd', new Date())
+  return endOfMonth(start).getDate()
+}
+
+/** All `YYYY-MM-DD` dates in a period, in order. */
+export function datesInPeriod(period: string): string[] {
+  const n = daysInPeriod(period)
+  const out: string[] = []
+  for (let d = 1; d <= n; d++) {
+    out.push(`${period}-${String(d).padStart(2, '0')}`)
+  }
+  return out
+}

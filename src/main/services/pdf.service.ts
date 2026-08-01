@@ -22,8 +22,10 @@ import type { AuditService } from './audit.service'
 import type { BillingService } from './billing.service'
 import type { CustomerService } from './customer.service'
 import type { DeliveryService } from './delivery.service'
+import type { EmployeeService } from './employee.service'
 import type { LedgerService } from './ledger.service'
 import type { PaymentService } from './payment.service'
+import type { PayrollService } from './payroll.service'
 import type { ReceivablesService } from './receivables.service'
 import type { SettingsService } from './settings.service'
 
@@ -111,6 +113,8 @@ export function createPdfService(
   receivables: ReceivablesService,
   renderer: PdfRenderer,
   platform: PdfPlatform,
+  payrollSvc?: PayrollService,
+  employeesSvc?: EmployeeService,
 ) {
   const cancelJobs = new Set<string>()
 
@@ -893,6 +897,60 @@ export function createPdfService(
     return { path: dest }
   }
 
+  async function generateSalarySlipPdf(
+    itemId: number,
+    opts: { openAfter?: boolean; userId?: number | null } = {},
+  ): Promise<{ path: string }> {
+    if (!payrollSvc) throw new AppError('INTERNAL', 'Payroll service not available')
+    const { run, item } = payrollSvc.getItem(itemId)
+    const emp = employeesSvc?.getById(item.employeeId).item
+    const business = businessHeader()
+    const payload = {
+      kind: 'salary-slip' as const,
+      business,
+      period: run.period,
+      workingDaysBasis: run.workingDaysBasis,
+      employee: {
+        code: item.employeeCode,
+        name: item.employeeName,
+        role: item.employeeRole,
+        joiningDate: emp?.joiningDate ?? null,
+      },
+      item,
+      amountInWords: words(item.netPayable),
+      generatedAt: nowIsoUtc(),
+    }
+    const fileName = `Salary-${run.period}-${item.employeeCode}-${slugifyName(item.employeeName)}.pdf`
+    const dest = path.join(miscDir(path.join('SalarySlips', run.period)), fileName)
+    await writePdf('salary-slip', payload, dest, 'A4')
+    audit.record({
+      userId: opts.userId,
+      action: 'export',
+      entityTable: 'payroll_items',
+      entityId: itemId,
+      summary: `Generated salary slip ${fileName}`,
+      after: { path: dest },
+    })
+    if (opts.openAfter) await platform.openPath(dest)
+    return { path: dest }
+  }
+
+  async function batchGenerateSalarySlips(
+    runId: number,
+    opts: { openFolder?: boolean; userId?: number | null } = {},
+  ): Promise<{ folder: string; files: string[]; generated: number }> {
+    if (!payrollSvc) throw new AppError('INTERNAL', 'Payroll service not available')
+    const { run, items } = payrollSvc.getRun(runId)
+    const folder = miscDir(path.join('SalarySlips', run.period))
+    const files: string[] = []
+    for (const item of items) {
+      const { path: p } = await generateSalarySlipPdf(item.id, { userId: opts.userId })
+      files.push(p)
+    }
+    if (opts.openFolder && files[0]) platform.showItemInFolder(files[0])
+    return { folder, files, generated: files.length }
+  }
+
   return {
     generateInvoicePdf,
     batchGenerateInvoices,
@@ -905,6 +963,8 @@ export function createPdfService(
     generateDeliveryCardPdf,
     generateBottlesOutPdf,
     generateReceivablesPdf,
+    generateSalarySlipPdf,
+    batchGenerateSalarySlips,
     exportTable,
     exportExcel,
     shareWhatsApp,

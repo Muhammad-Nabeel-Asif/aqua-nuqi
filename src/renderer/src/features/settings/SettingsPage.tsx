@@ -44,6 +44,7 @@ export function SettingsPage() {
     currencySymbol: 'Rs',
     dateFormat: 'dd-MM-yyyy',
     decimalPlaces: 0,
+    workingDaysBasis: 'fixed_26' as 'calendar' | 'fixed_26' | 'working_days',
   })
   const [newUser, setNewUser] = useState({
     username: '',
@@ -64,10 +65,15 @@ export function SettingsPage() {
       email: String(v['business.email'] ?? ''),
       bankDetails: String(v['business.bankDetails'] ?? ''),
     })
+    const basis = String(v['payroll.workingDaysBasis'] ?? 'fixed_26')
     setLocale({
       currencySymbol: String(v['locale.currencySymbol'] ?? 'Rs'),
       dateFormat: String(v['locale.dateFormat'] ?? 'dd-MM-yyyy'),
       decimalPlaces: Number(v['locale.decimalPlaces'] ?? 0),
+      workingDaysBasis:
+        basis === 'calendar' || basis === 'working_days' || basis === 'fixed_26'
+          ? basis
+          : 'fixed_26',
     })
   }, [settingsQuery.data])
 
@@ -101,6 +107,7 @@ export function SettingsPage() {
           'locale.currencySymbol': locale.currencySymbol,
           'locale.dateFormat': locale.dateFormat,
           'locale.decimalPlaces': locale.decimalPlaces,
+          'payroll.workingDaysBasis': locale.workingDaysBasis,
         },
       })
       toast({ title: 'Localisation saved', variant: 'success' })
@@ -218,6 +225,26 @@ export function SettingsPage() {
               value={locale.decimalPlaces}
               onChange={(e) => setLocale({ ...locale, decimalPlaces: Number(e.target.value) || 0 })}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Payroll working-days basis</Label>
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={locale.workingDaysBasis}
+              onChange={(e) =>
+                setLocale({
+                  ...locale,
+                  workingDaysBasis: e.target.value as 'calendar' | 'fixed_26' | 'working_days',
+                })
+              }
+            >
+              <option value="fixed_26">Fixed 26 days (default)</option>
+              <option value="calendar">Calendar days in month</option>
+              <option value="working_days">Actual working days (excl. holidays)</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              Used for absence deductions. Also shown on the payroll screen.
+            </p>
           </div>
           <Button onClick={() => void saveLocale()}>Save</Button>
         </TabsContent>

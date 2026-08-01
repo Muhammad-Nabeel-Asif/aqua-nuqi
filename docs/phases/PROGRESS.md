@@ -1087,3 +1087,91 @@ Addressed Phase 5 review findings without expanding scope:
   UI period-lock guards, `paisaToDecimalString`.
 - Stable **[v0.7.43](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.7.43)**
   published after review fixes (`package.json` remains `0.7.0`). Phase 5 done — next is Phase 6.
+
+---
+
+## Phase 6 — Employees, Attendance & Payroll
+
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.8.0`
+
+### Built
+
+- Migration `drizzle/0008_employees_payroll.sql` — `employees`, `employee_salaries`,
+  `attendance`, `payroll_runs`, `payroll_items`, `salary_advances`; deferred FKs on
+  `routes.default_employee_id`, `deliveries.employee_id`, `payments.received_by_employee_id`,
+  `expenses.employee_id`.
+- Services: `employee.service` (CRUD + dated salaries), `attendance.service`,
+  `payroll.service` (advances + generate/review/finalise/void/pay + performance).
+- `expense.service`: `createExpense(..., outerTx?)` and `voidSystemExpense` for payroll.
+- Screens: `/employees`, `/employees/:id`, `/employees/attendance`, `/payroll`; delivery
+  detail employee attribution; Settings → Localisation working-days basis.
+- Salary slip PDF template + `pdf:generateSalarySlip` / `pdf:batchGenerateSalarySlips`.
+- Unit tests covering AC1, AC3–AC8, AC10 and §6.5 double-counting.
+
+### Migrations added
+
+- `drizzle/0008_employees_payroll.sql` — tables above + FK rebuilds (schema version **9**)
+
+### IPC channels added
+
+- `employees:list|listActive|get|nextCode|create|update|setStatus|changeSalary|uploadPhoto|payrollHistory|performance|comparePerformance`
+- `attendance:getMonth|set|setRange|markAllPresent|markHoliday|today`
+- `advances:list|create|void|waive`
+- `payroll:list|get|generate|updateItem|finalize|void|recordPayment|payAll`
+- `pdf:generateSalarySlip|batchGenerateSalarySlips`
+
+### Settings keys added
+
+- `payroll.workingDaysBasis` — `'calendar' | 'fixed_26' | 'working_days'`, default **`fixed_26`**
+
+### Error codes added
+
+- None (reused `VALIDATION_FAILED`, `NOT_FOUND`, `CONFLICT`, `PERIOD_LOCKED`)
+
+### Working-days basis (for next phase)
+
+- Stored in `payroll.workingDaysBasis`, default `fixed_26`.
+- `calendar` = days in month; `fixed_26` = 26; `working_days` = calendar days minus distinct
+  dates marked `holiday` on attendance.
+- Shown on the payroll screen and attendance month header; configurable under Settings →
+  Localisation.
+
+### Commission when delivery has no employee
+
+- Commission uses `Σ quantity` of `deliveries` in the period where `employee_id = E` and
+  `status = 'recorded'`.
+- Deliveries with `employee_id IS NULL` are **excluded from every employee's total** — they do
+  not inflate anyone's commission.
+
+### Salaries expense amount rule (§6.5)
+
+- Paying an advance → immediate **Employee Advance** expense (`source = 'payroll'`,
+  `source_ref_table = 'salary_advances'`), amount = advance.
+- Finalising payroll → one **Salaries** expense per employee with `net_payable > 0`
+  (`source = 'payroll'`, `source_ref_table = 'payroll_items'`), amount = **`net_payable`**
+  (cash paid at payroll time), **not** gross salary.
+- Total salary cost for the month = Employee Advance + Salaries = gross (counted once).
+- If advances exceed net before advances: cap deduction, leave remainder outstanding, warn on
+  review; Salaries expense may be 0.
+
+### Deviations from the spec
+
+- Daily Entry employee filter left as disabled TODO (day-list API has no `employeeId` filter);
+  attribution works on delivery detail dialog.
+- Partial advance settlement splits the last advance row (settled portion + leftover
+  outstanding) so FIFO can match a capped deduction without a new expense on the split.
+- No EOBI / statutory deductions (client has not asked — open question below).
+
+### What the next phase must know
+
+- Employees table exists; `routes.default_employee_id` and `deliveries.employee_id` have FKs.
+- Create salary costs only via `expenses.createExpense` with `source: 'payroll'` (never raw
+  inserts). Use `voidSystemExpense` when reversing payroll-sourced rows.
+- Schema version is **9** after this phase.
+- **Next phase is Phase 7 (Inventory / trips)** — can link `vehicles` and trip cash variance
+  into employee performance (`cashVariance` is currently `null`).
+
+### Escalations / questions for the human
+
+- Confirm no EOBI / social-security / tax deductions are needed before Phase 8 P&L.
+- Optional: add `employeeId` filter to `deliveries:getDayList` for Daily Entry.

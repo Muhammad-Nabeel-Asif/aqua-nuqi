@@ -29,6 +29,11 @@ export function DeliveryDetailDialog({ open, onClose, deliveryId, defaults }: Pr
     queryFn: () => api.deliveries.get(deliveryId!),
     enabled: open && Boolean(deliveryId),
   })
+  const employees = useQuery({
+    queryKey: ['employees', 'active'],
+    queryFn: () => api.employees.listActive(),
+    enabled: open,
+  })
 
   const [quantity, setQuantity] = useState(0)
   const [empties, setEmpties] = useState(0)
@@ -39,6 +44,7 @@ export function DeliveryDetailDialog({ open, onClose, deliveryId, defaults }: Pr
   const [freeReason, setFreeReason] = useState('')
   const [cash, setCash] = useState(0)
   const [notes, setNotes] = useState('')
+  const [employeeId, setEmployeeId] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -52,6 +58,7 @@ export function DeliveryDetailDialog({ open, onClose, deliveryId, defaults }: Pr
       setFreeReason(item.freeReason ?? '')
       setCash(item.cashCollected)
       setNotes(item.notes ?? '')
+      setEmployeeId(item.employeeId == null ? '' : String(item.employeeId))
     } else if (defaults) {
       setQuantity(defaults.quantity ?? 0)
       setEmpties(defaults.emptiesCollected ?? defaults.quantity ?? 0)
@@ -61,6 +68,7 @@ export function DeliveryDetailDialog({ open, onClose, deliveryId, defaults }: Pr
       setFreeReason('')
       setCash(0)
       setNotes('')
+      setEmployeeId('')
     }
   }, [open, existing.data, defaults])
 
@@ -71,6 +79,7 @@ export function DeliveryDetailDialog({ open, onClose, deliveryId, defaults }: Pr
         date: existing.data?.item.deliveryDate ?? defaults!.date,
         quantity,
         emptiesCollected: empties,
+        employeeId: employeeId ? Number(employeeId) : null,
         rate: overrideRate ? rate : undefined,
         rateOverrideReason: overrideRate ? overrideReason || 'manual override' : undefined,
         isFree,
@@ -203,11 +212,17 @@ export function DeliveryDetailDialog({ open, onClose, deliveryId, defaults }: Pr
 
         <Field label="Employee">
           <select
-            className="flex h-10 w-full rounded-md border px-2 text-sm opacity-60"
-            disabled
-            title="Employees arrive in Phase 6"
+            className="flex h-10 w-full rounded-md border px-2 text-sm"
+            disabled={locked}
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
           >
-            <option value="">TODO(phase-6): employee attribution</option>
+            <option value="">Unassigned</option>
+            {(employees.data?.items ?? []).map((employee) => (
+              <option key={employee.id} value={employee.id}>
+                {employee.code} — {employee.name}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Cash collected (paisa)">

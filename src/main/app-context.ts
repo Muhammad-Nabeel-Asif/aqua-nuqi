@@ -1,6 +1,7 @@
 import type { AppDatabase, RawDatabase } from '@main/db/client'
 import type { AppPaths } from '@main/lib/paths'
 import type { AdjustmentService } from '@main/services/adjustment.service'
+import type { AttendanceService } from '@main/services/attendance.service'
 import type { AuditService } from '@main/services/audit.service'
 import type { AuthService } from '@main/services/auth.service'
 import type { BackupService } from '@main/services/backup.service'
@@ -9,10 +10,12 @@ import type { BillingService } from '@main/services/billing.service'
 import type { CustomerImportService } from '@main/services/customer-import.service'
 import type { CustomerService } from '@main/services/customer.service'
 import type { DeliveryService } from '@main/services/delivery.service'
+import type { EmployeeService } from '@main/services/employee.service'
 import type { ExpenseService } from '@main/services/expense.service'
 import type { LedgerService } from '@main/services/ledger.service'
 import type { MasterDataService } from '@main/services/master-data.service'
 import type { PaymentService } from '@main/services/payment.service'
+import type { PayrollService } from '@main/services/payroll.service'
 import type { PdfService } from '@main/services/pdf.service'
 import type { PeriodService } from '@main/services/period.service'
 import type { RateService } from '@main/services/rate.service'
@@ -45,6 +48,9 @@ export type AppContext = {
   payments: PaymentService
   receivables: ReceivablesService
   expenses: ExpenseService
+  employees: EmployeeService
+  attendance: AttendanceService
+  payroll: PayrollService
   pdf: PdfService
   appVersion: string
   schemaVersion: number

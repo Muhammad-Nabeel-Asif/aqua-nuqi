@@ -673,6 +673,132 @@ export const api = {
     showInFolder: (path: string) => invoke<{ ok: true }>('pdf:showInFolder', { path }),
     uploadLogo: (sourcePath: string) =>
       invoke<{ logoPath: string }>('pdf:uploadLogo', { sourcePath }),
+    generateSalarySlip: (itemId: number, openAfter?: boolean) =>
+      invoke<{ path: string }>('pdf:generateSalarySlip', { itemId, openAfter }),
+    batchGenerateSalarySlips: (runId: number, openFolder?: boolean) =>
+      invoke<{ folder: string; files: string[]; generated: number }>(
+        'pdf:batchGenerateSalarySlips',
+        { runId, openFolder },
+      ),
+  },
+  employees: {
+    list: (input: import('@shared/contracts').ListEmployeesInput = {}) =>
+      invoke<{ items: import('@shared/contracts').EmployeeDto[]; total: number }>(
+        'employees:list',
+        input,
+      ),
+    listActive: () =>
+      invoke<{
+        items: Array<{ id: number; code: string; name: string; role: string }>
+      }>('employees:listActive', {}),
+    get: (id: number) =>
+      invoke<{
+        item: import('@shared/contracts').EmployeeDto
+        salaryHistory: import('@shared/contracts').EmployeeSalaryDto[]
+      }>('employees:get', { id }),
+    nextCode: () => invoke<{ code: string }>('employees:nextCode', {}),
+    create: (input: import('@shared/contracts').CreateEmployeeInput) =>
+      invoke<{ item: import('@shared/contracts').EmployeeDto }>('employees:create', input),
+    update: (input: import('@shared/contracts').UpdateEmployeeInput) =>
+      invoke<{ item: import('@shared/contracts').EmployeeDto }>('employees:update', input),
+    setStatus: (input: import('@shared/contracts').SetEmployeeStatusInput) =>
+      invoke<{
+        item: import('@shared/contracts').EmployeeDto
+        outstandingAdvances: number
+        warning: string | null
+      }>('employees:setStatus', input),
+    changeSalary: (input: import('@shared/contracts').ChangeSalaryInput) =>
+      invoke<{
+        item: import('@shared/contracts').EmployeeSalaryDto
+        warning: string | null
+      }>('employees:changeSalary', input),
+    uploadPhoto: (sourcePath: string, employeeId?: number) =>
+      invoke<{ photoPath: string }>('employees:uploadPhoto', { sourcePath, employeeId }),
+    payrollHistory: (employeeId: number) =>
+      invoke<{
+        items: Array<{
+          period: string
+          status: string
+          netPayable: number
+          paidAmount: number
+        }>
+      }>('employees:payrollHistory', { employeeId }),
+    performance: (employeeId: number, period?: string) =>
+      invoke<import('@shared/contracts').EmployeePerformanceOutput>('employees:performance', {
+        employeeId,
+        period,
+      }),
+    comparePerformance: (period: string) =>
+      invoke<import('@shared/contracts').ComparePerformanceOutput>('employees:comparePerformance', {
+        period,
+      }),
+  },
+  attendance: {
+    getMonth: (period: string) =>
+      invoke<import('@shared/contracts').GetAttendanceMonthOutput>('attendance:getMonth', {
+        period,
+      }),
+    set: (input: import('@shared/contracts').SetAttendanceInput) =>
+      invoke<{ cell: import('@shared/contracts').AttendanceCellDto }>('attendance:set', input),
+    setRange: (input: import('@shared/contracts').SetAttendanceRangeInput) =>
+      invoke<{ updated: number }>('attendance:setRange', input),
+    markAllPresent: (input: import('@shared/contracts').MarkAllPresentInput) =>
+      invoke<{ updated: number }>('attendance:markAllPresent', input),
+    markHoliday: (input: import('@shared/contracts').MarkHolidayInput) =>
+      invoke<{ updated: number }>('attendance:markHoliday', input),
+    today: (date?: string) =>
+      invoke<import('@shared/contracts').TodayAttendanceOutput>('attendance:today', { date }),
+  },
+  advances: {
+    list: (input: import('@shared/contracts').ListAdvancesInput = {}) =>
+      invoke<{
+        items: import('@shared/contracts').SalaryAdvanceDto[]
+        outstandingTotal: number
+      }>('advances:list', input),
+    create: (input: import('@shared/contracts').CreateAdvanceInput) =>
+      invoke<{ item: import('@shared/contracts').SalaryAdvanceDto }>('advances:create', input),
+    void: (id: number, reason: string, forceClosedPeriod?: boolean) =>
+      invoke<{ item: import('@shared/contracts').SalaryAdvanceDto }>('advances:void', {
+        id,
+        reason,
+        forceClosedPeriod,
+      }),
+    waive: (id: number, reason: string) =>
+      invoke<{ item: import('@shared/contracts').SalaryAdvanceDto }>('advances:waive', {
+        id,
+        reason,
+      }),
+  },
+  payroll: {
+    list: () => invoke<{ items: import('@shared/contracts').PayrollRunDto[] }>('payroll:list', {}),
+    get: (id: number) =>
+      invoke<{
+        run: import('@shared/contracts').PayrollRunDto
+        items: import('@shared/contracts').PayrollItemDto[]
+      }>('payroll:get', { id }),
+    generate: (period: string, forceClosedPeriod?: boolean) =>
+      invoke<{
+        run: import('@shared/contracts').PayrollRunDto
+        items: import('@shared/contracts').PayrollItemDto[]
+      }>('payroll:generate', { period, forceClosedPeriod }),
+    updateItem: (input: import('@shared/contracts').UpdatePayrollItemInput) =>
+      invoke<{ item: import('@shared/contracts').PayrollItemDto }>('payroll:updateItem', input),
+    finalize: (input: import('@shared/contracts').FinalizePayrollInput) =>
+      invoke<{
+        run: import('@shared/contracts').PayrollRunDto
+        items: import('@shared/contracts').PayrollItemDto[]
+        salariesExpenseTotal: number
+      }>('payroll:finalize', input),
+    void: (id: number, reason: string, forceClosedPeriod?: boolean) =>
+      invoke<{ run: import('@shared/contracts').PayrollRunDto }>('payroll:void', {
+        id,
+        reason,
+        forceClosedPeriod,
+      }),
+    recordPayment: (input: import('@shared/contracts').RecordPayrollPaymentInput) =>
+      invoke<{ item: import('@shared/contracts').PayrollItemDto }>('payroll:recordPayment', input),
+    payAll: (input: import('@shared/contracts').PayAllPayrollInput) =>
+      invoke<{ items: import('@shared/contracts').PayrollItemDto[] }>('payroll:payAll', input),
   },
   expenses: {
     create: (input: import('@shared/contracts').CreateExpenseInput) =>

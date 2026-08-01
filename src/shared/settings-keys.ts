@@ -43,6 +43,8 @@ export const SETTING_DEFAULTS = {
   'security.autoLockMinutes': 15,
   'inventory.lowStockThreshold': 0,
   'deliveries.missedDaysThreshold': 10,
+  /** calendar | fixed_26 | working_days — shown on payroll screen; affects absence maths. */
+  'payroll.workingDaysBasis': 'fixed_26' as 'calendar' | 'fixed_26' | 'working_days',
 } as const
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS

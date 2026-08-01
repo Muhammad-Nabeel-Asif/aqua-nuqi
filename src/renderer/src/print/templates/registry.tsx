@@ -5,6 +5,7 @@ import { DeliverySlipTemplate } from './DeliverySlipTemplate'
 import { InvoiceTemplate } from './InvoiceTemplate'
 import { PaymentReceiptTemplate } from './PaymentReceiptTemplate'
 import { ReceivablesTemplate } from './ReceivablesTemplate'
+import { SalarySlipTemplate } from './SalarySlipTemplate'
 import { StatementTemplate } from './StatementTemplate'
 import { TableExportTemplate } from './TableExportTemplate'
 
@@ -50,6 +51,7 @@ export const PRINT_TEMPLATE_REGISTRY: Record<
   'table-export': (p) => (
     <TableExportTemplate {...(p as Parameters<typeof TableExportTemplate>[0])} />
   ),
+  'salary-slip': (p) => <SalarySlipTemplate {...(p as Parameters<typeof SalarySlipTemplate>[0])} />,
 }
 
 export const PRINT_TEMPLATE_IDS = Object.keys(PRINT_TEMPLATE_REGISTRY) as PrintTemplateId[]

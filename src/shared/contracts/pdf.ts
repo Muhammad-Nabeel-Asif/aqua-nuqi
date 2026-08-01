@@ -14,6 +14,7 @@ export const printTemplateIdSchema = z.enum([
   'bottles-out',
   'receivables',
   'table-export',
+  'salary-slip',
 ])
 export type PrintTemplateId = z.infer<typeof printTemplateIdSchema>
 
@@ -217,6 +218,22 @@ export const uploadLogoInput = z.object({
   sourcePath: z.string().min(1),
 })
 export const uploadLogoOutput = z.object({ logoPath: z.string() })
+
+export const generateSalarySlipInput = z.object({
+  itemId: z.number().int().positive(),
+  openAfter: z.boolean().optional(),
+})
+export const generateSalarySlipOutput = z.object({ path: z.string() })
+
+export const batchGenerateSalarySlipsInput = z.object({
+  runId: z.number().int().positive(),
+  openFolder: z.boolean().optional(),
+})
+export const batchGenerateSalarySlipsOutput = z.object({
+  folder: z.string(),
+  files: z.array(z.string()),
+  generated: z.number().int(),
+})
 
 export const getPrintJobInput = z.object({ jobId: z.string().min(1) })
 export const getPrintJobOutput = z.object({

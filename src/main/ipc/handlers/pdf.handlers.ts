@@ -24,8 +24,12 @@ import {
   generateDeliverySlipOutput,
   generateInvoicePdfInput,
   generateInvoicePdfOutput,
+  batchGenerateSalarySlipsInput,
+  batchGenerateSalarySlipsOutput,
   generateReceiptPdfInput,
   generateReceiptPdfOutput,
+  generateSalarySlipInput,
+  generateSalarySlipOutput,
   generateReceivablesPdfInput,
   generateReceivablesPdfOutput,
   generateStatementPdfInput,
@@ -169,6 +173,30 @@ export function registerPdfHandlers(): void {
     handler: (input, ctx) =>
       pdf().generateReceiptPdf(input.paymentId, input.variant, {
         openAfter: input.openAfter,
+        userId: ctx.userId,
+      }),
+  })
+
+  defineHandler({
+    channel: 'pdf:generateSalarySlip',
+    input: generateSalarySlipInput,
+    output: generateSalarySlipOutput,
+    roles: ['owner'],
+    handler: (input, ctx) =>
+      pdf().generateSalarySlipPdf(input.itemId, {
+        openAfter: input.openAfter,
+        userId: ctx.userId,
+      }),
+  })
+
+  defineHandler({
+    channel: 'pdf:batchGenerateSalarySlips',
+    input: batchGenerateSalarySlipsInput,
+    output: batchGenerateSalarySlipsOutput,
+    roles: ['owner'],
+    handler: (input, ctx) =>
+      pdf().batchGenerateSalarySlips(input.runId, {
+        openFolder: input.openFolder,
         userId: ctx.userId,
       }),
   })

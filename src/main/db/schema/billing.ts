@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { customers } from './customers'
+import { employees } from './employees'
 import { users } from './system'
 
 export const invoices = sqliteTable(
@@ -90,7 +91,7 @@ export const payments = sqliteTable(
     amount: integer('amount').notNull(),
     method: text('method').notNull(),
     referenceNo: text('reference_no'),
-    receivedByEmployeeId: integer('received_by_employee_id'),
+    receivedByEmployeeId: integer('received_by_employee_id').references(() => employees.id),
     notes: text('notes'),
     status: text('status').notNull().default('active'),
     voidReason: text('void_reason'),

@@ -78,6 +78,7 @@ const NAV: NavItem[] = [
   },
   { to: '/expenses', label: t('nav.expenses'), icon: Receipt, roles: ['owner'], phase: 5 },
   { to: '/employees', label: t('nav.employees'), icon: Users, roles: ['owner'], phase: 6 },
+  { to: '/payroll', label: 'Payroll', icon: Wallet, roles: ['owner'], phase: 6 },
   {
     to: '/inventory',
     label: t('nav.inventory'),

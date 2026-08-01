@@ -4,6 +4,18 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-01
+
+### Added
+
+- **Phase 6 — Employees, attendance & payroll:** employee master data with dated salary
+  structures, attendance calendar (bulk mark-present / company holiday), mid-month advances that
+  post an **Employee Advance** expense immediately, and monthly payroll runs. Finalising creates
+  one read-only **Salaries** expense per employee equal to _net payable_ (not gross), so
+  Advance + Salaries = gross once. Working-days basis setting `payroll.workingDaysBasis`
+  (default `fixed_26`). Salary slip PDFs via the Phase 4 engine. Migration
+  `0008_employees_payroll` (employees tables + deferred employee FKs).
+
 ## [0.7.0] — 2026-08-01
 
 ### Added

@@ -22,6 +22,7 @@ import {
   type AppPaths,
 } from './lib/paths'
 import { createAdjustmentService } from './services/adjustment.service'
+import { createAttendanceService } from './services/attendance.service'
 import { createAuditService } from './services/audit.service'
 import { createAuthService } from './services/auth.service'
 import { createBackupService } from './services/backup.service'
@@ -30,10 +31,12 @@ import { createBillingService } from './services/billing.service'
 import { createCustomerImportService } from './services/customer-import.service'
 import { createCustomerService } from './services/customer.service'
 import { createDeliveryService } from './services/delivery.service'
+import { createEmployeeService } from './services/employee.service'
 import { createExpenseService } from './services/expense.service'
 import { createLedgerService } from './services/ledger.service'
 import { createMasterDataService } from './services/master-data.service'
 import { createPaymentService } from './services/payment.service'
+import { createPayrollService } from './services/payroll.service'
 import { createPdfService } from './services/pdf.service'
 import { createPeriodService } from './services/period.service'
 import { createRateService } from './services/rate.service'
@@ -143,6 +146,9 @@ export function bootstrapApp(): BootstrapResult {
     const payments = createPaymentService(db, audit, period, balances, ledger, billing)
     const receivables = createReceivablesService(db)
     const expenses = createExpenseService(db, raw, audit, period)
+    const employees = createEmployeeService(db, audit, period)
+    const attendance = createAttendanceService(db, audit, period, settings)
+    const payroll = createPayrollService(db, audit, period, employees, attendance, expenses)
     const pdf = createPdfService(
       db,
       audit,
@@ -158,6 +164,8 @@ export function bootstrapApp(): BootstrapResult {
         print: printTemplate,
       },
       createPdfPlatformFromElectron(),
+      payroll,
+      employees,
     )
 
     const setupRequired = dbMissing || !auth.hasAnyUser()
@@ -189,6 +197,9 @@ export function bootstrapApp(): BootstrapResult {
       payments,
       receivables,
       expenses,
+      employees,
+      attendance,
+      payroll,
       pdf,
       appVersion,
       schemaVersion: schemaVersion || getSchemaVersion(),

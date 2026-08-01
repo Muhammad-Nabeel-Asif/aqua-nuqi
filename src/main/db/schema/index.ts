@@ -1,5 +1,6 @@
 export * from './system'
 export * from './products'
+export * from './employees'
 export * from './expenses'
 export * from './areas'
 export * from './customers'
