@@ -22,6 +22,10 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
   bulk-rate UI; openings/schedules no longer hard-deleted; `deposit_received` ledger;
   full audit before/after + export audit; monthly_package import columns; WhatsApp E.164;
   Ctrl+K Enter prefers customers; closed-period rate confirm.
+- **Customer list filters:** selecting “All statuses/types” (or clearing a filter) no longer
+  blanks the table — empty select values are omitted instead of sent as `""` to Zod.
+- **CI Linux publish:** attach AppImage/deb via `gh release upload` then undraft (avoids
+  softprops duplicate-tag failure).
 - **Windows packaged install:** frozen identity check failed with
   `package.json name must be "aqua-nuqi" (frozen). Found ""` because the app looked for
   `package.json` in the wrong folder under `resources/`. Resolve from the app root and always

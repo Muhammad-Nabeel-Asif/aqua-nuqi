@@ -290,7 +290,18 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 
 ## Phase 1 — Customers, Master Data & Pricing
 
-**Date:** 2026-07-31 · **Status:** partial · **package.json:** `0.3.0`
+**Date:** 2026-07-31 · **Status:** complete · **package.json:** `0.3.0` · **stable:** [v0.3.17](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.3.17)
+
+### Windows upgrade matrix (2026-08-01)
+
+| Check                                                           | Result   |
+| --------------------------------------------------------------- | -------- |
+| Fresh install / upgrade over previous (data intact)             | **PASS** |
+| #4 Downgrade refusal (older build over newer → older-than-data) | **PASS** |
+| Uninstall leaves `AppData\Roaming\Aqua Nuqi`                    | **PASS** |
+
+- **Installer used:** stable **v0.3.17** (schema ≥2 via migrations 0001 + 0002).
+- **Windows (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe
 
 ### Built
 
@@ -334,8 +345,8 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 ### Deviations from the spec
 
 - Added deps not in stack §1: `xlsx`, `@tanstack/react-virtual` (Excel import/export +
-  virtualised list). `@tanstack/react-table` is also in `package.json` but unused — list uses
-  react-virtual only.
+  virtualised list). `@tanstack/react-table` is in `package.json` but unused (list uses
+  react-virtual only); kept for now per decision — may use later or drop in a cleanup pass.
 - Money AR truth = `Σ ledger.debit − Σ ledger.credit` excluding `deposit_received` /
   `deposit_refunded` (those stay in the ledger for audit + `security_deposit_held`).
   Docs §J formula that also adds `customers.opening_balance` would double-count; column remains
@@ -418,11 +429,8 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 
 ### Escalations / questions for the human
 
-- Re-run Windows upgrade scenario **#4** (older-than-data) now that schema is ≥2
-  (migrations 0001 + 0002).
-- Confirm `xlsx` / TanStack Virtual may stay in the stack doc; drop unused react-table?
-- **Stable 0.3.x release not shipped yet** — push `main` → Actions → Build & Release
-  (`channel: stable`), then record version + URL and re-run upgrade matrix.
+- Confirm `xlsx` / TanStack Virtual (+ unused react-table kept for now) may be added to the
+  stack doc.
 
 ### Review fixes (2026-08-01)
 
@@ -439,4 +447,7 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
   mutation+audit in one transaction.
 - Import: `packageIncludedQty` / `packageExcessRate`; WhatsApp E.164 (`92…`); Ctrl+K Enter
   prefers customer hit.
-- Status set to **partial** until stable `0.3.x` release + Windows upgrade matrix recorded.
+- Linux release publish: `gh release upload` / `edit` (softprops draft:false tag race).
+- Customer list filters: empty select option no longer sends `""` to Zod (list went blank when
+  clearing / re-selecting “All …” filters).
+- Stable **v0.3.17** shipped; Windows matrix recorded; status → **complete**.

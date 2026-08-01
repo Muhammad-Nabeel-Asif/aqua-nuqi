@@ -41,8 +41,9 @@ export function CustomersPage() {
     queryFn: () =>
       api.customers.list({
         search: search || undefined,
-        status,
-        customerType: type,
+        // Empty select option is ""; Zod enums reject "" so omit instead of clearing the list.
+        status: status || undefined,
+        customerType: type || undefined,
         areaId: areaId ? Number(areaId) : undefined,
         routeId: routeId ? Number(routeId) : undefined,
         hasOutstanding: hasOutstanding || undefined,
@@ -144,13 +145,17 @@ export function CustomersPage() {
         />
         <Select
           value={status ?? ''}
-          onChange={(value) => setStatus(value as ListCustomersInput['status'])}
+          onChange={(value) =>
+            setStatus(value ? (value as NonNullable<ListCustomersInput['status']>) : undefined)
+          }
           options={['active', 'paused', 'inactive'].map((x) => [x, x])}
           placeholder="All statuses"
         />
         <Select
           value={type ?? ''}
-          onChange={(value) => setType(value as ListCustomersInput['customerType'])}
+          onChange={(value) =>
+            setType(value ? (value as NonNullable<ListCustomersInput['customerType']>) : undefined)
+          }
           options={['residential', 'commercial', 'walk_in'].map((x) => [x, x])}
           placeholder="All types"
         />
