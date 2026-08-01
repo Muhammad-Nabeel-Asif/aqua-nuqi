@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { nativeImage, shell } from 'electron'
-import { z } from 'zod'
 import { getAppContext } from '@main/app-context'
 import { defineHandler } from '@main/ipc/router'
 import {
@@ -23,6 +22,8 @@ import {
   createRecurringExpenseOutput,
   dueRecurringExpensesInput,
   dueRecurringExpensesOutput,
+  expenseAttachmentPreviewInput,
+  expenseAttachmentPreviewOutput,
   expenseAttributionOptionsInput,
   expenseAttributionOptionsOutput,
   expenseInsightsOutput,
@@ -37,6 +38,8 @@ import {
   listRecurringExpensesOutput,
   mergeExpenseCategoriesInput,
   mergeExpenseCategoriesOutput,
+  openExpenseAttachmentInput,
+  openExpenseAttachmentOutput,
   reorderExpenseCategoriesInput,
   reorderExpenseCategoriesOutput,
   resolveExpenseAttachmentInput,
@@ -252,8 +255,8 @@ export function registerExpenseHandlers(): void {
 
   defineHandler({
     channel: 'expenses:openAttachment',
-    input: z.object({ relativePath: z.string().min(1) }),
-    output: z.object({ ok: z.literal(true) }),
+    input: openExpenseAttachmentInput,
+    output: openExpenseAttachmentOutput,
     roles: ['owner'],
     handler: async (input) => {
       const abs = resolveAttachmentAbsolute(getAppContext().paths.userData, input.relativePath)
@@ -267,8 +270,8 @@ export function registerExpenseHandlers(): void {
 
   defineHandler({
     channel: 'expenses:attachmentPreview',
-    input: z.object({ relativePath: z.string().min(1) }),
-    output: z.object({ dataUrl: z.string().nullable() }),
+    input: expenseAttachmentPreviewInput,
+    output: expenseAttachmentPreviewOutput,
     roles: ['owner'],
     handler: (input) => {
       const abs = resolveAttachmentAbsolute(getAppContext().paths.userData, input.relativePath)

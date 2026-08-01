@@ -16,6 +16,7 @@ import type {
   VendorTotalDto,
 } from '@shared/contracts'
 import {
+  addBusinessDays,
   addBusinessMonths,
   assertBusinessDate,
   currentPeriod,
@@ -56,18 +57,23 @@ function advanceDueDate(
   return next
 }
 
-function previousEquivalentRange(from: string, to: string): { from: string; to: string } {
-  // Same-length window immediately before `from`.
-  const fromD = new Date(`${from}T00:00:00`)
-  const toD = new Date(`${to}T00:00:00`)
-  const days = Math.round((toD.getTime() - fromD.getTime()) / 86_400_000) + 1
-  const prevTo = new Date(fromD)
-  prevTo.setDate(prevTo.getDate() - 1)
-  const prevFrom = new Date(prevTo)
-  prevFrom.setDate(prevFrom.getDate() - (days - 1))
-  const fmt = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  return { from: fmt(prevFrom), to: fmt(prevTo) }
+/** Same-length inclusive window immediately before `from` (YYYY-MM-DD arithmetic only). */
+export function previousEquivalentRange(from: string, to: string): { from: string; to: string } {
+  assertBusinessDate(from)
+  assertBusinessDate(to)
+  if (to < from) {
+    throw new AppError('VALIDATION_FAILED', 'Range end must be on or after start')
+  }
+  let days = 0
+  let cursor = from
+  while (cursor <= to) {
+    days += 1
+    cursor = addBusinessDays(cursor, 1)
+    if (days > 4000) break
+  }
+  const prevTo = addBusinessDays(from, -1)
+  const prevFrom = addBusinessDays(prevTo, -(days - 1))
+  return { from: prevFrom, to: prevTo }
 }
 
 export function createExpenseService(
@@ -427,6 +433,12 @@ export function createExpenseService(
       // Allow missing refs for flexibility, but payroll/purchase should set them.
     }
 
+    // Link confirmed recurring recordings so void can restore the template due date.
+    const sourceRefTable =
+      input.sourceRefTable ?? (input.recurringExpenseId != null ? 'recurring_expenses' : null)
+    const sourceRefId =
+      input.sourceRefId ?? (input.recurringExpenseId != null ? input.recurringExpenseId : null)
+
     const now = nowIsoUtc()
     const expenseId = db.transaction((tx) => {
       const inserted = tx
@@ -444,8 +456,8 @@ export function createExpenseService(
           employeeId: input.employeeId ?? null,
           vehicleId: input.vehicleId ?? null,
           source,
-          sourceRefTable: input.sourceRefTable ?? null,
-          sourceRefId: input.sourceRefId ?? null,
+          sourceRefTable,
+          sourceRefId,
           status: 'active',
           createdAt: now,
           updatedAt: now,
@@ -598,6 +610,39 @@ export function createExpenseService(
         })
         .where(eq(expenses.id, id))
         .run()
+
+      // Mistyped recurring confirmation: restore the template so it reappears as due.
+      if (row.sourceRefTable === 'recurring_expenses' && row.sourceRefId != null) {
+        const rec = tx
+          .select()
+          .from(recurringExpenses)
+          .where(eq(recurringExpenses.id, row.sourceRefId))
+          .get()
+        if (rec && rec.lastRecordedDate === row.expenseDate) {
+          const prior = tx
+            .select()
+            .from(expenses)
+            .where(
+              and(
+                eq(expenses.sourceRefTable, 'recurring_expenses'),
+                eq(expenses.sourceRefId, row.sourceRefId),
+                eq(expenses.status, 'active'),
+              ),
+            )
+            .all()
+            .filter((e) => e.id !== id)
+            .sort((a, b) => b.expenseDate.localeCompare(a.expenseDate) || b.id - a.id)[0]
+          tx.update(recurringExpenses)
+            .set({
+              lastRecordedDate: prior?.expenseDate ?? null,
+              nextDueDate: row.expenseDate,
+              updatedAt: now,
+            })
+            .where(eq(recurringExpenses.id, row.sourceRefId))
+            .run()
+        }
+      }
+
       audit.record(
         {
           userId,
@@ -1028,6 +1073,7 @@ export function createExpenseService(
   } {
     assertBusinessDate(input.date)
     const openingCash = input.openingCash ?? 0
+    // Match billing.revenueCash: security deposits are liabilities, not trading cash-in.
     const cashPayments = db
       .select()
       .from(payments)
@@ -1039,6 +1085,7 @@ export function createExpenseService(
         ),
       )
       .all()
+      .filter((p) => !p.notes?.startsWith('[deposit]'))
     const cashExpenses = db
       .select()
       .from(expenses)

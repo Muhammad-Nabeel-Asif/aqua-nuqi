@@ -3,6 +3,7 @@ import {
   addPaisa,
   formatMoney,
   multiplyPaisa,
+  paisaToDecimalString,
   parseMoneyInput,
   roundHalfUp,
   toPaisa,
@@ -29,6 +30,13 @@ describe('money', () => {
 
   it('formats with symbol and thousands separator', () => {
     expect(formatMoney(toPaisa(1250))).toBe('Rs 1,250')
+  })
+
+  it('paisaToDecimalString uses integer maths (safe for exports)', () => {
+    expect(paisaToDecimalString(250_000)).toBe('2500.00')
+    expect(paisaToDecimalString(101)).toBe('1.01')
+    expect(paisaToDecimalString(-50)).toBe('-0.50')
+    expect(paisaToDecimalString(toPaisa('10.05'))).toBe('10.05')
   })
 
   it('parses typed money input', () => {

@@ -256,6 +256,20 @@ export const resolveExpenseAttachmentOutput = z.object({
   exists: z.boolean(),
 })
 
+export const openExpenseAttachmentInput = z.object({
+  relativePath: z.string().min(1),
+})
+export const openExpenseAttachmentOutput = z.object({
+  ok: z.literal(true),
+})
+
+export const expenseAttachmentPreviewInput = z.object({
+  relativePath: z.string().min(1),
+})
+export const expenseAttachmentPreviewOutput = z.object({
+  dataUrl: z.string().nullable(),
+})
+
 // ── Recurring ─────────────────────────────────────────────────────────
 
 export const listRecurringExpensesInput = z.object({

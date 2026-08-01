@@ -14,6 +14,15 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
   insights, and an informational cash book. Payroll/purchase-sourced expenses are read-only here
   so Phase 8 profit cannot double-count. Migration `0007_moaning_kitty_pryde`.
 
+### Fixed
+
+- **Phase 5 review:** recurring manage UI (create/list/edit/deactivate); voiding a recurring
+  confirmation restores the template due date; expenses UI no longer bypasses period lock via
+  `forceClosedPeriod`; cash book excludes `[deposit]` receipts; sortable expense columns;
+  dashboard `/expenses?recurring=<id>` deep-link prefill; export amounts via
+  `paisaToDecimalString`; attachment open/preview Zod contracts in shared; prior-period range
+  uses YYYY-MM-DD day helpers.
+
 ## [0.6.35] — 2026-08-01
 
 ### Fixed

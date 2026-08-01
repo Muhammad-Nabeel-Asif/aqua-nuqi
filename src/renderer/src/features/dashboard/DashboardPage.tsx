@@ -57,7 +57,14 @@ export function DashboardPage() {
           <ul className="space-y-1 text-sm">
             {dueRecurring.data!.items.map((r) => (
               <li key={r.id}>
-                {r.name} — <Money value={r.amount} />
+                <Link
+                  className="font-medium text-sky-900 underline"
+                  to={`/expenses?recurring=${r.id}`}
+                >
+                  {r.name}
+                </Link>
+                {' — '}
+                <Money value={r.amount} />
                 {r.vendorName ? ` · ${r.vendorName}` : ''}
                 {r.lastRecordedDate ? '' : ' — not yet recorded'}
               </li>

@@ -1067,3 +1067,21 @@ totals unchanged.
 - Seed category list is a placeholder from `03-data-model.md` §F — replace with the client's
   real list when available.
 - Confirm `recharts` may be added to the stack doc §1.
+
+### Review fixes (2026-08-01)
+
+Addressed Phase 5 review findings without expanding scope:
+
+- **Recurring UI:** `RecurringExpensesPanel` on `/expenses` (list/create/edit/deactivate).
+- **Void × recurring:** confirmed recordings store `source_ref_* → recurring_expenses`; void
+  rolls back `last_recorded_date` / `next_due_date` so the item reappears as due.
+- **Period lock:** expenses UI no longer offers confirm→`forceClosedPeriod` (AC7).
+- **Cash book:** excludes payments whose notes start with `[deposit]` (same as `revenueCash`).
+- **Sortable table** columns wired to `listExpenses` `sortBy`/`sortDir`.
+- **Dashboard deep link:** `/expenses?recurring=<id>` prefills the side panel.
+- **Export amounts:** `paisaToDecimalString` (no float `/100`).
+- **IPC contracts:** `openAttachment` / `attachmentPreview` schemas moved to shared contracts.
+- **`previousEquivalentRange`:** YYYY-MM-DD helpers only (`addBusinessDays`).
+- **Employee Advance:** toast warning when picked manually; Phase 6 still must net advances.
+- Regression tests: void×recurring, cash-book deposits, previousEquivalentRange, attachments,
+  UI period-lock guards, `paisaToDecimalString`.

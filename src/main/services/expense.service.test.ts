@@ -7,10 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDatabase, getDb, getRawDb, openDatabase } from '@main/db/client'
 import { expenses } from '@main/db/schema'
 import { seedDefaults } from '@main/db/seed'
+import { newUuid } from '@main/lib/ids'
 import { createAuditService } from '@main/services/audit.service'
 import { createAuthService } from '@main/services/auth.service'
-import { createExpenseService } from '@main/services/expense.service'
+import { createExpenseService, previousEquivalentRange } from '@main/services/expense.service'
 import { createPeriodService } from '@main/services/period.service'
+import { nowIsoUtc } from '@shared/date'
 import { AppError } from '@shared/errors'
 
 describe('expense Phase 5 acceptance', () => {
@@ -237,7 +239,7 @@ describe('expense Phase 5 acceptance', () => {
     const due = expensesSvc.dueRecurring('2026-08-15')
     expect(due.some((d) => d.id === rec.id)).toBe(true)
 
-    expensesSvc.createExpense(
+    const recorded = expensesSvc.createExpense(
       {
         expenseDate: '2026-08-01',
         categoryId: fuel.id,
@@ -248,6 +250,10 @@ describe('expense Phase 5 acceptance', () => {
       },
       owner.id,
     )
+    expect(recorded.sourceRefTable).toBe('recurring_expenses')
+    expect(recorded.sourceRefId).toBe(rec.id)
+    expect(recorded.source).toBe('manual')
+    expect(recorded.readOnly).toBe(false)
 
     const after = expensesSvc.dueRecurring('2026-08-15')
     expect(after.some((d) => d.id === rec.id)).toBe(false)
@@ -257,10 +263,59 @@ describe('expense Phase 5 acceptance', () => {
     expect(updated.nextDueDate).toBe('2026-09-01')
   })
 
+  it('voiding a recurring confirmation restores the due item', async () => {
+    const { expensesSvc, owner, fuel } = await setup()
+    const rec = expensesSvc.createRecurring(
+      {
+        name: 'Shop rent',
+        categoryId: fuel.id,
+        amount: 25_000_00,
+        frequency: 'monthly',
+        dayOfMonth: 1,
+        vendorName: 'Landlord',
+        nextDueDate: '2026-08-01',
+      },
+      owner.id,
+    )
+    const recorded = expensesSvc.createExpense(
+      {
+        expenseDate: '2026-08-01',
+        categoryId: fuel.id,
+        amount: 25_000_00,
+        paymentMethod: 'cash',
+        description: 'Shop rent',
+        recurringExpenseId: rec.id,
+      },
+      owner.id,
+    )
+    expect(expensesSvc.dueRecurring('2026-08-15').some((d) => d.id === rec.id)).toBe(false)
+
+    expensesSvc.voidExpense(recorded.id, 'mistyped amount', owner.id)
+
+    const afterVoidDue = expensesSvc.dueRecurring('2026-08-15')
+    expect(afterVoidDue.some((d) => d.id === rec.id)).toBe(true)
+    const updated = expensesSvc.listRecurring().find((r) => r.id === rec.id)!
+    expect(updated.nextDueDate).toBe('2026-08-01')
+    expect(updated.lastRecordedDate).toBeNull()
+  })
+
+  it('previousEquivalentRange uses YYYY-MM-DD day arithmetic', () => {
+    expect(previousEquivalentRange('2026-08-01', '2026-08-31')).toEqual({
+      from: '2026-07-01',
+      to: '2026-07-31',
+    })
+    expect(previousEquivalentRange('2026-08-15', '2026-08-15')).toEqual({
+      from: '2026-08-14',
+      to: '2026-08-14',
+    })
+    expect(previousEquivalentRange('2026-03-01', '2026-03-31')).toEqual({
+      from: '2026-01-29',
+      to: '2026-02-28',
+    })
+  })
+
   it('cash book sums cash payments in and cash expenses out', async () => {
-    const { expensesSvc, owner, fuel, db } = await setup()
-    // Insert a minimal cash payment via raw SQL (payments need a customer — skip if complex).
-    // Exercise cash-out side thoroughly; cash-in uses payments table when present.
+    const { expensesSvc, owner, fuel } = await setup()
     expensesSvc.createExpense(
       {
         expenseDate: '2026-08-01',
@@ -285,7 +340,50 @@ describe('expense Phase 5 acceptance', () => {
     expect(book.cashOut).toBe(1_500_00)
     expect(book.cashOutCount).toBe(1)
     expect(book.closingCash).toBe(10_000_00 - 1_500_00)
-    void db
+  })
+
+  it('cash book excludes deposit-tagged cash receipts', async () => {
+    const { expensesSvc, owner, fuel, raw } = await setup()
+    const now = nowIsoUtc()
+    raw
+      .prepare(
+        `INSERT INTO customers (uuid, code, name, customer_type, billing_mode, security_deposit_held,
+          opening_bottles, opening_balance, status, created_at, updated_at)
+         VALUES (?, 'C-DEP', 'Deposit Cust', 'residential', 'per_bottle', 0, 0, 0, 'active', ?, ?)`,
+      )
+      .run(newUuid(), now, now)
+    const customerId = (
+      raw.prepare(`SELECT id FROM customers WHERE code = 'C-DEP'`).get() as { id: number }
+    ).id
+
+    raw
+      .prepare(
+        `INSERT INTO payments (uuid, receipt_no, customer_id, payment_date, amount, method, notes, status, created_at, created_by)
+         VALUES (?, 'R-TRADE', ?, '2026-08-01', ?, 'cash', 'July bill', 'active', ?, ?)`,
+      )
+      .run(newUuid(), customerId, 5_000_00, now, owner.id)
+    raw
+      .prepare(
+        `INSERT INTO payments (uuid, receipt_no, customer_id, payment_date, amount, method, notes, status, created_at, created_by)
+         VALUES (?, 'R-DEP', ?, '2026-08-01', ?, 'cash', '[deposit] bottle security', 'active', ?, ?)`,
+      )
+      .run(newUuid(), customerId, 3_000_00, now, owner.id)
+
+    expensesSvc.createExpense(
+      {
+        expenseDate: '2026-08-01',
+        categoryId: fuel.id,
+        amount: 1_000_00,
+        paymentMethod: 'cash',
+      },
+      owner.id,
+    )
+
+    const book = expensesSvc.cashBook({ date: '2026-08-01', openingCash: 0 })
+    expect(book.cashIn).toBe(5_000_00)
+    expect(book.cashInCount).toBe(1)
+    expect(book.cashOut).toBe(1_000_00)
+    expect(book.closingCash).toBe(4_000_00)
   })
 
   it('createExpense signature stores source_ref for Phase 6 payroll', async () => {

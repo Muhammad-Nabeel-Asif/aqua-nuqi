@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Paperclip } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
@@ -18,15 +18,20 @@ import type {
 } from '@shared/contracts'
 import { todayBusinessDate } from '@shared/date'
 import { AppError } from '@shared/errors'
-import { formatMoney, toPaisa, type Paisa } from '@shared/money'
+import { formatMoney, paisaToDecimalString, toPaisa, type Paisa } from '@shared/money'
 import { type DatePreset, PAYMENT_METHODS, SOURCE_LABELS, rangeForPreset } from './date-presets'
 import { ExpenseInsights } from './ExpenseInsights'
 import { ExpenseSidePanel, type ExpensePrefill } from './ExpenseSidePanel'
+import { RecurringExpensesPanel } from './RecurringExpensesPanel'
+
+type SortBy = 'date' | 'amount' | 'category' | 'vendor'
 
 export function ExpensesPage() {
   const qc = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
   const amountRef = useRef<HTMLInputElement>(null)
   const listParentRef = useRef<HTMLDivElement>(null)
+  const deepLinkHandled = useRef(false)
 
   const [preset, setPreset] = useState<DatePreset>('this_month')
   const initial = rangeForPreset('this_month')
@@ -39,6 +44,8 @@ export function ExpensesPage() {
   const [search, setSearch] = useState('')
   const [amountMin, setAmountMin] = useState('')
   const [amountMax, setAmountMax] = useState('')
+  const [sortBy, setSortBy] = useState<SortBy>('date')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   // Quick add
   const [qaDate, setQaDate] = useState(todayBusinessDate())
@@ -89,9 +96,23 @@ export function ExpensesPage() {
       search: search.trim() || undefined,
       amountMin: min,
       amountMax: max,
+      sortBy,
+      sortDir,
       limit: 5000,
     }
-  }, [from, to, categoryIds, paymentMethod, vendor, source, search, amountMin, amountMax])
+  }, [
+    from,
+    to,
+    categoryIds,
+    paymentMethod,
+    vendor,
+    source,
+    search,
+    amountMin,
+    amountMax,
+    sortBy,
+    sortDir,
+  ])
 
   const listQ = useQuery({
     queryKey: ['expenses', listInput],
@@ -140,7 +161,21 @@ export function ExpensesPage() {
     await qc.invalidateQueries({ queryKey: ['expenseCategories'] })
   }
 
-  async function quickAdd(forceClosedPeriod = false) {
+  function toggleSort(col: SortBy) {
+    if (sortBy === col) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortBy(col)
+      setSortDir(col === 'date' || col === 'amount' ? 'desc' : 'asc')
+    }
+  }
+
+  function sortIndicator(col: SortBy) {
+    if (sortBy !== col) return ''
+    return sortDir === 'asc' ? ' ↑' : ' ↓'
+  }
+
+  async function quickAdd() {
     if (qaCategoryId === '' || !qaAmount.trim()) {
       toast({ title: 'Category and amount are required', variant: 'error' })
       return
@@ -165,7 +200,6 @@ export function ExpensesPage() {
         paymentMethod: qaMethod,
         description: qaDescription || null,
         vendorName: qaVendor || null,
-        forceClosedPeriod,
       })
       setQaAmount('')
       setQaDescription('')
@@ -174,12 +208,6 @@ export function ExpensesPage() {
       await invalidate()
       requestAnimationFrame(() => amountRef.current?.focus())
     } catch (e) {
-      if (e instanceof AppError && e.code === 'PERIOD_LOCKED' && !forceClosedPeriod) {
-        if (window.confirm('This period is closed. Record anyway?')) {
-          await quickAdd(true)
-          return
-        }
-      }
       toast({
         title: e instanceof AppError ? e.message : 'Could not record expense',
         variant: 'error',
@@ -206,7 +234,7 @@ export function ExpensesPage() {
     openNew({
       expenseDate: todayBusinessDate(),
       categoryId: e.categoryId,
-      amountRupees: String(e.amount / 100),
+      amountRupees: paisaToDecimalString(e.amount),
       description: e.description ?? '',
       paymentMethod: e.paymentMethod,
       vendorName: e.vendorName ?? '',
@@ -225,14 +253,6 @@ export function ExpensesPage() {
       toast({ title: 'Expense voided', variant: 'success' })
       await invalidate()
     } catch (err) {
-      if (err instanceof AppError && err.code === 'PERIOD_LOCKED') {
-        if (window.confirm('Period is closed. Void anyway?')) {
-          await api.expenses.void(e.id, reason.trim(), true)
-          toast({ title: 'Expense voided', variant: 'success' })
-          await invalidate()
-          return
-        }
-      }
       toast({
         title: err instanceof AppError ? err.message : 'Void failed',
         variant: 'error',
@@ -249,7 +269,7 @@ export function ExpensesPage() {
       vendor: e.vendorName ?? '',
       method: e.paymentMethod,
       source: e.source,
-      amount: e.amount / 100,
+      amount: paisaToDecimalString(e.amount),
     }))
     const columns = [
       { key: 'date', header: 'Date' },
@@ -258,7 +278,7 @@ export function ExpensesPage() {
       { key: 'vendor', header: 'Vendor' },
       { key: 'method', header: 'Method' },
       { key: 'source', header: 'Source' },
-      { key: 'amount', header: 'Amount', align: 'right' as const },
+      { key: 'amount', header: 'Amount (Rs)', align: 'right' as const },
     ]
     const filters = [
       { label: 'From', value: from },
@@ -298,7 +318,7 @@ export function ExpensesPage() {
     openNew({
       expenseDate: todayBusinessDate(),
       categoryId: r.categoryId,
-      amountRupees: String(r.amount / 100),
+      amountRupees: paisaToDecimalString(r.amount),
       description: r.name,
       vendorName: r.vendorName ?? '',
       paymentMethod: 'cash',
@@ -306,12 +326,38 @@ export function ExpensesPage() {
     })
   }
 
+  // Dashboard deep-link: /expenses?recurring=<id> opens quick-add prefilled.
+  useEffect(() => {
+    if (deepLinkHandled.current) return
+    const raw = searchParams.get('recurring')
+    if (!raw) return
+    const id = Number(raw)
+    if (!Number.isFinite(id) || id <= 0) return
+    deepLinkHandled.current = true
+    void api.recurringExpenses.list(true).then((res) => {
+      const item = res.items.find((r) => r.id === id)
+      if (item) recordDue(item)
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('recurring')
+          return next
+        },
+        { replace: true },
+      )
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot deep link on mount
+  }, [searchParams])
+
   const prev = listQ.data?.previousTotalAmount ?? 0
   const cur = listQ.data?.totalAmount ?? 0
   const delta = cur - prev
   const deltaPct = prev > 0 ? Math.round((delta / prev) * 1000) / 10 : null
 
   const activeCategories = (categoriesQ.data?.items ?? []).filter((c) => c.isActive)
+  const employeeAdvanceId = (categoriesQ.data?.items ?? []).find(
+    (c) => c.name === 'Employee Advance',
+  )?.id
 
   return (
     <div>
@@ -356,6 +402,8 @@ export function ExpensesPage() {
         </div>
       )}
 
+      <RecurringExpensesPanel categories={categoriesQ.data?.items ?? []} onRecordDue={recordDue} />
+
       {/* Quick add */}
       <form
         className="mb-4 grid grid-cols-2 items-end gap-2 rounded-lg border bg-slate-50 p-3 md:grid-cols-7"
@@ -373,7 +421,17 @@ export function ExpensesPage() {
           <select
             className="flex h-10 w-full rounded-md border bg-white px-2 text-sm"
             value={qaCategoryId}
-            onChange={(e) => setQaCategoryId(e.target.value ? Number(e.target.value) : '')}
+            onChange={(e) => {
+              const id = e.target.value ? Number(e.target.value) : ''
+              setQaCategoryId(id)
+              if (id !== '' && id === employeeAdvanceId) {
+                toast({
+                  title: 'Employee Advance',
+                  description:
+                    'Advances should be netted by payroll (Phase 6). Booking here inflates expenses until then.',
+                })
+              }
+            }}
           >
             <option value="">Select…</option>
             {activeCategories.map((c) => (
@@ -613,8 +671,8 @@ export function ExpensesPage() {
             </div>
           )}
           <p className="mt-2 text-xs text-muted-foreground">
-            Informational only — cash in from payments (method cash), cash out from expenses (method
-            cash). No accounting entries are written.
+            Informational only — cash in from payments (method cash, deposits excluded), cash out
+            from expenses (method cash). No accounting entries are written.
           </p>
         </div>
       )}
@@ -622,12 +680,36 @@ export function ExpensesPage() {
       {/* Table */}
       <div className="rounded-lg border bg-white">
         <div className="grid grid-cols-[100px_1fr_1.2fr_1fr_90px_100px_40px_120px] gap-2 border-b bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-          <span>Date</span>
-          <span>Category</span>
+          <button
+            type="button"
+            className="text-left hover:text-slate-900"
+            onClick={() => toggleSort('date')}
+          >
+            Date{sortIndicator('date')}
+          </button>
+          <button
+            type="button"
+            className="text-left hover:text-slate-900"
+            onClick={() => toggleSort('category')}
+          >
+            Category{sortIndicator('category')}
+          </button>
           <span>Description</span>
-          <span>Vendor</span>
+          <button
+            type="button"
+            className="text-left hover:text-slate-900"
+            onClick={() => toggleSort('vendor')}
+          >
+            Vendor{sortIndicator('vendor')}
+          </button>
           <span>Method</span>
-          <span className="text-right">Amount</span>
+          <button
+            type="button"
+            className="text-right hover:text-slate-900"
+            onClick={() => toggleSort('amount')}
+          >
+            Amount{sortIndicator('amount')}
+          </button>
           <span />
           <span />
         </div>

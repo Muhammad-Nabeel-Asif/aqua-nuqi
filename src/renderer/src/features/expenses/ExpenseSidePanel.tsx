@@ -7,7 +7,7 @@ import { Label } from '@renderer/components/ui/label'
 import { api } from '@renderer/lib/api'
 import type { ExpenseCategoryDto, ExpenseDto, ExpensePaymentMethod } from '@shared/contracts'
 import { AppError } from '@shared/errors'
-import { toPaisa } from '@shared/money'
+import { paisaToDecimalString, toPaisa } from '@shared/money'
 import { PAYMENT_METHODS, SOURCE_LABELS } from './date-presets'
 
 export type ExpensePrefill = Partial<{
@@ -60,7 +60,7 @@ export function ExpenseSidePanel({ open, expense, categories, onClose, onSaved, 
     if (expense) {
       setExpenseDate(expense.expenseDate)
       setCategoryId(expense.categoryId)
-      setAmountRupees(String(expense.amount / 100))
+      setAmountRupees(paisaToDecimalString(expense.amount))
       setDescription(expense.description ?? '')
       setPaymentMethod(expense.paymentMethod)
       setVendorName(expense.vendorName ?? '')
@@ -116,7 +116,7 @@ export function ExpenseSidePanel({ open, expense, categories, onClose, onSaved, 
     }
   }
 
-  async function save(forceClosedPeriod = false) {
+  async function save() {
     if (!expenseDate || categoryId === '' || !amountRupees.trim()) {
       toast({ title: 'Date, category and amount are required', variant: 'error' })
       return
@@ -147,7 +147,6 @@ export function ExpenseSidePanel({ open, expense, categories, onClose, onSaved, 
           attachmentPath,
           employeeId: employeeId === '' ? null : Number(employeeId),
           vehicleId: vehicleId === '' ? null : Number(vehicleId),
-          forceClosedPeriod,
         })
         toast({ title: 'Expense updated', variant: 'success' })
       } else {
@@ -163,19 +162,12 @@ export function ExpenseSidePanel({ open, expense, categories, onClose, onSaved, 
           employeeId: employeeId === '' ? null : Number(employeeId),
           vehicleId: vehicleId === '' ? null : Number(vehicleId),
           recurringExpenseId: prefill?.recurringExpenseId,
-          forceClosedPeriod,
         })
         toast({ title: 'Expense recorded', variant: 'success' })
       }
       onSaved()
       onClose()
     } catch (e) {
-      if (e instanceof AppError && e.code === 'PERIOD_LOCKED' && !forceClosedPeriod) {
-        if (window.confirm('This period is closed. Save anyway?')) {
-          await save(true)
-          return
-        }
-      }
       toast({
         title: e instanceof AppError ? e.message : 'Save failed',
         variant: 'error',
@@ -225,7 +217,18 @@ export function ExpenseSidePanel({ open, expense, categories, onClose, onSaved, 
               className="flex h-10 w-full rounded-md border px-3 text-sm"
               value={categoryId}
               disabled={readOnly}
-              onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : '')}
+              onChange={(e) => {
+                const id = e.target.value ? Number(e.target.value) : ''
+                setCategoryId(id)
+                const cat = categories.find((c) => c.id === id)
+                if (cat?.name === 'Employee Advance') {
+                  toast({
+                    title: 'Employee Advance',
+                    description:
+                      'Advances should be netted by payroll (Phase 6). Booking here inflates expenses until then.',
+                  })
+                }
+              }}
             >
               <option value="">Select…</option>
               {categories

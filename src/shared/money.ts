@@ -34,6 +34,19 @@ export function toRupees(p: Paisa): number {
   return p / 100
 }
 
+/**
+ * Format paisa as a decimal rupee string using integer maths only.
+ * Prefer this over `amount / 100` when writing exports (PDF/Excel).
+ */
+export function paisaToDecimalString(p: Paisa | number): string {
+  const n = Math.trunc(Number(p))
+  const neg = n < 0
+  const abs = Math.abs(n)
+  const whole = Math.trunc(abs / 100)
+  const frac = String(abs % 100).padStart(2, '0')
+  return `${neg ? '-' : ''}${whole}.${frac}`
+}
+
 export function formatMoney(
   p: Paisa,
   opts: { symbol?: string; decimalPlaces?: number } = {},
