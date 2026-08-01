@@ -143,16 +143,127 @@ export function createStockService(
     return row
   }
 
+  const REVERSAL_NOTE_RE = /^\[reversal of #(\d+)\]/
+
+  function isReversalNote(notes: string | null | undefined): boolean {
+    return !!notes && REVERSAL_NOTE_RE.test(notes)
+  }
+
   /**
-   * Delivery sync strategy: **reversal-by-replace**.
-   * Delete prior movements for this delivery ref, then write movements matching
-   * the current recorded state. Easier to reason about than deltas; non-delivery
-   * events (purchase, production, trips) remain strictly append-only.
+   * Append opposite movements for active (not-yet-reversed) rows matching the filter.
+   * Ledger stays append-only — never DELETE stock_movements.
    */
+  function reverseMovements(
+    tx: DbLike,
+    rows: Array<typeof stockMovements.$inferSelect>,
+    opts: { note: string; userId?: number | null; movementDate?: string },
+  ): void {
+    const reversedIds = new Set<number>()
+    for (const r of rows) {
+      const match = r.notes?.match(REVERSAL_NOTE_RE)
+      if (match) reversedIds.add(Number(match[1]))
+    }
+    for (const m of rows) {
+      if (isReversalNote(m.notes)) continue
+      if (reversedIds.has(m.id)) continue
+      if (m.toLocation === 'scrap') {
+        // Schema forbids from_location=scrap. Restore stock via none→from; getBalances
+        // excludes scrap inflows that have a `[reversal of #id]` sibling so voided
+        // trip shortfalls (and any other reversed scrap write-offs) do not inflate
+        // breakage forever. Unreversed customer damage/lost rows still count.
+        if (m.fromLocation === 'none' || m.fromLocation === 'supplier') continue
+        record(tx, {
+          movementDate: opts.movementDate ?? m.movementDate,
+          productId: m.productId,
+          bottleState: m.bottleState as BottleState,
+          quantity: m.quantity,
+          fromLocation: 'none',
+          toLocation: m.fromLocation as StockLocationTo,
+          reason: m.reason as StockReason,
+          vehicleId: m.vehicleId,
+          customerId: m.customerId,
+          refTable: m.refTable,
+          refId: m.refId,
+          notes: `[reversal of #${m.id}] ${opts.note}`,
+          createdBy: opts.userId ?? null,
+        })
+        continue
+      }
+      if (m.fromLocation === 'supplier') {
+        // Reverse purchase: plant → none (removes from owned without inventing supplier sink).
+        record(tx, {
+          movementDate: opts.movementDate ?? m.movementDate,
+          productId: m.productId,
+          bottleState: m.bottleState as BottleState,
+          quantity: m.quantity,
+          fromLocation: m.toLocation === 'scrap' ? 'none' : (m.toLocation as StockLocationFrom),
+          toLocation: 'none',
+          reason: m.reason as StockReason,
+          vehicleId: m.vehicleId,
+          customerId: m.customerId,
+          refTable: m.refTable,
+          refId: m.refId,
+          notes: `[reversal of #${m.id}] ${opts.note}`,
+          createdBy: opts.userId ?? null,
+        })
+        continue
+      }
+      record(tx, {
+        movementDate: opts.movementDate ?? m.movementDate,
+        productId: m.productId,
+        bottleState: m.bottleState as BottleState,
+        quantity: m.quantity,
+        fromLocation: m.toLocation as StockLocationFrom,
+        toLocation: m.fromLocation as StockLocationTo,
+        reason: m.reason as StockReason,
+        vehicleId: m.vehicleId,
+        customerId: m.customerId,
+        refTable: m.refTable,
+        refId: m.refId,
+        notes: `[reversal of #${m.id}] ${opts.note}`,
+        createdBy: opts.userId ?? null,
+      })
+    }
+  }
+
+  /**
+   * Delivery sync strategy: **append-only reversal**.
+   * Reverse prior active movements for this delivery ref, then write movements
+   * matching the current recorded state. Never DELETE ledger rows.
+   */
+  function reverseDeliveryMovements(
+    tx: DbLike,
+    deliveryId: number,
+    opts?: { note?: string; userId?: number | null },
+  ): void {
+    reverseMovementsForRef(tx, 'deliveries', deliveryId, {
+      note: opts?.note ?? 'delivery edit/void',
+      userId: opts?.userId ?? null,
+    })
+  }
+
+  /** Append-only reverse of all active movements for a ref (trips, deliveries, …). */
+  function reverseMovementsForRef(
+    tx: DbLike,
+    refTable: string,
+    refId: number,
+    opts?: { note?: string; userId?: number | null; movementDate?: string },
+  ): void {
+    const rows = tx
+      .select()
+      .from(stockMovements)
+      .where(and(eq(stockMovements.refTable, refTable), eq(stockMovements.refId, refId)))
+      .all()
+    reverseMovements(tx, rows, {
+      note: opts?.note ?? `${refTable} reverse`,
+      userId: opts?.userId ?? null,
+      movementDate: opts?.movementDate,
+    })
+  }
+
+  /** @deprecated Use reverseDeliveryMovements — kept as alias for call sites/tests. */
   function clearDeliveryMovements(tx: DbLike, deliveryId: number): void {
-    tx.delete(stockMovements)
-      .where(and(eq(stockMovements.refTable, 'deliveries'), eq(stockMovements.refId, deliveryId)))
-      .run()
+    reverseDeliveryMovements(tx, deliveryId)
   }
 
   function writeDeliveryMovements(
@@ -170,7 +281,10 @@ export function createStockService(
       userId?: number | null
     },
   ): void {
-    clearDeliveryMovements(tx, opts.deliveryId)
+    reverseDeliveryMovements(tx, opts.deliveryId, {
+      note: 'delivery replace',
+      userId: opts.userId ?? null,
+    })
     const fromFilled: StockLocationFrom = opts.viaVan ? 'van' : 'plant'
     const toEmpty: StockLocationTo = opts.viaVan ? 'van' : 'plant'
     if (opts.quantity > 0) {
@@ -222,7 +336,10 @@ export function createStockService(
     opts?: { vehicleId?: number | null; userId?: number | null },
   ): void {
     if (delivery.status !== 'recorded') {
-      clearDeliveryMovements(tx, delivery.id)
+      reverseDeliveryMovements(tx, delivery.id, {
+        note: 'delivery void',
+        userId: opts?.userId ?? null,
+      })
       return
     }
     writeDeliveryMovements(tx, {
@@ -248,8 +365,9 @@ export function createStockService(
       userId?: number | null
     },
   ): void {
-    // Replace any prior opening movement for this customer
-    tx.delete(stockMovements)
+    const prior = tx
+      .select()
+      .from(stockMovements)
       .where(
         and(
           eq(stockMovements.refTable, 'customers'),
@@ -257,7 +375,12 @@ export function createStockService(
           eq(stockMovements.reason, 'opening_stock'),
         ),
       )
-      .run()
+      .all()
+    reverseMovements(tx, prior, {
+      note: 'customer opening replace',
+      userId: opts.userId ?? null,
+      movementDate: opts.date,
+    })
     if (opts.openingBottles <= 0) return
     record(tx, {
       movementDate: opts.date,
@@ -288,14 +411,19 @@ export function createStockService(
     },
   ): void {
     const reason: StockReason = opts.kind === 'lost_bottle' ? 'lost' : 'damaged'
-    tx.delete(stockMovements)
+    // Idempotent: never DELETE. One create writes once; re-calls are no-ops.
+    const existing = tx
+      .select({ id: stockMovements.id })
+      .from(stockMovements)
       .where(
         and(
           eq(stockMovements.refTable, 'customer_adjustments'),
           eq(stockMovements.refId, opts.adjustmentId),
         ),
       )
-      .run()
+      .limit(1)
+      .get()
+    if (existing) return
     if (opts.quantity <= 0) return
     record(tx, {
       movementDate: opts.date,
@@ -310,6 +438,24 @@ export function createStockService(
       refId: opts.adjustmentId,
       createdBy: opts.userId ?? null,
     })
+  }
+
+  /** Reject operations that would drive plant balances negative. */
+  function assertPlantAvailability(
+    productId: number,
+    bottleState: BottleState,
+    quantity: number,
+  ): void {
+    const bal = getBalances(undefined, productId)
+    const item = bal.items.find((i) => i.productId === productId) ?? bal.totals
+    const available = bottleState === 'filled' ? item.filledAtPlant : item.emptyAtPlant
+    if (available < quantity) {
+      throw new AppError(
+        'VALIDATION_FAILED',
+        `Insufficient ${bottleState} bottles at plant (have ${available}, need ${quantity})`,
+        { available, quantity, bottleState, productId },
+      )
+    }
   }
 
   function getBalances(asOf?: string, productId?: number): GetStockBalancesOutput {
@@ -387,7 +533,27 @@ export function createStockService(
       else if (r.location === 'van' && r.bottle_state === 'filled') bal.filledInVans += net
       else if (r.location === 'van' && r.bottle_state === 'empty') bal.emptyInVans += net
       else if (r.location === 'customer') bal.withCustomers += net
-      else if (r.location === 'scrap') bal.scrapped += net
+      // scrap: computed below (exclude reversed write-offs; schema has no scrap outflow)
+    }
+
+    // Scrapped = unreverted to_location=scrap only. Reversals restore stock via
+    // none→from and are tagged `[reversal of #id]`; counting those inflows would
+    // permanently inflate breakage after voiding a mistaken trip shortfall.
+    const scrapRows = raw
+      .prepare(
+        `SELECT product_id, SUM(quantity) AS qty
+         FROM stock_movements m
+         WHERE m.to_location = 'scrap'${dateClause}${productClause}
+           AND NOT EXISTS (
+             SELECT 1 FROM stock_movements r
+             WHERE r.notes LIKE '[reversal of #' || m.id || ']%'
+           )
+         GROUP BY product_id`,
+      )
+      .all(...params) as Array<{ product_id: number; qty: number }>
+    for (const r of scrapRows) {
+      const bal = byProduct.get(r.product_id)
+      if (bal) bal.scrapped = Number(r.qty) || 0
     }
 
     const items = [...byProduct.values()].map((b) => {
@@ -669,6 +835,7 @@ export function createStockService(
     assertBusinessDate(input.date)
     period.guardPeriodOpen(input.date)
     const productId = resolveProductId(input.productId)
+    assertPlantAvailability(productId, 'empty', input.quantity)
     const noteParts = [
       input.shift ? `shift=${input.shift}` : null,
       input.operatorEmployeeId ? `operator=#${input.operatorEmployeeId}` : null,
@@ -851,13 +1018,15 @@ export function createStockService(
     const adding = input.delta > 0
 
     const row = db.transaction((tx) => {
+      // Count corrections use toLocation `none` (not scrap) so physical-count
+      // errors are not reported as breakage. Reserve scrap for damage/lost/scrapped.
       const m = record(tx, {
         movementDate: input.date,
         productId,
         bottleState: input.bottleState,
         quantity: qty,
         fromLocation: adding ? 'none' : input.location,
-        toLocation: adding ? input.location : 'scrap',
+        toLocation: adding ? input.location : 'none',
         reason: 'adjustment',
         vehicleId: input.vehicleId ?? null,
         notes: input.notes,
@@ -1009,6 +1178,9 @@ export function createStockService(
     listMovements,
     syncDeliveryMovements,
     clearDeliveryMovements,
+    reverseDeliveryMovements,
+    reverseMovementsForRef,
+    assertPlantAvailability,
     writeCustomerOpeningMovement,
     writeAdjustmentScrapMovement,
     recordOpeningStock,

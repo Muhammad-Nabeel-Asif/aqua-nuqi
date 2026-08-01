@@ -4,6 +4,18 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Phase 7 review: trip close writes off filled/empty shortfalls (`van→scrap` lost) so missing
+  bottles leave van stock and `totalOwned`; `bottle_variance` uses schema formula
+  (loaded − returned − delivered); delivery/opening stock updates append opposite movements
+  instead of DELETE; negative count adjustments use `none` (not scrap); production and trip
+  load reject insufficient plant stock; inventory bottles-out PDF/Excel from stock report;
+  movement history filters + export; opening stock can force-adjust after ops start.
+- Phase 7 close-out: `voidTrip` reverses trip shortfall `lost` write-offs (append-only) so
+  voiding a closed trip after unlinking deliveries restores van/plant/`totalOwned` and does
+  not leave negative `filledInVans` or permanent scrap from the mistaken close.
+
 ## [0.9.0] — 2026-08-01
 
 ### Added
@@ -11,7 +23,7 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 - **Phase 7 — Bottle inventory, vehicles & trip reconciliation:** append-only `stock_movements`
   ledger with derived balances (`filledAtPlant`, `emptyAtPlant`, `filledInVans`, `emptyInVans`,
   `withCustomers`, `scrapped`, `totalOwned`). Deliveries write plant↔customer (or van↔customer
-  when a trip is linked) movements; updates use **reversal-by-replace**. Idempotent backfill for
+  when a trip is linked) movements; updates use **append-only reversal**. Idempotent backfill for
   historical deliveries/openings/adjustments. Opening stock, purchase (creates read-only Bottle
   purchase expense), production, damage/loss/scrap, and manual adjustments. Vehicles CRUD +
   trip load-out / close with expected vs actual for filled, empties and cash (note required on

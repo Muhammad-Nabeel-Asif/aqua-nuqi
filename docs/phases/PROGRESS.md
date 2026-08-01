@@ -1229,7 +1229,9 @@ deduction) — intentional.
   auto-links open trip when `employeeId` + date match. Customer opening bottles write
   `opening_stock` movements. Payroll performance `cashVariance` from closed trips.
 - Screens: `/inventory`, `/inventory/vehicles`, `/inventory/trips`, `/inventory/bottles-out`.
-- Unit tests covering AC1–AC10 (stock arithmetic, backfill consistency, trip variance + note).
+- Unit tests covering AC1–AC10 plus review regressions (ghost van stock, variance sign,
+  append-only delivery void/edit, adjustment sink, plant availability, bottles-out shortfall,
+  purchase expense read-only).
 
 ### Migrations added
 
@@ -1274,31 +1276,62 @@ Derived from a single grouped query over `stock_movements` (Σ in − Σ out per
 
 ### How delivery updates write movements
 
-**Reversal-by-replace** (chosen over deltas): inside the same transaction as the delivery
-write, delete all `stock_movements` with `ref_table='deliveries'` and `ref_id=<id>`, then write
-fresh movements for the new recorded state (`filled: plant|van → customer`,
-`empty: customer → plant|van`). Void clears movements. Non-delivery events (purchase,
-production, trip load/unload) remain strictly append-only.
+**Append-only reversal** (not hard-delete): inside the same transaction as the delivery
+write, reverse prior _active_ movements for `ref_table='deliveries'` / `ref_id=<id>` by
+appending opposite rows noted `[reversal of #<id>] …`, then write fresh movements for the
+current recorded state (`filled: plant|van → customer`, `empty: customer → plant|van`).
+Void only appends reversals. Customer opening stock uses the same reverse-then-write
+pattern. Adjustment scrap rows are write-once (idempotent; never deleted).
 
 ### Trips are optional
 
 If no open trip matches employee+date, `trip_id` stays null and stock moves plant ↔ customer.
 Deliveries never require a trip.
 
+### `bottle_variance` sign
+
+Persisted as **loaded − returned − delivered** (schema / AC8): positive means bottles short.
+Cash variance remains **submitted − expected** (negative when short). On close, positive
+filled/empty shortfalls write `van → scrap` reason `lost` so `filledInVans`/`emptyInVans`
+clear and stolen bottles leave `totalOwned`.
+
 ### Bottle purchase expense
 
 `source: 'purchase'`, `source_ref_table: 'stock_movements'`, category **Bottle purchase** —
 read-only on `/expenses`.
 
+### Manual adjustments vs scrap
+
+Negative count corrections use `to_location = none` (not scrap). Scrap is reserved for
+damaged / lost / scrapped reasons.
+
 ### What the next phase must know
 
 - Schema version **12**. Stock truth is `stock_movements`; balances are derived.
 - Phase 8 asset/loss reports should read `stock.listMovements` / `getBalances` and trip
-  variances — do not invent a second bottle counter.
+  variances — do not invent a second bottle counter. Treat `reason=lost` trip-close rows as
+  theft/shortfall write-offs; do not treat `reason=adjustment`→`none` as breakage.
+- `bottle_variance > 0` means short; sum carefully in loss reports.
 - Expense vehicle attribution now has a real FK; `attributionOptions().vehicles` populates.
 - `/deliveries/bottles-out` (Phase 2) still exists; the richer recovery list is
-  `/inventory/bottles-out`.
+  `/inventory/bottles-out` (PDF/Excel export from inventory list with shortfall amounts).
 - **Next phase is Phase 8 (Reports / P&L).**
+
+### Review fixes (2026-08-01)
+
+- Trip close writes lost movements for filled/empty shortfalls (no ghost van stock).
+- `bottle_variance` sign corrected to schema formula; UI filled/empties variance aligned.
+- Delivery/opening stock paths no longer DELETE `stock_movements` (append-only reverse).
+- Negative adjustments → `none` sink; production/trip load reject insufficient plant stock.
+- Inventory bottles-out exports PDF/Excel from `stock.listBottlesOut`; movement history
+  filters (product/location/vehicle/customer) + Excel export; opening stock prompts
+  `forceAdjustment` on CONFLICT.
+- Tests added/updated for ghost stock, variance sign, append-only void/edit, adjustment
+  sink, availability rejection, bottles-out shortfall sample, purchase read-only.
+- **Trip void after shortfall:** `voidTrip` uses `stock.reverseMovementsForRef` for _all_
+  active trip-linked movements (load/unload **and** close-time `lost` van→scrap). Scrap
+  balances exclude inflows that have a `[reversal of #id]` sibling so a voided mistaken
+  write-off does not permanently inflate breakage or leave `filledInVans` negative.
 
 ### Escalations / questions for the human
 

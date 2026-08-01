@@ -104,10 +104,11 @@ export function createTripService(
       reconciliation: {
         filledExpected,
         filledActual,
-        filledVariance: filledActual == null ? null : filledActual - filledExpected,
+        // Positive = short (matches bottle_variance = loaded − returned − delivered)
+        filledVariance: filledActual == null ? null : filledExpected - filledActual,
         emptiesExpected: linked.emptiesCollected,
         emptiesActual,
-        emptiesVariance: emptiesActual == null ? null : emptiesActual - linked.emptiesCollected,
+        emptiesVariance: emptiesActual == null ? null : linked.emptiesCollected - emptiesActual,
         cashExpected: linked.cashCollected,
         cashActual,
         cashVariance: cashActual == null ? null : cashActual - linked.cashCollected,
@@ -175,6 +176,10 @@ export function createTripService(
 
     const productId = rates.resolveDefaultProductId(input.productId)
     const emptiesLoaded = input.emptiesLoaded ?? 0
+    stock.assertPlantAvailability(productId, 'filled', input.filledLoaded)
+    if (emptiesLoaded > 0) {
+      stock.assertPlantAvailability(productId, 'empty', emptiesLoaded)
+    }
     const now = nowIsoUtc()
 
     const row = db.transaction((tx) => {
@@ -261,10 +266,9 @@ export function createTripService(
     period.guardPeriodOpen(existing.tripDate)
 
     const linked = linkedTotals(existing.id)
-    const filledExpected = existing.filledLoaded - linked.bottlesDelivered
-    const bottleVariance = input.filledReturned - filledExpected
-    // Also consider empties variance in the "any variance" note requirement
-    const emptiesVariance = input.emptiesReturned - linked.emptiesCollected
+    // Schema: bottle_variance = loaded − returned − delivered (positive = short)
+    const bottleVariance = existing.filledLoaded - input.filledReturned - linked.bottlesDelivered
+    const emptiesVariance = linked.emptiesCollected - input.emptiesReturned
     const cashVariance = input.cashSubmitted - linked.cashCollected
     const anyVariance = bottleVariance !== 0 || emptiesVariance !== 0 || cashVariance !== 0
 
@@ -282,6 +286,28 @@ export function createTripService(
 
     const productId = rates.resolveDefaultProductId(input.productId)
     const now = nowIsoUtc()
+
+    // Empties that should be on the van: loaded at start + collected on route
+    const emptiesLoadedRow = db
+      .select({
+        qty: sql<number>`coalesce(sum(${stockMovements.quantity}), 0)`,
+      })
+      .from(stockMovements)
+      .where(
+        and(
+          eq(stockMovements.refTable, 'trips'),
+          eq(stockMovements.refId, existing.id),
+          eq(stockMovements.reason, 'load_to_van'),
+          eq(stockMovements.bottleState, 'empty'),
+        ),
+      )
+      .get()
+    const emptiesLoaded = Number(emptiesLoadedRow?.qty ?? 0)
+    const filledShortfall = Math.max(0, bottleVariance)
+    const emptiesShortfall = Math.max(
+      0,
+      emptiesLoaded + linked.emptiesCollected - input.emptiesReturned,
+    )
 
     db.transaction((tx) => {
       // Unload: filled van → plant, empty van → plant
@@ -312,6 +338,40 @@ export function createTripService(
           vehicleId: existing.vehicleId,
           refTable: 'trips',
           refId: existing.id,
+          createdBy: input.userId ?? null,
+        })
+      }
+
+      // Write off positive shortfalls so missing bottles leave van stock / totalOwned
+      if (filledShortfall > 0) {
+        stock.record(tx, {
+          movementDate: existing.tripDate,
+          productId,
+          bottleState: 'filled',
+          quantity: filledShortfall,
+          fromLocation: 'van',
+          toLocation: 'scrap',
+          reason: 'lost',
+          vehicleId: existing.vehicleId,
+          refTable: 'trips',
+          refId: existing.id,
+          notes: `Trip close shortfall: ${filledShortfall} filled missing`,
+          createdBy: input.userId ?? null,
+        })
+      }
+      if (emptiesShortfall > 0) {
+        stock.record(tx, {
+          movementDate: existing.tripDate,
+          productId,
+          bottleState: 'empty',
+          quantity: emptiesShortfall,
+          fromLocation: 'van',
+          toLocation: 'scrap',
+          reason: 'lost',
+          vehicleId: existing.vehicleId,
+          refTable: 'trips',
+          refId: existing.id,
+          notes: `Trip close shortfall: ${emptiesShortfall} empties missing`,
           createdBy: input.userId ?? null,
         })
       }
@@ -368,37 +428,13 @@ export function createTripService(
 
     const now = nowIsoUtc()
     db.transaction((tx) => {
-      // Reverse trip load/unload movements by deleting trip-linked rows and
-      // writing opposite movements so the ledger stays consistent.
-      const movs = tx
-        .select()
-        .from(stockMovements)
-        .where(and(eq(stockMovements.refTable, 'trips'), eq(stockMovements.refId, id)))
-        .all()
-
-      for (const m of movs) {
-        // Only reverse plant↔van load/unload
-        if (
-          (m.reason === 'load_to_van' || m.reason === 'unload_from_van') &&
-          (m.fromLocation === 'plant' || m.fromLocation === 'van') &&
-          (m.toLocation === 'plant' || m.toLocation === 'van')
-        ) {
-          stock.record(tx, {
-            movementDate: existing.tripDate,
-            productId: m.productId,
-            bottleState: m.bottleState as 'filled' | 'empty',
-            quantity: m.quantity,
-            fromLocation: m.toLocation as 'plant' | 'van',
-            toLocation: m.fromLocation as 'plant' | 'van',
-            reason: m.reason === 'load_to_van' ? 'unload_from_van' : 'load_to_van',
-            vehicleId: m.vehicleId,
-            refTable: 'trips',
-            refId: id,
-            notes: `Void reversal: ${reason}`,
-            createdBy: userId ?? null,
-          })
-        }
-      }
+      // Append-only reverse of all active trip-linked movements (load, unload,
+      // and close-time shortfall write-offs van→scrap reason=lost). Never DELETE.
+      stock.reverseMovementsForRef(tx, 'trips', id, {
+        note: `trip void: ${reason}`,
+        userId: userId ?? null,
+        movementDate: existing.tripDate,
+      })
 
       tx.update(trips)
         .set({

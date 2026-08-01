@@ -100,13 +100,14 @@ export function TripsPage() {
     liveCashPaisa = null
   }
 
+  // Filled/empties: positive = short (expected − actual). Cash: submitted − expected.
   const liveFilledVar =
     recon && liveFilled != null && Number.isFinite(liveFilled)
-      ? liveFilled - recon.filledExpected
+      ? recon.filledExpected - liveFilled
       : null
   const liveEmptiesVar =
     recon && liveEmpties != null && Number.isFinite(liveEmpties)
-      ? liveEmpties - recon.emptiesExpected
+      ? recon.emptiesExpected - liveEmpties
       : null
   const liveCashVar =
     recon && liveCashPaisa != null && Number.isFinite(liveCashPaisa)

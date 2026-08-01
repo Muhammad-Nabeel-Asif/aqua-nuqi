@@ -10,6 +10,7 @@ import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
 import { todayBusinessDate } from '@shared/date'
 import { AppError } from '@shared/errors'
+import { formatMoney, type Paisa } from '@shared/money'
 
 type ActionPanel = 'return' | 'charge' | null
 
@@ -77,18 +78,127 @@ export function InventoryBottlesOutPage() {
     setChDesc('')
   }
 
+  function exportRows() {
+    return items.map((r) => ({
+      code: r.code,
+      name: r.name,
+      area: r.areaName,
+      route: r.routeName,
+      bottles: r.bottlesWithCustomer,
+      depositHeld: formatMoney(r.securityDepositHeld as Paisa),
+      shortfall: formatMoney(r.depositShortfallAmount as Paisa),
+      lastDelivery: r.lastDeliveryDate,
+      lastReturn: r.lastEmptyReturnDate,
+      daysSinceReturn: r.daysSinceLastReturn,
+      phone: r.phonePrimary,
+    }))
+  }
+
+  const exportColumns = [
+    { key: 'code', header: 'Code' },
+    { key: 'name', header: 'Customer' },
+    { key: 'area', header: 'Area' },
+    { key: 'route', header: 'Route' },
+    { key: 'bottles', header: 'Bottles', align: 'right' as const },
+    { key: 'depositHeld', header: 'Deposit held', align: 'right' as const },
+    { key: 'shortfall', header: 'Shortfall', align: 'right' as const },
+    { key: 'lastDelivery', header: 'Last delivery' },
+    { key: 'lastReturn', header: 'Last return' },
+    { key: 'daysSinceReturn', header: 'Days since return', align: 'right' as const },
+    { key: 'phone', header: 'Phone' },
+  ]
+
   async function exportPdf() {
+    if (!items.length) {
+      toast({ title: 'No rows to export', variant: 'error' })
+      return
+    }
     try {
-      const r = await api.pdf.generateBottlesOut({
-        search: listInput.search,
-        routeId: listInput.routeId,
-        minBottles: listInput.minBottles,
+      const r = await api.pdf.exportTable({
+        title: 'Bottles with customers',
+        fileName: `inventory-bottles-out-${today}.pdf`,
+        orientation: 'landscape',
         openAfter: true,
+        filters: [
+          ...(summary
+            ? [
+                {
+                  label: 'Total bottles',
+                  value: String(summary.totalBottlesWithCustomers),
+                },
+                {
+                  label: 'Deposit shortfall',
+                  value: formatMoney(summary.totalDepositShortfall as Paisa),
+                },
+              ]
+            : []),
+        ],
+        columns: exportColumns,
+        rows: exportRows(),
       })
       toast({ title: 'Bottles-out PDF saved', description: r.path, variant: 'success' })
     } catch (e) {
       toast({
         title: e instanceof AppError ? e.message : 'PDF export failed',
+        variant: 'error',
+        code: e instanceof AppError ? e.code : undefined,
+      })
+    }
+  }
+
+  async function exportExcel() {
+    if (!items.length) {
+      toast({ title: 'No rows to export', variant: 'error' })
+      return
+    }
+    try {
+      const r = await api.pdf.exportExcel({
+        title: 'Bottles with customers',
+        fileName: `inventory-bottles-out-${today}.xlsx`,
+        openAfter: true,
+        columns: [
+          ...exportColumns,
+          { key: 'valueAtDeposit', header: 'Value at deposit', align: 'right' },
+        ],
+        rows: [
+          ...items.map((row) => ({
+            code: row.code,
+            name: row.name,
+            area: row.areaName,
+            route: row.routeName,
+            bottles: row.bottlesWithCustomer,
+            depositHeld: formatMoney(row.securityDepositHeld as Paisa),
+            shortfall: formatMoney(row.depositShortfallAmount as Paisa),
+            valueAtDeposit: formatMoney((row.bottlesWithCustomer * row.defaultDeposit) as Paisa),
+            lastDelivery: row.lastDeliveryDate,
+            lastReturn: row.lastEmptyReturnDate,
+            daysSinceReturn: row.daysSinceLastReturn,
+            phone: row.phonePrimary,
+          })),
+          ...(summary
+            ? [
+                {
+                  code: 'TOTAL',
+                  name: '',
+                  area: null,
+                  route: null,
+                  bottles: summary.totalBottlesWithCustomers,
+                  depositHeld: '',
+                  shortfall: formatMoney(summary.totalDepositShortfall as Paisa),
+                  valueAtDeposit: formatMoney(summary.totalValueAtDepositRate as Paisa),
+                  lastDelivery: null,
+                  lastReturn: null,
+                  daysSinceReturn: null,
+                  phone: null,
+                },
+              ]
+            : []),
+        ],
+      })
+      toast({ title: 'Bottles-out Excel saved', description: r.path, variant: 'success' })
+    } catch (e) {
+      toast({
+        title: e instanceof AppError ? e.message : 'Excel export failed',
         variant: 'error',
         code: e instanceof AppError ? e.code : undefined,
       })
@@ -177,6 +287,9 @@ export function InventoryBottlesOutPage() {
             </Button>
             <Button variant="outline" onClick={() => void exportPdf()}>
               Export PDF
+            </Button>
+            <Button variant="outline" onClick={() => void exportExcel()}>
+              Export Excel
             </Button>
           </>
         }

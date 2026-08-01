@@ -58,6 +58,10 @@ export function InventoryPage() {
   const [movFrom, setMovFrom] = useState(periodStart(month))
   const [movTo, setMovTo] = useState(periodEnd(month))
   const [reasonFilter, setReasonFilter] = useState<StockMovementDto['reason'] | ''>('')
+  const [locationFilter, setLocationFilter] = useState('')
+  const [vehicleFilter, setVehicleFilter] = useState('')
+  const [customerFilter, setCustomerFilter] = useState('')
+  const [productFilter, setProductFilter] = useState('')
 
   // Opening stock
   const [osDate, setOsDate] = useState(today)
@@ -96,19 +100,35 @@ export function InventoryPage() {
     queryFn: () => api.inventory.getBalances(),
   })
 
-  const movementsInput = useMemo(
-    () => ({
+  const movementsInput = useMemo(() => {
+    const vehicleId = vehicleFilter.trim() ? Number(vehicleFilter) : undefined
+    const customerId = customerFilter.trim() ? Number(customerFilter) : undefined
+    const productId = productFilter.trim() ? Number(productFilter) : undefined
+    return {
       from: movFrom,
       to: movTo,
       reason: reasonFilter || undefined,
+      location: locationFilter || undefined,
+      vehicleId: vehicleId != null && Number.isFinite(vehicleId) ? vehicleId : undefined,
+      customerId: customerId != null && Number.isFinite(customerId) ? customerId : undefined,
+      productId: productId != null && Number.isFinite(productId) ? productId : undefined,
       limit: 500,
-    }),
-    [movFrom, movTo, reasonFilter],
-  )
+    }
+  }, [movFrom, movTo, reasonFilter, locationFilter, vehicleFilter, customerFilter, productFilter])
 
   const movementsQ = useQuery({
     queryKey: ['inventory', 'movements', movementsInput],
     queryFn: () => api.inventory.listMovements(movementsInput),
+  })
+
+  const productsQ = useQuery({
+    queryKey: ['products'],
+    queryFn: () => api.products.list(),
+  })
+
+  const vehiclesQ = useQuery({
+    queryKey: ['vehicles', false],
+    queryFn: () => api.vehicles.list(false),
   })
 
   async function invalidate() {
@@ -143,13 +163,97 @@ export function InventoryPage() {
       toast({ title: 'Quantity must be a positive number', variant: 'error' })
       return
     }
-    await runMutation('Opening stock recorded', () =>
-      api.inventory.recordOpeningStock({
+    setBusy(true)
+    try {
+      await api.inventory.recordOpeningStock({
         date: osDate,
         bottleState: osState,
         quantity,
-      }),
-    )
+      })
+      toast({ title: 'Opening stock recorded', variant: 'success' })
+      setPanel(null)
+      await invalidate()
+    } catch (e) {
+      if (e instanceof AppError && e.code === 'CONFLICT') {
+        const ok = window.confirm(
+          'Other stock movements already exist for this product. Record this quantity as a manual adjustment instead?',
+        )
+        if (!ok) return
+        try {
+          await api.inventory.recordOpeningStock({
+            date: osDate,
+            bottleState: osState,
+            quantity,
+            forceAdjustment: true,
+          })
+          toast({ title: 'Recorded as stock adjustment', variant: 'success' })
+          setPanel(null)
+          await invalidate()
+        } catch (e2) {
+          toast({
+            title: e2 instanceof AppError ? e2.message : 'Adjustment failed',
+            variant: 'error',
+            code: e2 instanceof AppError ? e2.code : undefined,
+          })
+        }
+        return
+      }
+      toast({
+        title: e instanceof AppError ? e.message : 'Opening stock failed',
+        variant: 'error',
+        code: e instanceof AppError ? e.code : undefined,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function exportMovements() {
+    const items = movementsQ.data?.items ?? []
+    if (!items.length) {
+      toast({ title: 'No movements to export', variant: 'error' })
+      return
+    }
+    try {
+      const r = await api.pdf.exportExcel({
+        title: `Stock movements ${movFrom}–${movTo}`,
+        fileName: `stock-movements-${movFrom}-${movTo}.xlsx`,
+        openAfter: true,
+        columns: [
+          { key: 'date', header: 'Date' },
+          { key: 'reason', header: 'Reason' },
+          { key: 'state', header: 'State' },
+          { key: 'qty', header: 'Qty', align: 'right' },
+          { key: 'from', header: 'From' },
+          { key: 'to', header: 'To' },
+          { key: 'vehicle', header: 'Vehicle' },
+          { key: 'customer', header: 'Customer' },
+          { key: 'product', header: 'Product' },
+          { key: 'notes', header: 'Notes' },
+          { key: 'ownedAfter', header: 'Owned after', align: 'right' },
+        ],
+        rows: items.map((m) => ({
+          date: m.movementDate,
+          reason: REASON_LABELS[m.reason] ?? m.reason,
+          state: m.bottleState,
+          qty: m.quantity,
+          from: m.fromLocation,
+          to: m.toLocation,
+          vehicle: m.vehicleName ?? null,
+          customer: m.customerName ?? null,
+          product: m.productName ?? null,
+          notes: m.notes ?? null,
+          ownedAfter: m.balanceAfterOwned ?? null,
+        })),
+      })
+      toast({ title: 'Movements exported', description: r.path, variant: 'success' })
+    } catch (e) {
+      toast({
+        title: e instanceof AppError ? e.message : 'Export failed',
+        variant: 'error',
+        code: e instanceof AppError ? e.code : undefined,
+      })
+    }
   }
 
   async function submitPurchase() {
@@ -631,6 +735,53 @@ export function InventoryPage() {
             </option>
           ))}
         </select>
+        <select
+          className="h-10 rounded-md border px-2 text-sm"
+          value={locationFilter}
+          onChange={(e) => setLocationFilter(e.target.value)}
+        >
+          <option value="">All locations</option>
+          <option value="plant">Plant</option>
+          <option value="van">Van</option>
+          <option value="customer">Customer</option>
+          <option value="supplier">Supplier</option>
+          <option value="scrap">Scrap</option>
+          <option value="none">None</option>
+        </select>
+        <select
+          className="h-10 rounded-md border px-2 text-sm"
+          value={productFilter}
+          onChange={(e) => setProductFilter(e.target.value)}
+        >
+          <option value="">All products</option>
+          {(productsQ.data?.items ?? []).map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <select
+          className="h-10 rounded-md border px-2 text-sm"
+          value={vehicleFilter}
+          onChange={(e) => setVehicleFilter(e.target.value)}
+        >
+          <option value="">All vehicles</option>
+          {(vehiclesQ.data?.items ?? []).map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+            </option>
+          ))}
+        </select>
+        <Input
+          className="w-28"
+          placeholder="Customer id"
+          inputMode="numeric"
+          value={customerFilter}
+          onChange={(e) => setCustomerFilter(e.target.value)}
+        />
+        <Button variant="outline" size="sm" onClick={() => void exportMovements()}>
+          Export Excel
+        </Button>
       </div>
 
       <div className="overflow-auto rounded-lg border bg-white">
