@@ -30,6 +30,7 @@ import { createBillingService } from './services/billing.service'
 import { createCustomerImportService } from './services/customer-import.service'
 import { createCustomerService } from './services/customer.service'
 import { createDeliveryService } from './services/delivery.service'
+import { createExpenseService } from './services/expense.service'
 import { createLedgerService } from './services/ledger.service'
 import { createMasterDataService } from './services/master-data.service'
 import { createPaymentService } from './services/payment.service'
@@ -141,6 +142,7 @@ export function bootstrapApp(): BootstrapResult {
     const billing = createBillingService(db, audit, period, settings, balances, ledger)
     const payments = createPaymentService(db, audit, period, balances, ledger, billing)
     const receivables = createReceivablesService(db)
+    const expenses = createExpenseService(db, raw, audit, period)
     const pdf = createPdfService(
       db,
       audit,
@@ -186,6 +188,7 @@ export function bootstrapApp(): BootstrapResult {
       billing,
       payments,
       receivables,
+      expenses,
       pdf,
       appVersion,
       schemaVersion: schemaVersion || getSchemaVersion(),

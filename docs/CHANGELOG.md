@@ -4,6 +4,16 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-08-01
+
+### Added
+
+- **Phase 5 — Expense management:** categorised expenses with quick-add (<5 s keyboard entry),
+  receipt attachments under `userData/attachments/expenses/<year>/`, system categories (Salaries /
+  Employee Advance), category merge, recurring expense inbox (confirm-before-create), Recharts
+  insights, and an informational cash book. Payroll/purchase-sourced expenses are read-only here
+  so Phase 8 profit cannot double-count. Migration `0007_moaning_kitty_pryde`.
+
 ## [0.6.35] — 2026-08-01
 
 ### Fixed

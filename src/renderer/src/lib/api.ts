@@ -674,6 +674,140 @@ export const api = {
     uploadLogo: (sourcePath: string) =>
       invoke<{ logoPath: string }>('pdf:uploadLogo', { sourcePath }),
   },
+  expenses: {
+    create: (input: import('@shared/contracts').CreateExpenseInput) =>
+      invoke<{ item: import('@shared/contracts').ExpenseDto }>('expenses:create', input),
+    update: (input: import('@shared/contracts').UpdateExpenseInput) =>
+      invoke<{ item: import('@shared/contracts').ExpenseDto }>('expenses:update', input),
+    void: (id: number, reason: string, forceClosedPeriod?: boolean) =>
+      invoke<{ item: import('@shared/contracts').ExpenseDto }>('expenses:void', {
+        id,
+        reason,
+        forceClosedPeriod,
+      }),
+    list: (input: import('@shared/contracts').ListExpensesInput = {}) =>
+      invoke<{
+        items: import('@shared/contracts').ExpenseDto[]
+        total: number
+        totalAmount: number
+        previousTotalAmount: number
+      }>('expenses:list', input),
+    get: (id: number) =>
+      invoke<{ item: import('@shared/contracts').ExpenseDto }>('expenses:get', { id }),
+    summaryByCategory: (from: string, to: string) =>
+      invoke<{
+        items: import('@shared/contracts').CategoryTotalDto[]
+        total: number
+      }>('expenses:summaryByCategory', { from, to }),
+    summaryByMonth: (from: string, to: string) =>
+      invoke<{ items: import('@shared/contracts').MonthTotalDto[] }>('expenses:summaryByMonth', {
+        from,
+        to,
+      }),
+    insights: (from: string, to: string) =>
+      invoke<{
+        byCategory: import('@shared/contracts').CategoryTotalDto[]
+        byMonth: import('@shared/contracts').MonthTotalDto[]
+        topVendors: import('@shared/contracts').VendorTotalDto[]
+        total: number
+      }>('expenses:insights', { from, to }),
+    attributionOptions: () =>
+      invoke<{
+        employees: Array<{ id: number; name: string; code: string }>
+        vehicles: Array<{ id: number; name: string }>
+      }>('expenses:attributionOptions', {}),
+    cashBook: (input: { date: string; openingCash?: number; countedCash?: number | null }) =>
+      invoke<{
+        date: string
+        openingCash: number
+        cashIn: number
+        cashOut: number
+        closingCash: number
+        countedCash: number | null
+        variance: number | null
+        cashInCount: number
+        cashOutCount: number
+      }>('expenses:cashBook', input),
+    attachReceipt: (sourcePath: string, expenseDate?: string) =>
+      invoke<{
+        relativePath: string
+        absolutePath: string
+        warnedLarge: boolean
+        downscaled: boolean
+      }>('expenses:attachReceipt', { sourcePath, expenseDate }),
+    resolveAttachment: (relativePath: string) =>
+      invoke<{ absolutePath: string | null; exists: boolean }>('expenses:resolveAttachment', {
+        relativePath,
+      }),
+    openAttachment: (relativePath: string) =>
+      invoke<{ ok: true }>('expenses:openAttachment', { relativePath }),
+    attachmentPreview: (relativePath: string) =>
+      invoke<{ dataUrl: string | null }>('expenses:attachmentPreview', { relativePath }),
+  },
+  expenseCategories: {
+    list: (includeInactive?: boolean) =>
+      invoke<{ items: import('@shared/contracts').ExpenseCategoryDto[] }>(
+        'expenseCategories:list',
+        { includeInactive },
+      ),
+    create: (input: { name: string; parentId?: number | null }) =>
+      invoke<{ item: import('@shared/contracts').ExpenseCategoryDto }>(
+        'expenseCategories:create',
+        input,
+      ),
+    update: (input: { id: number; name?: string; parentId?: number | null; isActive?: boolean }) =>
+      invoke<{ item: import('@shared/contracts').ExpenseCategoryDto }>(
+        'expenseCategories:update',
+        input,
+      ),
+    reorder: (orderedIds: number[]) =>
+      invoke<{ ok: true }>('expenseCategories:reorder', { orderedIds }),
+    merge: (fromId: number, intoId: number) =>
+      invoke<{ moved: number; item: import('@shared/contracts').ExpenseCategoryDto }>(
+        'expenseCategories:merge',
+        { fromId, intoId },
+      ),
+  },
+  recurringExpenses: {
+    list: (includeInactive?: boolean) =>
+      invoke<{ items: import('@shared/contracts').RecurringExpenseDto[] }>(
+        'recurringExpenses:list',
+        { includeInactive },
+      ),
+    create: (input: {
+      name: string
+      categoryId: number
+      amount: number
+      frequency: 'monthly' | 'quarterly' | 'yearly'
+      dayOfMonth?: number | null
+      vendorName?: string | null
+      nextDueDate: string
+    }) =>
+      invoke<{ item: import('@shared/contracts').RecurringExpenseDto }>(
+        'recurringExpenses:create',
+        input,
+      ),
+    update: (input: {
+      id: number
+      name?: string
+      categoryId?: number
+      amount?: number
+      frequency?: 'monthly' | 'quarterly' | 'yearly'
+      dayOfMonth?: number | null
+      vendorName?: string | null
+      nextDueDate?: string
+      isActive?: boolean
+    }) =>
+      invoke<{ item: import('@shared/contracts').RecurringExpenseDto }>(
+        'recurringExpenses:update',
+        input,
+      ),
+    due: (asOf?: string) =>
+      invoke<{ items: import('@shared/contracts').RecurringExpenseDto[] }>(
+        'recurringExpenses:due',
+        { asOf },
+      ),
+  },
   ...(import.meta.env.DEV
     ? {
         dev: {

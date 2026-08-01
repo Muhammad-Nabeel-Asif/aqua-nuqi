@@ -27,11 +27,11 @@ import { toPaisa } from '@shared/money'
 import { getBundledSchemaVersion, runBootMigrations } from './migrate'
 
 /**
- * Simulates docs/07 §7 scenario 1 for the Phase 3 schema bump:
+ * Simulates docs/07 §7 scenario 1 for a schema bump:
  * a Phase 2 database (migrations through 0004) with live rows must survive
- * boot into Phase 3 (0005 + 0006) with data intact and an app_upgrade audit.
+ * boot into the current bundled schema with data intact and an app_upgrade audit.
  */
-describe('Phase 2 → Phase 3 upgrade', () => {
+describe('Phase 2 → current upgrade', () => {
   let dir: string
 
   beforeEach(() => {
@@ -43,12 +43,18 @@ describe('Phase 2 → Phase 3 upgrade', () => {
     fs.rmSync(dir, { recursive: true, force: true })
   })
 
+  function migrationIndex(name: string): number | null {
+    const match = /^(\d+)_/.exec(name)
+    return match ? Number(match[1]) : null
+  }
+
   function phase2MigrationsFolder(): string {
     const src = path.join(process.cwd(), 'drizzle')
     const dest = path.join(dir, 'drizzle-phase2')
     fs.mkdirSync(path.join(dest, 'meta'), { recursive: true })
     for (const name of fs.readdirSync(src)) {
-      if (name.endsWith('.sql') && !name.startsWith('0005') && !name.startsWith('0006')) {
+      const idx = migrationIndex(name)
+      if (name.endsWith('.sql') && idx != null && idx <= 4) {
         fs.copyFileSync(path.join(src, name), path.join(dest, name))
       }
     }
@@ -59,9 +65,10 @@ describe('Phase 2 → Phase 3 upgrade', () => {
     const journal = JSON.parse(
       fs.readFileSync(path.join(src, 'meta', '_journal.json'), 'utf8'),
     ) as { version: string; dialect: string; entries: Array<{ tag: string }> }
-    journal.entries = journal.entries.filter(
-      (e) => !e.tag.startsWith('0005') && !e.tag.startsWith('0006'),
-    )
+    journal.entries = journal.entries.filter((e) => {
+      const idx = migrationIndex(e.tag)
+      return idx != null && idx <= 4
+    })
     fs.writeFileSync(path.join(dest, 'meta', '_journal.json'), JSON.stringify(journal, null, 2))
     return dest
   }
@@ -110,7 +117,7 @@ describe('Phase 2 → Phase 3 upgrade', () => {
 
     const fullFolder = path.join(process.cwd(), 'drizzle')
     const bundledMax = getBundledSchemaVersion(fullFolder)
-    expect(bundledMax).toBe(7) // through 0006
+    expect(bundledMax).toBeGreaterThanOrEqual(8) // through 0007 (Phase 5)
 
     const outcome = runBootMigrations({
       paths: {
@@ -124,12 +131,12 @@ describe('Phase 2 → Phase 3 upgrade', () => {
         resourcesPath: dir,
       },
       migrationsFolder: fullFolder,
-      appVersion: '0.5.29',
+      appVersion: '0.7.0',
     })
     expect(outcome.kind).toBe('migrated')
     if (outcome.kind === 'migrated') {
       expect(outcome.from).toBe(5)
-      expect(outcome.to).toBe(7)
+      expect(outcome.to).toBe(bundledMax)
       expect(fs.existsSync(outcome.backupPath)).toBe(true)
     }
 
@@ -139,21 +146,21 @@ describe('Phase 2 → Phase 3 upgrade', () => {
     const del = live.select().from(deliveries).where(eq(deliveries.id, delivery.id)).get()
     expect(del?.quantity).toBe(7)
 
-    // Phase 3 tables exist
+    // Later-phase tables exist
     expect(live.select().from(invoices).all()).toEqual([])
     expect(live.select().from(paymentAllocations).all()).toEqual([])
 
     const schema = live.select().from(appMeta).where(eq(appMeta.key, 'schema_version')).get()?.value
-    expect(schema).toBe('7')
+    expect(schema).toBe(String(bundledMax))
     const appVer = live.select().from(appMeta).where(eq(appMeta.key, 'app_version')).get()?.value
-    expect(appVer).toBe('0.5.29')
+    expect(appVer).toBe('0.7.0')
 
     const upgradeAudit = live
       .select()
       .from(auditLog)
       .all()
       .find((r) => r.action === 'app_upgrade')
-    expect(upgradeAudit?.summary).toMatch(/0\.4\.25 → 0\.5\.29/)
-    expect(upgradeAudit?.summary).toMatch(/schema 5 → 7/)
+    expect(upgradeAudit?.summary).toMatch(/0\.4\.25 → 0\.7\.0/)
+    expect(upgradeAudit?.summary).toMatch(new RegExp(`schema 5 → ${bundledMax}`))
   })
 })

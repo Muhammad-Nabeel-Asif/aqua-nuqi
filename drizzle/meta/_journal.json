@@ -50,6 +50,13 @@
       "when": 1785579000000,
       "tag": "0006_alloc_status",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1785586481998,
+      "tag": "0007_moaning_kitty_pryde",
+      "breakpoints": true
     }
   ]
 }

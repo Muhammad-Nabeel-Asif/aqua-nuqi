@@ -946,3 +946,124 @@ exportTable({
 - `exportTable` on Customers + Month Matrix; deleted orphan `src/main/lib/print-window.ts`.
 - Verifier rewritten against real print fixtures; stable **v0.6.35** published; status →
   **complete**.
+
+---
+
+## Phase 5 — Expense Management
+
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.7.0`
+
+### Built
+
+- Migration `drizzle/0007_moaning_kitty_pryde.sql` — `expenses`, `recurring_expenses`
+  (`employee_id` / `vehicle_id` columns without FKs until Phases 6/7).
+  `expense_categories` already existed from Phase 0 and is seeded on boot.
+- Service `expense.service.ts`: expenses CRUD + void, category CRUD/reorder/merge,
+  recurring CRUD + due list, `summaryByCategory` / `summaryByMonth` / `insights`, cash book,
+  attribution options (empty until employees/vehicles tables exist).
+- Attachment copy helper `expense-attachments.ts` + IPC resize via Electron `nativeImage`.
+- Screens: `/expenses` (quick-add, filters, virtualised list, side panel, insights, cash book),
+  `/expenses/categories`; dashboard recurring-due widget (owner).
+- Unit tests covering acceptance criteria 2, 4, 5, 6, 7, 9 + payroll read-only + audit.
+
+### Migrations added
+
+- `drizzle/0007_moaning_kitty_pryde.sql` — tables: `expenses`, `recurring_expenses`
+  (hand-stripped a spurious `payment_allocations` rebuild from drizzle-kit)
+
+### IPC channels added
+
+- `expenses:create|update|void|list|get|summaryByCategory|summaryByMonth|insights`
+- `expenses:attributionOptions|cashBook|attachReceipt|resolveAttachment|openAttachment|attachmentPreview`
+- `expenseCategories:list|create|update|reorder|merge`
+- `recurringExpenses:list|create|update|due`
+
+### Settings keys added
+
+- None
+
+### Error codes added
+
+- None (reused `VALIDATION_FAILED`, `NOT_FOUND`, `CONFLICT`, `PERIOD_LOCKED`)
+
+### Dependencies added
+
+- `recharts` — expense insights charts (FR-EX-07). Note for stack doc.
+
+### Attachments folder (Phase 9 must include in backups)
+
+- **Path:** `<userData>/attachments/expenses/<YYYY>/<uuid>.<ext>`
+- Relative path stored in `expenses.attachment_path` (e.g. `expenses/2026/<uuid>.jpg`).
+- Absolute root: `path.join(userData, 'attachments')`.
+- Phase 9 backup/restore must zip **DB + `attachments/`** (and existing `logos/`).
+  Current `backup.service` is still DB-only (`VACUUM INTO`).
+
+### Deviations from the spec
+
+- Generated migration initially rewrote `payment_allocations`; hand-removed (same pattern as
+  Phase 2/3).
+- Image downscale uses Electron `nativeImage` in the IPC handler (services stay Electron-free).
+- Recurring confirmations create `source = 'manual'` expenses (editable) and advance the
+  template via `recurringExpenseId`. The `recurring` source value is reserved; not used for
+  user-confirmed recordings so they stay editable.
+
+### Cash book (5.9)
+
+- **Implemented** (informational): opening cash + cash-in (payments method `cash`) − cash-out
+  (expenses method `cash`) = closing; optional counted cash → variance. Toggle on `/expenses`.
+
+### What the next phase must know
+
+**`createExpense` signature** — Phase 6 **must** create salary expenses through this service
+(never insert into `expenses` directly), or the Phase 8 profit report will double-count:
+
+```ts
+expenses.createExpense(
+  {
+    expenseDate: string              // YYYY-MM-DD — guardPeriodOpen applies
+    categoryId: number               // use Salaries / Employee Advance system categories
+    amount: number                   // paisa, > 0
+    paymentMethod: 'cash' | 'bank_transfer' | 'jazzcash' | 'easypaisa' | 'cheque' | 'credit' | 'other'
+    vendorName?: string | null
+    description?: string | null
+    referenceNo?: string | null
+    attachmentPath?: string | null   // relative under attachments/
+    employeeId?: number | null       // optional attribution
+    vehicleId?: number | null
+    source?: 'manual' | 'payroll' | 'purchase' | 'recurring'   // default 'manual'
+    sourceRefTable?: string | null
+    sourceRefId?: number | null
+    recurringExpenseId?: number | null  // advances template after confirm
+    forceClosedPeriod?: boolean
+  },
+  userId: number,
+): ExpenseDto
+```
+
+**How Phase 6 must populate `source` / `source_ref_*`:**
+
+| Event                     | `source`     | `source_ref_table`                    | `source_ref_id`      | Category                   |
+| ------------------------- | ------------ | ------------------------------------- | -------------------- | -------------------------- |
+| Payroll item paid         | `'payroll'`  | `'payroll_items'`                     | `payroll_items.id`   | **Salaries** (`is_system`) |
+| Salary advance paid out   | `'payroll'`  | `'salary_advances'`                   | `salary_advances.id` | **Employee Advance**       |
+| Bottle purchase (Phase 7) | `'purchase'` | `'stock_movements'` (or purchase row) | that row's id        | Bottle purchase            |
+
+- Look up system categories by name: `expenses.findCategoryByName('Salaries')` /
+  `'Employee Advance'` (seeded, `is_system = 1`, cannot rename/delete).
+- Expenses with `source != 'manual'` are **read-only** on `/expenses` (update/void throw
+  `CONFLICT` with a banner pointing at payroll/inventory). Edit/void only from the originating
+  module.
+- Prefer calling `createExpense` inside the same DB transaction as the payroll write when
+  Phase 6 adds a `tx` overload; until then create inside the payroll transaction by extending
+  the service, or create immediately after finalize in the same service method.
+
+**Category merge:** moves all `expenses` + `recurring_expenses` from A → B, deactivates A;
+totals unchanged.
+
+**Next phase is Phase 6 (Employees & payroll).** Do not invent a second salary expense path.
+
+### Escalations / questions for the human
+
+- Seed category list is a placeholder from `03-data-model.md` §F — replace with the client's
+  real list when available.
+- Confirm `recharts` may be added to the stack doc §1.

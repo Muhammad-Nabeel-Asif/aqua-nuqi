@@ -12,6 +12,8 @@ import { BottlesOutPage } from './features/deliveries/BottlesOutPage'
 import { CustomerCardPage } from './features/deliveries/CustomerCardPage'
 import { DailyEntryPage } from './features/deliveries/DailyEntryPage'
 import { MonthMatrixPage } from './features/deliveries/MonthMatrixPage'
+import { ExpenseCategoriesPage } from './features/expenses/ExpenseCategoriesPage'
+import { ExpensesPage } from './features/expenses/ExpensesPage'
 import { PaymentsPage } from './features/payments/PaymentsPage'
 import { ComingSoonPage } from './features/placeholder/ComingSoonPage'
 import { ReceivablesPage } from './features/receivables/ReceivablesPage'
@@ -78,10 +80,21 @@ export const router = createHashRouter([
       { path: 'billing/periods', element: <PeriodsPage /> },
       { path: 'payments', element: <PaymentsPage /> },
       { path: 'receivables', element: <ReceivablesPage /> },
-      { path: 'expenses', element: <ComingSoonPage title="Expenses" phase={5} /> },
+      {
+        path: 'expenses',
+        element: (
+          <RequireOwner>
+            <ExpensesPage />
+          </RequireOwner>
+        ),
+      },
       {
         path: 'expenses/categories',
-        element: <ComingSoonPage title="Expense categories" phase={5} />,
+        element: (
+          <RequireOwner>
+            <ExpenseCategoriesPage />
+          </RequireOwner>
+        ),
       },
       { path: 'employees', element: <ComingSoonPage title="Employees" phase={6} /> },
       { path: 'employees/:id', element: <ComingSoonPage title="Employee detail" phase={6} /> },
