@@ -349,6 +349,204 @@ export const api = {
         date ? { date } : {},
       ),
   },
+  invoices: {
+    preview: (customerId: number, period: string) =>
+      invoke<{ preview: import('@shared/contracts').InvoicePreviewDto }>('invoices:preview', {
+        customerId,
+        period,
+      }),
+    previewBatch: (input: {
+      period: string
+      filter: {
+        mode: 'all' | 'area' | 'route' | 'selected'
+        areaId?: number
+        routeId?: number
+        customerIds?: number[]
+      }
+      includeZeroActivity?: boolean
+    }) =>
+      invoke<{ items: import('@shared/contracts').InvoicePreviewDto[] }>(
+        'invoices:previewBatch',
+        input,
+      ),
+    generate: (input: { customerId: number; period: string; issueDate?: string; notes?: string }) =>
+      invoke<{ item: import('@shared/contracts').InvoiceDto }>('invoices:generate', input),
+    generateBatch: (input: {
+      period: string
+      filter: {
+        mode: 'all' | 'area' | 'route' | 'selected'
+        areaId?: number
+        routeId?: number
+        customerIds?: number[]
+      }
+      issueDate?: string
+      includeZeroActivity?: boolean
+    }) =>
+      invoke<{
+        generated: number
+        skipped: Array<{ customerId: number; code: string; name: string; reason: string }>
+        invoiceIds: number[]
+        elapsedMs: number
+      }>('invoices:generateBatch', input),
+    issue: (id: number) =>
+      invoke<{ item: import('@shared/contracts').InvoiceDto }>('invoices:issue', { id }),
+    issueAll: (invoiceIds: number[]) =>
+      invoke<{ issued: number; errors: string[] }>('invoices:issueAll', { invoiceIds }),
+    void: (id: number, reason: string) =>
+      invoke<{ item: import('@shared/contracts').InvoiceDto }>('invoices:void', { id, reason }),
+    list: (
+      input: {
+        period?: string
+        status?: 'draft' | 'issued' | 'partially_paid' | 'paid' | 'void'
+        customerId?: number
+        areaId?: number
+        routeId?: number
+        overdueOnly?: boolean
+        search?: string
+        limit?: number
+        offset?: number
+      } = {},
+    ) =>
+      invoke<{ items: import('@shared/contracts').InvoiceDto[]; total: number }>(
+        'invoices:list',
+        input,
+      ),
+    get: (id: number) =>
+      invoke<{ item: import('@shared/contracts').InvoiceDto }>('invoices:get', { id }),
+    markShared: (invoiceIds: number[]) =>
+      invoke<{ count: number }>('invoices:markShared', { invoiceIds }),
+  },
+  billing: {
+    periodsOverview: () =>
+      invoke<{
+        items: Array<{
+          period: string
+          closed: boolean
+          deliveryCount: number
+          invoiceCount: number
+          revenue: number
+        }>
+      }>('billing:periodsOverview', {}),
+  },
+  adjustments: {
+    create: (input: {
+      customerId: number
+      adjustmentDate: string
+      kind:
+        | 'damaged_bottle'
+        | 'lost_bottle'
+        | 'dispenser_rent'
+        | 'delivery_charge'
+        | 'other_charge'
+        | 'discount'
+        | 'write_off'
+        | 'deposit_received'
+        | 'deposit_refunded'
+      amount: number
+      quantity?: number | null
+      description?: string | null
+    }) => invoke<{ item: unknown }>('adjustments:create', input),
+    void: (id: number, reason: string) =>
+      invoke<{ item: unknown }>('adjustments:void', { id, reason }),
+    list: (customerId: number, unbilledOnly?: boolean) =>
+      invoke<{ items: unknown[] }>('adjustments:list', { customerId, unbilledOnly }),
+  },
+  ledger: {
+    get: (customerId: number, from?: string, to?: string) =>
+      invoke<{
+        items: Array<{
+          id: number
+          entryDate: string
+          entryType: string
+          debit: number
+          credit: number
+          balanceAfter: number
+          description: string
+          refTable: string | null
+          refId: number | null
+          isNonRevenue: boolean
+        }>
+      }>('ledger:get', { customerId, from, to }),
+  },
+  payments: {
+    record: (input: import('@shared/contracts').RecordPaymentInput) =>
+      invoke<{ item: import('@shared/contracts').PaymentDto }>('payments:record', input),
+    void: (id: number, reason: string) =>
+      invoke<{ item: import('@shared/contracts').PaymentDto }>('payments:void', { id, reason }),
+    reallocate: (id: number, allocations: Array<{ invoiceId: number; amount: number }>) =>
+      invoke<{ item: import('@shared/contracts').PaymentDto }>('payments:reallocate', {
+        id,
+        allocations,
+      }),
+    list: (
+      input: {
+        from?: string
+        to?: string
+        method?: import('@shared/contracts').PaymentDto['method']
+        customerId?: number
+        status?: 'active' | 'void'
+        limit?: number
+        offset?: number
+      } = {},
+    ) =>
+      invoke<{
+        items: import('@shared/contracts').PaymentDto[]
+        total: number
+        totalAmount: number
+      }>('payments:list', input),
+    get: (id: number) =>
+      invoke<{ item: import('@shared/contracts').PaymentDto }>('payments:get', { id }),
+    postCollectedCash: (date: string) =>
+      invoke<{
+        created: number
+        skipped: number
+        paymentIds: number[]
+        totalAmount: number
+      }>('payments:postCollectedCash', { date }),
+    collectedCashPreview: (date: string) =>
+      invoke<{
+        date: string
+        rows: Array<{
+          customerId: number
+          code: string
+          name: string
+          cashCollected: number
+          alreadyPosted: boolean
+        }>
+        total: number
+      }>('payments:collectedCashPreview', { date }),
+  },
+  receivables: {
+    report: (asOf?: string) =>
+      invoke<{
+        asOf: string
+        outstanding: Array<{
+          customerId: number
+          code: string
+          name: string
+          phone: string | null
+          areaName: string | null
+          routeName: string | null
+          balance: number
+          oldestUnpaidInvoiceDate: string | null
+          daysOverdue: number
+          ageingBucket: 'current' | '1-30' | '31-60' | '60+'
+          lastPaymentDate: string | null
+        }>
+        inCredit: Array<{
+          customerId: number
+          code: string
+          name: string
+          phone: string | null
+          balance: number
+          ageingBucket: string
+          lastPaymentDate: string | null
+        }>
+        bucketTotals: Record<'current' | '1-30' | '31-60' | '60+', number>
+        totalOutstanding: number
+        totalCredit: number
+      }>('receivables:report', asOf ? { asOf } : {}),
+  },
   ...(import.meta.env.DEV
     ? {
         dev: {

@@ -259,7 +259,36 @@ describe('deliveryService', () => {
       quantity: 2,
       userId: owner.id,
     })
-    db.update(deliveries).set({ invoiceId: 999 }).where(eq(deliveries.id, d.id)).run()
+    const { invoices } = await import('@main/db/schema')
+    const inv = db
+      .insert(invoices)
+      .values({
+        uuid: '00000000-0000-4000-8000-000000000099',
+        invoiceNo: 'INV-TEST-LOCK',
+        customerId: customer.id,
+        period: '2026-07',
+        periodStart: '2026-07-01',
+        periodEnd: '2026-07-31',
+        issueDate: '2026-08-01',
+        openingBalance: 0,
+        deliveriesQty: 2,
+        deliveriesTotal: 0,
+        chargesTotal: 0,
+        discountTotal: 0,
+        taxTotal: 0,
+        invoiceTotal: 0,
+        totalPayable: 0,
+        paidTotal: 0,
+        closingBalance: 0,
+        bottlesWithCustomerAtIssue: 0,
+        status: 'issued',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: owner.id,
+      })
+      .returning()
+      .get()!
+    db.update(deliveries).set({ invoiceId: inv.id }).where(eq(deliveries.id, d.id)).run()
     expect(() =>
       deliveriesSvc.upsertDelivery({
         customerId: customer.id,

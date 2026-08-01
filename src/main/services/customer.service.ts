@@ -28,6 +28,7 @@ import { assertBusinessDate, nowIsoUtc, todayBusinessDate } from '@shared/date'
 import { AppError } from '@shared/errors'
 import type { AuditService } from './audit.service'
 import type { BalanceService } from './balance.service'
+import type { LedgerService } from './ledger.service'
 import type { PeriodService } from './period.service'
 import type { RateService } from './rate.service'
 
@@ -95,6 +96,7 @@ export function createCustomerService(
   period: PeriodService,
   rateService: RateService,
   balanceService: BalanceService,
+  ledgerService?: LedgerService,
 ) {
   function peekNextCode(): string {
     const row = db.select().from(sequences).where(eq(sequences.name, CUSTOMER_CODE_SEQ)).get()
@@ -206,30 +208,6 @@ export function createCustomerService(
     }
   }
 
-  function appendVoidReversal(
-    entry: typeof ledgerEntries.$inferSelect,
-    balanceAfter: number,
-    userId: number | null | undefined,
-    tx: AppDatabase,
-  ): void {
-    tx.insert(ledgerEntries)
-      .values({
-        uuid: newUuid(),
-        customerId: entry.customerId,
-        entryDate: entry.entryDate,
-        entryType: 'void_reversal',
-        debit: entry.credit,
-        credit: entry.debit,
-        balanceAfter,
-        description: `Void: ${entry.description}`,
-        refTable: 'ledger_entries',
-        refId: entry.id,
-        createdAt: nowIsoUtc(),
-        createdBy: userId ?? null,
-      })
-      .run()
-  }
-
   function isLedgerVoided(entryId: number, tx: AppDatabase): boolean {
     return Boolean(
       tx
@@ -267,36 +245,79 @@ export function createCustomerService(
 
     for (const r of openingRows) {
       if (isLedgerVoided(r.id, tx)) continue
-      const afterVoid = balanceService.computeLiveBalance(customerId, tx) - r.debit + r.credit
-      appendVoidReversal(r, afterVoid, userId, tx)
+      if (ledgerService) {
+        ledgerService.appendEntry(tx, {
+          customerId,
+          date: r.entryDate,
+          type: 'void_reversal',
+          debit: r.credit,
+          credit: r.debit,
+          description: `Void: ${r.description}`,
+          refTable: 'ledger_entries',
+          refId: r.id,
+          createdBy: userId,
+        })
+      } else {
+        const afterVoid = balanceService.computeLiveBalance(customerId, tx) - r.debit + r.credit
+        tx.insert(ledgerEntries)
+          .values({
+            uuid: newUuid(),
+            customerId: r.customerId,
+            entryDate: r.entryDate,
+            entryType: 'void_reversal',
+            debit: r.credit,
+            credit: r.debit,
+            balanceAfter: afterVoid,
+            description: `Void: ${r.description}`,
+            refTable: 'ledger_entries',
+            refId: r.id,
+            createdAt: nowIsoUtc(),
+            createdBy: userId ?? null,
+          })
+          .run()
+      }
     }
 
     if (openingBalance !== 0 && openingAsOf) {
       period.guardPeriodOpen(openingAsOf)
       const debit = openingBalance > 0 ? openingBalance : 0
       const credit = openingBalance < 0 ? -openingBalance : 0
-      tx.insert(ledgerEntries)
-        .values({
-          uuid: newUuid(),
+      if (ledgerService) {
+        ledgerService.appendEntry(tx, {
           customerId,
-          entryDate: openingAsOf,
-          entryType: 'opening_balance',
+          date: openingAsOf,
+          type: 'opening_balance',
           debit,
           credit,
-          balanceAfter: openingBalance,
           description: 'Opening balance',
           refTable: 'customers',
           refId: customerId,
-          createdAt: nowIsoUtc(),
-          createdBy: userId ?? null,
+          createdBy: userId,
         })
-        .run()
+      } else {
+        tx.insert(ledgerEntries)
+          .values({
+            uuid: newUuid(),
+            customerId,
+            entryDate: openingAsOf,
+            entryType: 'opening_balance',
+            debit,
+            credit,
+            balanceAfter: openingBalance,
+            description: 'Opening balance',
+            refTable: 'customers',
+            refId: customerId,
+            createdAt: nowIsoUtc(),
+            createdBy: userId ?? null,
+          })
+          .run()
+      }
     }
   }
 
   /**
    * Keep deposit_received ledger in sync with security_deposit_held.
-   * Deposit types are excluded from AR balance (see balanceService).
+   * Deposit credits change the running account; they are tagged non-revenue (FR-BL-14).
    */
   function syncDepositLedger(
     customerId: number,
@@ -318,28 +339,71 @@ export function createCustomerService(
 
     for (const r of depositRows) {
       if (isLedgerVoided(r.id, tx)) continue
-      const ar = balanceService.computeLiveBalance(customerId, tx)
-      appendVoidReversal(r, ar, userId, tx)
+      if (ledgerService) {
+        ledgerService.appendEntry(tx, {
+          customerId,
+          date: r.entryDate,
+          type: 'void_reversal',
+          debit: r.credit,
+          credit: r.debit,
+          description: `Void: ${r.description}`,
+          refTable: 'ledger_entries',
+          refId: r.id,
+          createdBy: userId,
+        })
+      } else {
+        const bal = balanceService.computeLiveBalance(customerId, tx)
+        tx.insert(ledgerEntries)
+          .values({
+            uuid: newUuid(),
+            customerId,
+            entryDate: r.entryDate,
+            entryType: 'void_reversal',
+            debit: r.credit,
+            credit: r.debit,
+            balanceAfter: bal - r.credit + r.debit,
+            description: `Void: ${r.description}`,
+            refTable: 'ledger_entries',
+            refId: r.id,
+            createdAt: nowIsoUtc(),
+            createdBy: userId ?? null,
+          })
+          .run()
+      }
     }
 
     if (depositHeld > 0) {
-      const ar = balanceService.computeLiveBalance(customerId, tx)
-      tx.insert(ledgerEntries)
-        .values({
-          uuid: newUuid(),
+      if (ledgerService) {
+        ledgerService.appendEntry(tx, {
           customerId,
-          entryDate: asOf,
-          entryType: 'deposit_received',
+          date: asOf,
+          type: 'deposit_received',
           debit: 0,
           credit: depositHeld,
-          balanceAfter: ar,
           description: 'Security deposit received',
           refTable: 'customers',
           refId: customerId,
-          createdAt: nowIsoUtc(),
-          createdBy: userId ?? null,
+          createdBy: userId,
         })
-        .run()
+      } else {
+        const bal = balanceService.computeLiveBalance(customerId, tx)
+        tx.insert(ledgerEntries)
+          .values({
+            uuid: newUuid(),
+            customerId,
+            entryDate: asOf,
+            entryType: 'deposit_received',
+            debit: 0,
+            credit: depositHeld,
+            balanceAfter: bal - depositHeld,
+            description: 'Security deposit received',
+            refTable: 'customers',
+            refId: customerId,
+            createdAt: nowIsoUtc(),
+            createdBy: userId ?? null,
+          })
+          .run()
+      }
     }
   }
 
@@ -499,22 +563,36 @@ export function createCustomerService(
       if (openingBalance !== 0 && openingAsOf) {
         const debit = openingBalance > 0 ? openingBalance : 0
         const credit = openingBalance < 0 ? -openingBalance : 0
-        tx.insert(ledgerEntries)
-          .values({
-            uuid: newUuid(),
+        if (ledgerService) {
+          ledgerService.appendEntry(tx, {
             customerId: row.id,
-            entryDate: openingAsOf,
-            entryType: 'opening_balance',
+            date: openingAsOf,
+            type: 'opening_balance',
             debit,
             credit,
-            balanceAfter: openingBalance,
             description: 'Opening balance',
             refTable: 'customers',
             refId: row.id,
-            createdAt: now,
-            createdBy: userId ?? null,
+            createdBy: userId,
           })
-          .run()
+        } else {
+          tx.insert(ledgerEntries)
+            .values({
+              uuid: newUuid(),
+              customerId: row.id,
+              entryDate: openingAsOf,
+              entryType: 'opening_balance',
+              debit,
+              credit,
+              balanceAfter: openingBalance,
+              description: 'Opening balance',
+              refTable: 'customers',
+              refId: row.id,
+              createdAt: now,
+              createdBy: userId ?? null,
+            })
+            .run()
+        }
       }
 
       const depositHeld = input.securityDepositHeld ?? 0
@@ -523,11 +601,7 @@ export function createCustomerService(
         syncDepositLedger(row.id, depositHeld, depositDate, userId, tx)
       }
 
-      balanceService.upsertSummary(
-        row.id,
-        { balance: openingBalance, bottlesWithCustomer: openingBottles },
-        tx,
-      )
+      balanceService.syncFromSources(row.id, tx)
 
       if (input.rate != null) {
         const productId = input.productId ?? rateService.resolveDefaultProductId()

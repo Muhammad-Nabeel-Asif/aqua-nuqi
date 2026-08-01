@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { eq, isNull } from 'drizzle-orm'
 import type { AppDatabase, RawDatabase } from '@main/db/client'
 import { customerBalances, customers, ledgerEntries } from '@main/db/schema'
 import { nowIsoUtc } from '@shared/date'
@@ -8,11 +8,9 @@ type DbLike = AppDatabase
 /**
  * Materialised customer_balances helpers.
  *
- * Money truth = Σ ledger debit − Σ ledger credit (includes opening_balance / void_reversal).
- * Deposits (deposit_received / deposit_refunded) are excluded from AR — held separately in
- * customers.security_deposit_held and omitted from revenue (FR-BL-14).
- * Bottles = opening_bottles + Σ deliveries − Σ empties − Σ lost/damaged
- * (delivery/adjustment tables arrive in later phases; queries no-op until then).
+ * Money truth = Σ ledger debit − Σ ledger credit for ALL entry types (including deposits).
+ * Deposits change the running account but are tagged non-revenue (FR-BL-14); revenue
+ * helpers exclude them. Bottles = opening + Σ deliveries − Σ empties − Σ lost/damaged.
  */
 export function createBalanceService(db: AppDatabase, raw: RawDatabase) {
   function tableExists(name: string): boolean {
@@ -26,12 +24,7 @@ export function createBalanceService(db: AppDatabase, raw: RawDatabase) {
     const rows = tx
       .select({ debit: ledgerEntries.debit, credit: ledgerEntries.credit })
       .from(ledgerEntries)
-      .where(
-        and(
-          eq(ledgerEntries.customerId, customerId),
-          sql`${ledgerEntries.entryType} NOT IN ('deposit_received', 'deposit_refunded')`,
-        ),
-      )
+      .where(eq(ledgerEntries.customerId, customerId))
       .all()
     return rows.reduce((sum, r) => sum + r.debit - r.credit, 0)
   }

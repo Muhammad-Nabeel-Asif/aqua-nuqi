@@ -1,6 +1,10 @@
 import { Navigate, createHashRouter } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { LoginPage } from './features/auth/LoginPage'
+import { GenerateBillsPage } from './features/billing/GenerateBillsPage'
+import { InvoiceDetailPage } from './features/billing/InvoiceDetailPage'
+import { InvoiceListPage } from './features/billing/InvoiceListPage'
+import { PeriodsPage } from './features/billing/PeriodsPage'
 import { CustomerDetailPage } from './features/customers/CustomerDetailPage'
 import { CustomersPage } from './features/customers/CustomersPage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
@@ -8,7 +12,9 @@ import { BottlesOutPage } from './features/deliveries/BottlesOutPage'
 import { CustomerCardPage } from './features/deliveries/CustomerCardPage'
 import { DailyEntryPage } from './features/deliveries/DailyEntryPage'
 import { MonthMatrixPage } from './features/deliveries/MonthMatrixPage'
+import { PaymentsPage } from './features/payments/PaymentsPage'
 import { ComingSoonPage } from './features/placeholder/ComingSoonPage'
+import { ReceivablesPage } from './features/receivables/ReceivablesPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { SetupWizard } from './features/setup/SetupWizard'
 import { useSessionStore } from './stores/session'
@@ -61,14 +67,12 @@ export const router = createHashRouter([
       { path: 'customers', element: <CustomersPage /> },
       { path: 'customers/:id', element: <CustomerDetailPage /> },
       { path: 'customers/:id/card/:period', element: <CustomerCardPage /> },
-      { path: 'billing/generate', element: <ComingSoonPage title="Generate invoices" phase={3} /> },
-      { path: 'billing/invoices', element: <ComingSoonPage title="Invoices" phase={3} /> },
-      {
-        path: 'billing/invoices/:id',
-        element: <ComingSoonPage title="Invoice detail" phase={3} />,
-      },
-      { path: 'payments', element: <ComingSoonPage title="Payments" phase={3} /> },
-      { path: 'receivables', element: <ComingSoonPage title="Receivables" phase={3} /> },
+      { path: 'billing/generate', element: <GenerateBillsPage /> },
+      { path: 'billing/invoices', element: <InvoiceListPage /> },
+      { path: 'billing/invoices/:id', element: <InvoiceDetailPage /> },
+      { path: 'billing/periods', element: <PeriodsPage /> },
+      { path: 'payments', element: <PaymentsPage /> },
+      { path: 'receivables', element: <ReceivablesPage /> },
       { path: 'expenses', element: <ComingSoonPage title="Expenses" phase={5} /> },
       {
         path: 'expenses/categories',

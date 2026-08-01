@@ -20,16 +20,21 @@ import {
   resolveAppPaths,
   type AppPaths,
 } from './lib/paths'
+import { createAdjustmentService } from './services/adjustment.service'
 import { createAuditService } from './services/audit.service'
 import { createAuthService } from './services/auth.service'
 import { createBackupService } from './services/backup.service'
 import { createBalanceService } from './services/balance.service'
+import { createBillingService } from './services/billing.service'
 import { createCustomerImportService } from './services/customer-import.service'
 import { createCustomerService } from './services/customer.service'
 import { createDeliveryService } from './services/delivery.service'
+import { createLedgerService } from './services/ledger.service'
 import { createMasterDataService } from './services/master-data.service'
+import { createPaymentService } from './services/payment.service'
 import { createPeriodService } from './services/period.service'
 import { createRateService } from './services/rate.service'
+import { createReceivablesService } from './services/receivables.service'
 import { createSettingsService } from './services/settings.service'
 
 function readAppVersion(): string {
@@ -125,9 +130,14 @@ export function bootstrapApp(): BootstrapResult {
     const masterData = createMasterDataService(db, audit)
     const rates = createRateService(db, audit, period)
     const balances = createBalanceService(db, raw)
-    const customers = createCustomerService(db, audit, period, rates, balances)
+    const ledger = createLedgerService(db, balances)
+    const customers = createCustomerService(db, audit, period, rates, balances, ledger)
     const customerImport = createCustomerImportService(db, customers, masterData)
     const deliveries = createDeliveryService(db, audit, period, rates, balances, settings)
+    const adjustments = createAdjustmentService(db, audit, period, balances, ledger)
+    const billing = createBillingService(db, audit, period, settings, balances, ledger)
+    const payments = createPaymentService(db, audit, period, balances, ledger, billing)
+    const receivables = createReceivablesService(db)
 
     const setupRequired = dbMissing || !auth.hasAnyUser()
     const schemaVersion =
@@ -152,6 +162,11 @@ export function bootstrapApp(): BootstrapResult {
       customers,
       customerImport,
       deliveries,
+      ledger,
+      adjustments,
+      billing,
+      payments,
+      receivables,
       appVersion,
       schemaVersion: schemaVersion || getSchemaVersion(),
       setupRequired,

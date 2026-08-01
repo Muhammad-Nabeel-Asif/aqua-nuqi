@@ -120,7 +120,7 @@ describe('customerService', () => {
     expect(updated.balance).toBe(Number(toPaisa(2000)))
   })
 
-  it('security deposit writes deposit_received and does not change AR balance', async () => {
+  it('security deposit writes deposit_received and credits the running account (non-revenue)', async () => {
     const { db, customers, balances, owner } = await setup()
     const c = customers.create(
       {
@@ -144,8 +144,9 @@ describe('customerService', () => {
     expect(deposits[0]!.credit).toBe(Number(toPaisa(2000)))
 
     expect(c.securityDepositHeld).toBe(Number(toPaisa(2000)))
-    expect(c.balance).toBe(Number(toPaisa(1000)))
-    expect(balances.computeLiveBalance(c.id)).toBe(Number(toPaisa(1000)))
+    // Opening 1000 − deposit credit 2000 = −1000 (customer credit). Not revenue.
+    expect(c.balance).toBe(Number(toPaisa(-1000)))
+    expect(balances.computeLiveBalance(c.id)).toBe(Number(toPaisa(-1000)))
   })
 
   it('update audit stores full before/after DTOs', async () => {

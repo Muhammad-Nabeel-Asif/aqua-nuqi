@@ -1,6 +1,6 @@
 {
   "name": "aqua-nuqi",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Offline water-plant management for Aqua Nuqi",
   "main": "./out/main/index.js",
   "author": "Muhammad Nabeel Asif <nabeel.asif362@gmail.com>",

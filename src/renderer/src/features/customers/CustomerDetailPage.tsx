@@ -16,6 +16,7 @@ import { AppError } from '@shared/errors'
 import { toPaisa } from '@shared/money'
 import { toWhatsAppE164 } from '@shared/phone'
 import { CustomerCardView } from '../deliveries/CustomerCardView'
+import { RecordPaymentDialog } from '../payments/RecordPaymentDialog'
 import { CustomerFormDialog } from './CustomerFormDialog'
 
 export function CustomerDetailPage() {
@@ -23,6 +24,8 @@ export function CustomerDetailPage() {
   const qc = useQueryClient()
   const [edit, setEdit] = useState(false)
   const [rateOpen, setRateOpen] = useState(false)
+  const [payOpen, setPayOpen] = useState(false)
+  const [chargeOpen, setChargeOpen] = useState(false)
   const q = useQuery({ queryKey: ['customer', id], queryFn: () => api.customers.get(id) })
   const c = q.data?.item
   if (!c) return <div className="p-8">Loading…</div>
@@ -58,6 +61,12 @@ export function CustomerDetailPage() {
         subtitle={c.phonePrimary ?? 'No phone'}
         actions={
           <>
+            <Button variant="outline" onClick={() => setPayOpen(true)}>
+              Record payment
+            </Button>
+            <Button variant="outline" onClick={() => setChargeOpen(true)}>
+              Add charge/discount
+            </Button>
             <Button variant="outline" onClick={() => setEdit(true)}>
               Edit
             </Button>
@@ -186,19 +195,40 @@ export function CustomerDetailPage() {
         <TabsContent value="delivery" className="rounded-lg border bg-white p-4">
           <CustomerCardView customerId={id} showHeader />
         </TabsContent>
-        {(['ledger', 'invoices'] as const).map((tab) => (
-          <TabsContent
-            key={tab}
-            value={tab}
-            className="rounded-lg border bg-white p-8 text-center text-muted-foreground"
-          >
-            This section will be available in Phase 3.
-          </TabsContent>
-        ))}
+        <TabsContent value="ledger" className="rounded-lg border bg-white p-4">
+          <CustomerLedgerTab customerId={id} />
+        </TabsContent>
+        <TabsContent value="invoices" className="rounded-lg border bg-white p-4">
+          <CustomerInvoicesTab customerId={id} />
+        </TabsContent>
         <TabsContent value="history">
           <Audit id={id} />
         </TabsContent>
       </Tabs>
+      {payOpen && (
+        <RecordPaymentDialog
+          customerId={id}
+          customerLabel={`${c.code} — ${c.name}`}
+          defaultAmount={Math.max(0, c.balance)}
+          onClose={() => setPayOpen(false)}
+          onSaved={() => {
+            setPayOpen(false)
+            void qc.invalidateQueries({ queryKey: ['customer', id] })
+            void qc.invalidateQueries({ queryKey: ['ledger', id] })
+          }}
+        />
+      )}
+      {chargeOpen && (
+        <AdjustmentDialog
+          customerId={id}
+          onClose={() => setChargeOpen(false)}
+          onSaved={() => {
+            setChargeOpen(false)
+            void qc.invalidateQueries({ queryKey: ['customer', id] })
+            void qc.invalidateQueries({ queryKey: ['ledger', id] })
+          }}
+        />
+      )}
       {edit && (
         <CustomerFormDialog
           customer={c}
@@ -321,6 +351,167 @@ function RateDialog({
             }
           >
             Apply
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CustomerLedgerTab({ customerId }: { customerId: number }) {
+  const q = useQuery({
+    queryKey: ['ledger', customerId],
+    queryFn: () => api.ledger.get(customerId),
+  })
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="border-b text-left">
+          <th className="py-2">Date</th>
+          <th>Description</th>
+          <th className="text-right">Debit</th>
+          <th className="text-right">Credit</th>
+          <th className="text-right">Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {(q.data?.items ?? []).map((r) => (
+          <tr key={r.id} className="border-b">
+            <td className="py-2">
+              <DateText value={r.entryDate} />
+            </td>
+            <td>
+              {r.description}
+              {r.isNonRevenue ? ' (non-revenue)' : ''}
+              {r.refTable === 'invoices' && r.refId != null && (
+                <Link className="ml-2 text-sky-700" to={`/billing/invoices/${r.refId}`}>
+                  view
+                </Link>
+              )}
+            </td>
+            <td className="text-right">{r.debit ? <Money value={r.debit} /> : '—'}</td>
+            <td className="text-right">{r.credit ? <Money value={r.credit} /> : '—'}</td>
+            <td className="text-right">
+              <Money value={r.balanceAfter} />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function CustomerInvoicesTab({ customerId }: { customerId: number }) {
+  const q = useQuery({
+    queryKey: ['invoices', 'customer', customerId],
+    queryFn: () => api.invoices.list({ customerId, limit: 200 }),
+  })
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="border-b text-left">
+          <th className="py-2">Invoice</th>
+          <th>Period</th>
+          <th>Status</th>
+          <th className="text-right">Total</th>
+          <th className="text-right">Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {(q.data?.items ?? []).map((inv) => (
+          <tr key={inv.id} className="border-b">
+            <td className="py-2">
+              <Link className="text-sky-700" to={`/billing/invoices/${inv.id}`}>
+                {inv.invoiceNo}
+              </Link>
+            </td>
+            <td>{inv.period ?? '—'}</td>
+            <td className="capitalize">{inv.status.replace(/_/g, ' ')}</td>
+            <td className="text-right">
+              <Money value={inv.invoiceTotal} />
+            </td>
+            <td className="text-right">
+              <Money value={inv.balanceDue} />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function AdjustmentDialog({
+  customerId,
+  onClose,
+  onSaved,
+}: {
+  customerId: number
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [kind, setKind] = useState<'discount' | 'other_charge' | 'deposit_received' | 'write_off'>(
+    'discount',
+  )
+  const [amount, setAmount] = useState('')
+  const [date, setDate] = useState(todayBusinessDate())
+  const [description, setDescription] = useState('')
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="w-full max-w-md space-y-4 rounded-lg bg-white p-6">
+        <h2 className="text-lg font-semibold">Add charge / discount</h2>
+        <div>
+          <Label>Kind</Label>
+          <select
+            className="flex h-10 w-full rounded-md border px-3 text-sm"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as typeof kind)}
+          >
+            <option value="discount">Discount</option>
+            <option value="other_charge">Other charge</option>
+            <option value="write_off">Write-off</option>
+            <option value="deposit_received">Deposit received</option>
+          </select>
+        </div>
+        <div>
+          <Label>Date</Label>
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div>
+          <Label>Amount (Rs)</Label>
+          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </div>
+        <div>
+          <Label>Description</Label>
+          <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() =>
+              void (async () => {
+                try {
+                  await api.adjustments.create({
+                    customerId,
+                    adjustmentDate: date,
+                    kind,
+                    amount: Number(toPaisa(amount)),
+                    description: description || null,
+                  })
+                  toast({ title: 'Adjustment saved', variant: 'success' })
+                  onSaved()
+                } catch (e) {
+                  toast({
+                    title: 'Failed',
+                    description: e instanceof Error ? e.message : 'Error',
+                    variant: 'error',
+                  })
+                }
+              })()
+            }
+          >
+            Save
           </Button>
         </div>
       </div>

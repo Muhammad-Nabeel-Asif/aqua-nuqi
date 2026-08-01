@@ -601,3 +601,113 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
   (2026-08-01; seeded; all routes; no mouse in timed loop). Status → **complete**.
 - Stable release for Phase 2 already shipped as **v0.4.25** (no new release invented for this
   timing pass). Review-fix commits still need pushing if not yet on `main`.
+
+---
+
+## Phase 3 — Billing, Customer Ledger & Payments
+
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.5.0`
+
+### Built
+
+- Migration `drizzle/0005_chilly_silverclaw.sql` — `invoices`, `invoice_lines`, `payments`,
+  `payment_allocations`; FKs on `deliveries.invoice_id` + `customer_adjustments.invoice_id`
+  (table rebuild); adjustment indexes
+- Services: `ledger`, `adjustment`, `billing`, `payment`, `receivables`
+- Screens: `/billing/generate`, `/billing/invoices`, `/billing/invoices/:id`,
+  `/billing/periods`, `/payments`, `/receivables`; customer Ledger/Invoices tabs;
+  daily-entry “Post today's collected cash”
+- Unit tests: ledger 1,000-entry random/back-dated; acceptance criteria 1–11 arithmetic
+
+### Migrations added
+
+- `drizzle/0005_chilly_silverclaw.sql` — billing tables + delivery/adjustment invoice FKs
+
+### IPC channels added
+
+- `invoices:preview|previewBatch|generate|generateBatch|issue|issueAll|void|list|get|markShared`
+- `billing:periodsOverview`
+- `adjustments:create|void|list`
+- `ledger:get`
+- `payments:record|void|reallocate|list|get|postCollectedCash|collectedCashPreview`
+- `receivables:report`
+
+### Settings keys added
+
+- None (uses existing `invoice.*` / `tax.*`)
+
+### Error codes added
+
+- `INVOICE_EXISTS`, `INVOICE_ALREADY_ISSUED`, `INVOICE_NOT_EDITABLE`
+
+### Invoice numbering format
+
+- Settings: `invoice.numberFormat` = `{prefix}-{YYYY}-{MM}-{seq:4}`, prefix `INV`
+- Sequence name: `invoice:YYYY-MM` in `sequences` (allocated inside each generate transaction)
+- Example: `INV-2026-07-0001`
+- Receipts: `RCV-00001` via sequence `receipt`
+
+### Cash-at-delivery handling
+
+- **Chosen:** recommended end-of-day action. Daily Entry button
+  “Post today's collected cash” → `payments:collectedCashPreview` then
+  `payments:postCollectedCash`. Creates one `cash` payment per customer with notes tag
+  `[cash_at_delivery:YYYY-MM-DD]` (idempotent). Does **not** silently create payments on
+  delivery upsert.
+
+### InvoicePreview DTO (Phase 4 renders invoices from InvoiceDto)
+
+```ts
+{
+  customerId, customerCode, customerName, period, periodStart, periodEnd,
+  openingBalance, deliveriesCount, deliveriesQty, deliveriesTotal,
+  chargesTotal, discountTotal, taxTotal, invoiceTotal, totalPayable,
+  bottlesWithCustomer,
+  lines: [{ lineNo, lineType, lineDate, description, quantity, rate, amount, deliveryId, adjustmentId }],
+  warnings: string[],
+  skipReason: string | null,
+  existingInvoiceId: number | null,
+  existingStatus: string | null
+}
+```
+
+### Invoice DTO
+
+```ts
+{
+  id, uuid, invoiceNo, customerId, customerCode, customerName,
+  period, periodStart, periodEnd, issueDate, dueDate,
+  openingBalance, deliveriesQty, deliveriesTotal, chargesTotal, discountTotal,
+  taxTotal, invoiceTotal, totalPayable, paidTotal, closingBalance,
+  bottlesWithCustomerAtIssue,
+  status: 'draft'|'issued'|'partially_paid'|'paid'|'void',
+  voidReason, pdfPath, lastSharedAt, notes,
+  createdAt, updatedAt, createdBy,
+  lines: InvoiceLineDto[],  // includes id
+  balanceDue                 // totalPayable − paidTotal (0 if void)
+}
+```
+
+### Deviations from the spec
+
+- Running ledger balance **includes** deposit credits/debits (Phase 3.2). Phase 1 had excluded
+  deposits from AR; deposits remain non-revenue (`isNonRevenue` / excluded from
+  `revenueAccrual` / `revenueCash`).
+- Deposit adjustments ledger immediately; other adjustments hit the ledger via
+  `invoice_total` on issue. Deposit lines appear on the invoice but are **not** in
+  `invoice_total` (avoids double-count + revenue inflation).
+- Credit/debit notes (FR-BL-11 Should): void + regenerate / adjustment path; no separate
+  credit-note document type yet.
+- PDF/WhatsApp: buttons present, disabled with `TODO(phase-4)`.
+
+### What the next phase must know
+
+- Issue appends ledger debit for **`invoice_total` only** — never `total_payable`.
+- Void appends `void_reversal` and clears `deliveries.invoice_id` / adjustment links.
+- `pdf_path` / `last_shared_at` columns exist; Phase 4 should fill them and enable print/share.
+- Walk-in customers are excluded from invoicing and receivables.
+- **Next phase is Phase 4 (PDF invoices & sharing).**
+
+### Escalations / questions for the human
+
+- Confirm deposit-in-running-balance (vs Phase 1 AR exclusion) is the intended live behaviour.

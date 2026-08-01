@@ -6,8 +6,8 @@ import { users } from './system'
 
 /**
  * Deliveries — one recorded row per (customer, date, product).
- * trip_id / employee_id / invoice_id are columns without FKs until those tables exist
- * (employees Phase 6, trips/invoices Phase 7 / 3).
+ * trip_id / employee_id are columns without FKs until those tables exist
+ * (employees Phase 6, trips Phase 7). invoice_id FK is added in the Phase 3 SQL migration.
  */
 export const deliveries = sqliteTable(
   'deliveries',
@@ -60,8 +60,8 @@ export const deliveries = sqliteTable(
 )
 
 /**
- * Minimal adjustments for damaged/lost bottles (FR-DL-11). Full billing adjustments /
- * invoice linking arrive in Phase 3 — invoice_id is a plain column without FK for now.
+ * Customer charges/credits. Extended in Phase 3 for full billing.
+ * invoice_id FK is added in the Phase 3 SQL migration (avoids circular imports).
  */
 export const customerAdjustments = sqliteTable(
   'customer_adjustments',
@@ -90,5 +90,7 @@ export const customerAdjustments = sqliteTable(
       )`,
     ),
     statusCheck: check('customer_adjustments_status_check', sql`${t.status} IN ('active','void')`),
+    customerIdx: index('idx_adjustments_customer').on(t.customerId, t.adjustmentDate),
+    invoiceIdx: index('idx_adjustments_invoice').on(t.invoiceId),
   }),
 )

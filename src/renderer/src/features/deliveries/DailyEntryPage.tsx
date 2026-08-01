@@ -250,6 +250,46 @@ export function DailyEntryPage() {
             <Button variant="outline" disabled={periodClosed} onClick={() => copyPrev.mutate()}>
               Copy previous day
             </Button>
+            <Button
+              variant="outline"
+              disabled={periodClosed}
+              onClick={() =>
+                void (async () => {
+                  try {
+                    const preview = await api.payments.collectedCashPreview(date)
+                    if (!preview.rows.length || preview.total <= 0) {
+                      toast({ title: 'No cash collected to post', variant: 'error' })
+                      return
+                    }
+                    const pending = preview.rows.filter((r) => !r.alreadyPosted)
+                    if (!pending.length) {
+                      toast({ title: 'Already posted for this date', variant: 'error' })
+                      return
+                    }
+                    const ok = window.confirm(
+                      `Post cash collected for ${date} as payments?\n` +
+                        `${pending.length} customers · Rs ${(preview.total / 100).toLocaleString('en-PK')}`,
+                    )
+                    if (!ok) return
+                    const res = await api.payments.postCollectedCash(date)
+                    toast({
+                      title: `Posted ${res.created} payments`,
+                      description: `Total Rs ${(res.totalAmount / 100).toLocaleString('en-PK')}`,
+                      variant: 'success',
+                    })
+                    await qc.invalidateQueries({ queryKey: ['day-list'] })
+                  } catch (e) {
+                    toast({
+                      title: 'Post cash failed',
+                      description: e instanceof Error ? e.message : 'Error',
+                      variant: 'error',
+                    })
+                  }
+                })()
+              }
+            >
+              Post today&apos;s collected cash
+            </Button>
           </>
         }
       />

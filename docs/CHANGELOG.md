@@ -6,6 +6,11 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ### Added
 
+- **Phase 3 — Billing, ledger & payments:** append-only `ledgerService` with back-dated
+  `balance_after` recompute; monthly invoice generate/issue/void (gapless
+  `INV-{YYYY}-{MM}-{seq:4}`); FIFO payment allocation + customer credit; receivables ageing;
+  adjustments (incl. non-revenue deposits); end-of-day “post collected cash as payments”;
+  period close UI under `/billing/periods`. PDF/print/share buttons disabled (`TODO(phase-4)`).
 - **Phase 2 — Delivery tracking:** `deliveries` table with partial unique slot index; keyboard-first
   Daily Entry, Month Matrix, and per-customer Monthly Card; debounced (~400 ms) cell autosave with
   optimistic row/footer updates and rollback toast; walk-in cash sales via system `WALK-IN`
