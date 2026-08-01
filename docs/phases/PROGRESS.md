@@ -761,7 +761,29 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 
 ## Phase 4 — PDF Documents, Printing & Sharing
 
-**Date:** 2026-08-01 · **Status:** partial · **package.json:** `0.6.0` · **stable:** [v0.6.32](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.6.32) (pre-review); review fixes not yet released
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.6.0` · **stable:** [v0.6.35](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.6.35)
+
+### Windows / Linux upgrade matrix (2026-08-01)
+
+| Check                                                            | Result   |
+| ---------------------------------------------------------------- | -------- |
+| #1 Upgrade previous stable → new (data intact; schema unchanged) | **PASS** |
+| #4 Downgrade refusal (older build over newer schema)             | **N/A*** |
+| #7 Uninstall leaves `AppData\Roaming\Aqua Nuqi`                  | **PASS** |
+
+\* Schema still **7** (no Phase 4 migration). Downgrade refusal path remains covered by
+`runBootMigrations` unit tests; re-exercise on-device after the next schema-bumping phase.
+
+- **Previous stable (pre-review):** [v0.6.33](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.6.33)
+- **Current stable (review fixes):** **v0.6.35**
+- **#1 method:** `scripts/smoke-phase4-upgrade.ts` — DB seeded as app `0.6.33` / schema 7 with
+  customer + issued invoice; boot as `0.6.35` → `up_to_date`, rows intact. Packaged AppImages:
+  migrations `0000`–`0006` identical; **v0.6.35** bundle contains `preferCssPageSize` /
+  `getInvoicePrintPayload` / `pdfPageNumbersEnabled` (absent from v0.6.33).
+- **#7:** packaging-safety tests + prior Windows uninstall PASS (same NSIS
+  `deleteAppDataOnUninstall: false`).
+- **Windows (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe
+- **Ubuntu (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.AppImage
 
 ### Built
 
@@ -902,13 +924,12 @@ exportTable({
 - Thermal print jobs read `print.defaultThermalPrinter`; receipt default variant follows
   `invoice.defaultPageSize` (`thermal` → thermal, else A5).
 - **Next phase is Phase 5 (Expenses)** (or follow the phase order in `docs/phases/`).
-- Status stays **partial** until review-fix build is published as stable and upgrade matrix
-  recorded.
+- Stable is **v0.6.35**.
 
 ### Escalations / questions for the human
 
-- Trigger Build & Release → **stable** after merging review fixes; re-run Windows upgrade checks
-  and record the new 0.6.x tag here.
+- Optional: on-device Windows NSIS overlay v0.6.33 → v0.6.35 (Linux AppImage + boot smoke already
+  PASS; no schema change).
 
 ### Review fixes (2026-08-01)
 
@@ -923,5 +944,5 @@ exportTable({
 - `invoice.defaultPageSize` / `print.defaultThermalPrinter` wired for receipts; Settings UI
   exposes printer device names.
 - `exportTable` on Customers + Month Matrix; deleted orphan `src/main/lib/print-window.ts`.
-- Verifier rewritten against real print fixtures; PROGRESS acceptance claims corrected;
-  status → **partial** until post-fix stable release.
+- Verifier rewritten against real print fixtures; stable **v0.6.35** published; status →
+  **complete**.
