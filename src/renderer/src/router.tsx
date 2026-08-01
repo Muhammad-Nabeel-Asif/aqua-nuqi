@@ -24,8 +24,21 @@ import { InventoryPage } from './features/inventory/InventoryPage'
 import { TripsPage } from './features/inventory/TripsPage'
 import { VehiclesPage } from './features/inventory/VehiclesPage'
 import { PaymentsPage } from './features/payments/PaymentsPage'
-import { ComingSoonPage } from './features/placeholder/ComingSoonPage'
 import { ReceivablesPage } from './features/receivables/ReceivablesPage'
+import { AreaRoutePerformancePage } from './features/reports/AreaRoutePerformancePage'
+import { BottleLossReportPage } from './features/reports/BottleLossReportPage'
+import { CollectionReportPage } from './features/reports/CollectionReportPage'
+import { CostPerBottlePage } from './features/reports/CostPerBottlePage'
+import { CustomerActivityPage } from './features/reports/CustomerActivityPage'
+import { CustomerSalesPage } from './features/reports/CustomerSalesPage'
+import { EmployeeDeliveryReportPage } from './features/reports/EmployeeDeliveryReportPage'
+import { ExpenseReportPage } from './features/reports/ExpenseReportPage'
+import { ProfitLossPage } from './features/reports/ProfitLossPage'
+import { ReceivablesAgeingReportPage } from './features/reports/ReceivablesAgeingReportPage'
+import { ReportsHubPage } from './features/reports/ReportsHubPage'
+import { SalesSummaryPage } from './features/reports/SalesSummaryPage'
+import { StockMovementRegisterPage } from './features/reports/StockMovementRegisterPage'
+import { TripVarianceReportPage } from './features/reports/TripVarianceReportPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { SetupWizard } from './features/setup/SetupWizard'
 import { PrintJobPage } from './print/PrintJobPage'
@@ -149,7 +162,48 @@ export const router = createHashRouter([
       { path: 'inventory/vehicles', element: <VehiclesPage /> },
       { path: 'inventory/trips', element: <TripsPage /> },
       { path: 'inventory/bottles-out', element: <InventoryBottlesOutPage /> },
-      { path: 'reports', element: <ComingSoonPage title="Reports" phase={8} /> },
+      { path: 'reports', element: <ReportsHubPage /> },
+      { path: 'reports/sales-summary', element: <SalesSummaryPage /> },
+      { path: 'reports/customer-sales', element: <CustomerSalesPage /> },
+      { path: 'reports/area-route-performance', element: <AreaRoutePerformancePage /> },
+      { path: 'reports/employee-delivery', element: <EmployeeDeliveryReportPage /> },
+      { path: 'reports/customer-activity', element: <CustomerActivityPage /> },
+      { path: 'reports/bottle-loss', element: <BottleLossReportPage /> },
+      { path: 'reports/trip-variance', element: <TripVarianceReportPage /> },
+      { path: 'reports/stock-movements', element: <StockMovementRegisterPage /> },
+      {
+        path: 'reports/profit-loss',
+        element: (
+          <RequireOwner>
+            <ProfitLossPage />
+          </RequireOwner>
+        ),
+      },
+      { path: 'reports/receivables-ageing', element: <ReceivablesAgeingReportPage /> },
+      {
+        path: 'reports/collection',
+        element: (
+          <RequireOwner>
+            <CollectionReportPage />
+          </RequireOwner>
+        ),
+      },
+      {
+        path: 'reports/expenses',
+        element: (
+          <RequireOwner>
+            <ExpenseReportPage />
+          </RequireOwner>
+        ),
+      },
+      {
+        path: 'reports/cost-per-bottle',
+        element: (
+          <RequireOwner>
+            <CostPerBottlePage />
+          </RequireOwner>
+        ),
+      },
       {
         path: 'settings',
         element: (

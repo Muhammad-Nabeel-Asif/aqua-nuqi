@@ -1,5 +1,6 @@
 import type { AppDatabase } from '@main/db/client'
 import { auditLog } from '@main/db/schema'
+import { bumpDbWriteCounter } from '@main/lib/db-write-counter'
 import type { AuditAction } from '@shared/constants'
 import { nowIsoUtc } from '@shared/date'
 
@@ -16,6 +17,8 @@ export type AuditRecordInput = {
 /** Drizzle transaction or root db — anything that can insert/select/update. */
 export type TxLike = Pick<AppDatabase, 'insert' | 'select' | 'update'>
 
+const NON_MUTATING: ReadonlySet<AuditAction> = new Set(['login', 'logout'])
+
 export function createAuditService(db: AppDatabase) {
   function record(input: AuditRecordInput, tx: TxLike = db): void {
     tx.insert(auditLog)
@@ -30,6 +33,10 @@ export function createAuditService(db: AppDatabase) {
         afterJson: input.after === undefined ? null : JSON.stringify(input.after),
       })
       .run()
+    // Invalidate report cache after any business mutation.
+    if (!NON_MUTATING.has(input.action)) {
+      bumpDbWriteCounter()
+    }
   }
 
   function withAudit<T>(tx: TxLike, input: AuditRecordInput, work: () => T): T {

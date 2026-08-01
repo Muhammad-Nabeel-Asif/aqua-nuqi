@@ -1346,3 +1346,114 @@ damaged / lost / scrapped reasons.
 - Optional: demo seed for vehicles + sample open trip.
 - On-device overlay install of previous stable → **v0.9.49** (schema 11→12 + stock backfill)
   not run in this environment; unit suite covers migration + backfill + review probes.
+
+---
+
+## Phase 8 — Dashboard, Profit & Loss and Reports
+
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.10.0`
+
+### Built
+
+- `report.service.ts` — one function per report (P&L accrual/cash, sales summary,
+  customer-wise sales, area/route performance, employee delivery, customer activity,
+  consumption trend, receivables ageing + by-area, collections, expenses, cost per bottle,
+  bottles-out, bottle loss, trip variance, stock movement register, dashboard).
+- `reportCache` keyed by `(report, params, dbWriteCounter)`; counter bumped from
+  `audit.record` on every mutating action (not login/logout).
+- Dashboard `/` — today / MTD / assets / charts / action lists / quick actions; role-stripped
+  for operator/viewer (no profit, expense, salary, or recurring-expense money).
+- Report hub `/reports` + individual screens; Money reports (P&L, collection, expenses,
+  cost-per-bottle) behind `RequireOwner`. PDF/Excel via Phase 4 `exportTable` / `exportExcel`
+  with filter headers.
+- Customer detail overview: last-6-month consumption trend chart.
+- Unit tests (`report.service.test.ts`) with a fixed July-2026 fixture and hand-calculated
+  expected paisa totals covering AC1–AC7 plus voids, deposits, walk-ins, salary-once, cache,
+  operator strip, and <2s performance on the fixture.
+
+### Migrations added
+
+- `drizzle/0012_report_indexes.sql` — `idx_invoices_issue_date`,
+  `idx_invoices_period_status`, `idx_customer_adjustments_date`, `idx_stock_reason_date`
+  (schema version **13**).
+
+### Summary tables for performance
+
+**None added.** Reports scan indexed transactional tables (`invoices`, `payments`,
+`expenses`, `deliveries`, `stock_movements`, `customer_balances`). Existing
+`customer_balances` (Phase 1/3) remains the only materialised summary; rebuild via
+`balanceService.recalculateBalances()` / `syncFromSources` as documented in earlier phases.
+Phase 9 integrity check does **not** need a new rebuild path for Phase 8.
+
+In-memory `reportCache` is process-local only — discarded on restart; not persisted.
+
+### Canonical revenue formulas (implemented)
+
+```
+revenue_accrual(from,to) = Σ invoice_total (status issued|partially_paid|paid,
+                           period in months of range, or ad-hoc by issue_date)
+                         + Σ walk-in delivery.amount (status=recorded)
+revenue_cash(from,to)    = Σ payments.amount (status=active, not notes LIKE '[deposit]%')
+                         + Σ walk-in delivery.cash_collected
+expenses_total           = Σ expenses.amount (status=active)  — includes Salaries +
+                           Employee Advance once (Phase 6 netting)
+net_profit               = revenue − expenses_total
+cost_per_bottle          = expenses_total / Σ delivery.quantity (recorded)
+```
+
+Deposits (adjustments + `[deposit]`-tagged payments) are listed under P&L “Excluded” and
+never enter net revenue. Walk-ins are in revenue, never in receivables / customer-wise sales.
+
+### IPC channels added
+
+- `reports:dashboard|profitAndLoss|expenseDrilldown|salesSummary|customerWiseSales|areaRoutePerformance|employeeDelivery|customerActivity|customerConsumptionTrend|receivablesAgeing|collection|expenses|costPerBottle|bottlesOut|bottleLoss|tripVariance|stockMovements|resolveRange`
+
+### Settings keys added
+
+- None
+
+### Error codes added
+
+- None
+
+### Deviations from the spec
+
+- No persisted report summary table (not needed under 2s on fixture; indexes suffice).
+- Cash-basis P&L collapses other-charges / discounts lines to 0 (cash is collections only);
+  accrual shows the full water / charges / discounts breakdown.
+- Dashboard “missed scheduled” counts weekday-schedule customers with no recorded entry today
+  (simpler than full Phase 2 missed-delivery reasons).
+
+### Acceptance verification (hand-calc fixture, July 2026)
+
+| #   | Check                               | Expected (paisa)                            | Result |
+| --- | ----------------------------------- | ------------------------------------------- | ------ |
+| 1   | Dashboard MTD accrual = P&L accrual | 106_000                                     | PASS   |
+| 2   | Accrual vs cash                     | 106_000 vs 61_000                           | PASS   |
+| 3   | Deposits + advances don’t distort   | profit −2_394_000; salary-related 1_000_000 | PASS   |
+| 4   | Salaries once; expenses = list sum  | 2_500_000                                   | PASS   |
+| 5   | Receivables buckets sum = total     | B only 25_000 after A’s deposit credit      | PASS   |
+| 6   | Dashboard bottles = bottles-out     | 2                                           | PASS   |
+| 7   | Cost/bottle = expenses ÷ bottles    | round(2_500_000/18) = 138_889               | PASS   |
+| 8   | PDF/Excel export with filters       | via `exportTable`/`exportExcel`             | wired  |
+| 9   | Operator no profit/expense          | `dashboardForRole` + RequireOwner routes    | PASS   |
+| 10  | <2s on fixture                      | cache + indexes                             | PASS   |
+| 11  | typecheck / lint / test / build     | all green (196 tests)                       | PASS   |
+
+### What the next phase must know
+
+- Schema version **13** after `0012_report_indexes`.
+- No new rebuildable summary table from Phase 8. Phase 9 integrity should still rebuild
+  `customer_balances` (existing). If a future report is slow, prefer a monthly totals table
+  maintained on invoice/payment/expense write with `rebuildReportTotals()`.
+- P&L and dashboard money channels are **owner-only**; do not expose them to operator.
+- Deposit exclusion convention: invoice_total never includes deposits; cash excludes
+  payments whose notes start with `[deposit]`.
+- Walk-in revenue is delivery-based (no invoice / no payment row).
+- **Next phase is Phase 9 (Backup, restore, settings polish, integrity).**
+
+### Escalations / questions for the human
+
+- Confirm whether cash P&L should attempt to attribute collections to water vs charges
+  (currently total collections only).
+- Optional: on-device overlay install 0.9.x → 0.10.0 (schema 12→13 indexes only).

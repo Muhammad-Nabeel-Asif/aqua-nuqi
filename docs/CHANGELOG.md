@@ -4,6 +4,18 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-08-01
+
+### Added
+
+- **Phase 8 — Dashboard, Profit & Loss and Reports:** `report.service` with accrual/cash P&L,
+  sales, receivables ageing, collections, expenses, cost-per-bottle, bottle loss, trip variance,
+  and stock movement reports. Dashboard answers bottles/cash/revenue/profit/receivables/stock in
+  one glance; operators see no profit, expense, or salary figures. Report hub at `/reports` with
+  PDF/Excel export (filters in header). In-memory `reportCache` invalidated via audit write
+  counter. Migration `0012_report_indexes`. Unit tests against a fixed hand-calculated fixture
+  (voids, deposits, advances, walk-ins, salaries-once).
+
 ### Fixed
 
 - Phase 7 review: trip close writes off filled/empty shortfalls (`van→scrap` lost) so missing

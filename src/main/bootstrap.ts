@@ -41,6 +41,7 @@ import { createPdfService } from './services/pdf.service'
 import { createPeriodService } from './services/period.service'
 import { createRateService } from './services/rate.service'
 import { createReceivablesService } from './services/receivables.service'
+import { createReportService } from './services/report.service'
 import { createSettingsService } from './services/settings.service'
 import { createStockService } from './services/stock.service'
 import { createTripService } from './services/trip.service'
@@ -164,6 +165,12 @@ export function bootstrapApp(): BootstrapResult {
     const employees = createEmployeeService(db, audit, period)
     const attendance = createAttendanceService(db, audit, period, settings)
     const payroll = createPayrollService(db, audit, period, employees, attendance, expenses, trips)
+    const reports = createReportService(db, raw, {
+      expenses,
+      receivables,
+      stock,
+      trips,
+    })
     const pdf = createPdfService(
       db,
       audit,
@@ -218,6 +225,7 @@ export function bootstrapApp(): BootstrapResult {
       employees,
       attendance,
       payroll,
+      reports,
       pdf,
       appVersion,
       schemaVersion: schemaVersion || getSchemaVersion(),

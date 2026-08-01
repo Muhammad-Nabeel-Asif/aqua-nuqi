@@ -85,6 +85,13 @@
       "when": 1785603000000,
       "tag": "0011_inventory_trips",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1785604000000,
+      "tag": "0012_report_indexes",
+      "breakpoints": true
     }
   ]
 }

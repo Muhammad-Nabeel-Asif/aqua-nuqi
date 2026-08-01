@@ -1033,6 +1033,70 @@ export const api = {
     update: (input: import('@shared/contracts').UpdateVehicleInput) =>
       invoke<{ item: import('@shared/contracts').VehicleDto }>('vehicles:update', input),
   },
+  reports: {
+    dashboard: (asOf?: string) =>
+      invoke<import('@shared/contracts').DashboardOutput>('reports:dashboard', { asOf }),
+    profitAndLoss: (input: import('@shared/contracts').ProfitLossInput) =>
+      invoke<import('@shared/contracts').ProfitLossOutput>('reports:profitAndLoss', input),
+    expenseDrilldown: (from: string, to: string, categoryId: number) =>
+      invoke<{
+        items: Array<{
+          id: number
+          expenseDate: string
+          amount: number
+          description: string | null
+          vendorName: string | null
+          source: string
+        }>
+      }>('reports:expenseDrilldown', { from, to, categoryId }),
+    salesSummary: (input: {
+      from: string
+      to: string
+      groupBy: 'day' | 'month'
+      areaId?: number
+      routeId?: number
+      employeeId?: number
+      customerType?: string
+    }) => invoke('reports:salesSummary', input),
+    customerWiseSales: (input: {
+      from: string
+      to: string
+      topN?: number
+      areaId?: number
+      routeId?: number
+    }) => invoke('reports:customerWiseSales', input),
+    areaRoutePerformance: (input: { from: string; to: string; groupBy: 'area' | 'route' }) =>
+      invoke('reports:areaRoutePerformance', input),
+    employeeDelivery: (from: string, to: string) =>
+      invoke('reports:employeeDelivery', { from, to }),
+    customerActivity: (from: string, to: string) =>
+      invoke('reports:customerActivity', { from, to }),
+    customerConsumptionTrend: (customerId: number, months?: number) =>
+      invoke('reports:customerConsumptionTrend', { customerId, months }),
+    receivablesAgeing: (asOf?: string) => invoke('reports:receivablesAgeing', { asOf }),
+    collection: (from: string, to: string) => invoke('reports:collection', { from, to }),
+    expenses: (from: string, to: string) => invoke('reports:expenses', { from, to }),
+    costPerBottle: (from: string, to: string) => invoke('reports:costPerBottle', { from, to }),
+    bottlesOut: (input?: {
+      search?: string
+      routeId?: number
+      areaId?: number
+      minBottles?: number
+      shortfallOnly?: boolean
+      noReturnDays?: number
+    }) => invoke('reports:bottlesOut', input ?? {}),
+    bottleLoss: (from: string, to: string) => invoke('reports:bottleLoss', { from, to }),
+    tripVariance: (from: string, to: string) => invoke('reports:tripVariance', { from, to }),
+    stockMovements: (input: { from: string; to: string; productId?: number; reason?: string }) =>
+      invoke('reports:stockMovements', input),
+    resolveRange: (input: {
+      kind: 'month' | 'quarter' | 'year' | 'custom'
+      period?: string
+      year?: number
+      from?: string
+      to?: string
+    }) => invoke<{ from: string; to: string; label: string }>('reports:resolveRange', input),
+  },
   trips: {
     list: (input?: {
       from?: string

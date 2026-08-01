@@ -20,6 +20,7 @@ import type { PdfService } from '@main/services/pdf.service'
 import type { PeriodService } from '@main/services/period.service'
 import type { RateService } from '@main/services/rate.service'
 import type { ReceivablesService } from '@main/services/receivables.service'
+import type { ReportService } from '@main/services/report.service'
 import type { SettingsService } from '@main/services/settings.service'
 import type { StockService } from '@main/services/stock.service'
 import type { TripService } from '@main/services/trip.service'
@@ -57,6 +58,7 @@ export type AppContext = {
   employees: EmployeeService
   attendance: AttendanceService
   payroll: PayrollService
+  reports: ReportService
   pdf: PdfService
   appVersion: string
   schemaVersion: number

@@ -11,6 +11,7 @@ import { registerMasterDataHandlers } from './handlers/master-data.handlers'
 import { registerPaymentHandlers } from './handlers/payments.handlers'
 import { registerPdfHandlers } from './handlers/pdf.handlers'
 import { registerPeriodHandlers } from './handlers/period.handlers'
+import { registerReportHandlers } from './handlers/reports.handlers'
 import { registerSettingsHandlers } from './handlers/settings.handlers'
 import { registerSetupHandlers } from './handlers/setup.handlers'
 
@@ -30,4 +31,5 @@ export function registerAllHandlers(): void {
   registerExpenseHandlers()
   registerEmployeeHandlers()
   registerInventoryHandlers()
+  registerReportHandlers()
 }

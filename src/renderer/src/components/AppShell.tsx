@@ -86,7 +86,13 @@ const NAV: NavItem[] = [
     roles: ['owner', 'operator'],
     phase: 7,
   },
-  { to: '/reports', label: t('nav.reports'), icon: ChartColumn, roles: ['owner'], phase: 8 },
+  {
+    to: '/reports',
+    label: t('nav.reports'),
+    icon: ChartColumn,
+    roles: ['owner', 'operator', 'viewer'],
+    phase: 8,
+  },
   { to: '/settings', label: t('nav.settings'), icon: Settings, roles: ['owner'] },
 ]
 

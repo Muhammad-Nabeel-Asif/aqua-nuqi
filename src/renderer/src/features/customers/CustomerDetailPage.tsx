@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { confirmDialog } from '@renderer/components/ConfirmDialog'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
@@ -27,6 +28,10 @@ export function CustomerDetailPage() {
   const [payOpen, setPayOpen] = useState(false)
   const [chargeOpen, setChargeOpen] = useState(false)
   const q = useQuery({ queryKey: ['customer', id], queryFn: () => api.customers.get(id) })
+  const trendQ = useQuery({
+    queryKey: ['customer-consumption-trend', id],
+    queryFn: () => api.reports.customerConsumptionTrend(id, 6),
+  })
   const c = q.data?.item
   if (!c) return <div className="p-8">Loading…</div>
   const customer = c
@@ -163,6 +168,24 @@ export function CustomerDetailPage() {
                 </dd>
               </dl>
             </Card>
+          </div>
+          <div className="mt-4 rounded-lg border bg-white p-4">
+            <h3 className="mb-3 font-semibold">Consumption trend · last 6 months</h3>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={(
+                    (trendQ.data as { items: Array<{ period: string; units: number }> } | undefined)
+                      ?.items ?? []
+                  ).map((item) => ({ ...item, value: item.units }))}
+                >
+                  <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#0284c7" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
           <div className="mt-4 rounded-lg border bg-white p-4">
             <h3 className="font-semibold">Rate history</h3>
