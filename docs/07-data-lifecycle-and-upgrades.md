@@ -13,10 +13,10 @@ Get any one of them wrong and the data is gone.**
 
 An installed Electron app on Windows lives in two places that have nothing to do with each other:
 
-| | Path (Windows, per-user install) | Contains | Replaced by an update? |
-|---|---|---|---|
+|                   | Path (Windows, per-user install)                    | Contains                                                                      | Replaced by an update?                     |
+| ----------------- | --------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------ |
 | **Program files** | `C:\Users\<user>\AppData\Local\Programs\aqua-nuqi\` | `Aqua Nuqi.exe`, Electron runtime, our compiled code, bundled migration files | **Yes — wiped and rewritten every update** |
-| **User data** | `C:\Users\<user>\AppData\Roaming\Aqua Nuqi\` | `data/aqua-nuqi.db`, `backups/`, `attachments/`, `logs/`, config | **No — never touched by the installer** |
+| **User data**     | `C:\Users\<user>\AppData\Roaming\Aqua Nuqi\`        | `data/aqua-nuqi.db`, `backups/`, `attachments/`, `logs/`, config              | **No — never touched by the installer**    |
 
 On Ubuntu the equivalents are the AppImage/`/opt` install directory and
 `~/.config/Aqua Nuqi/`.
@@ -47,6 +47,7 @@ schema changes get applied to it.
 ## 3. The five ways data can still be lost, and the guardrail for each
 
 ### 3.1 Storing the database next to the executable
+
 If the database ever ends up in the install directory (the "portable app" instinct), **every single
 update deletes it**, because step 3 above wipes that folder.
 
@@ -59,26 +60,31 @@ update deletes it**, because step 3 above wipes that folder.
 > UI must warn that portable data is not shared with the installed version.
 
 ### 3.2 Changing `appId` or `productName` after the first release
+
 `app.getPath('userData')` is derived from the app name. Renaming `Aqua Nuqi` to `AquaNuqi`, or
 changing `appId`, points the new version at a **different, empty folder**. The client opens the app
 and every customer is gone. The data is still on disk, but he does not know that, and by then he
 has panicked.
 
 > **Guardrail.** These values are frozen after the first stable release:
+>
 > ```
 > appId       = com.aquanuqi.app
 > productName = Aqua Nuqi
 > package.json name = aqua-nuqi
 > ```
+>
 > A unit test asserts all three against hard-coded constants. If a rename is ever genuinely
 > required, it needs an explicit migration step that copies the old userData folder to the new one
 > before opening the database — never a plain rename.
 
 ### 3.3 A failed migration
+
 The new version adds a column; the migration throws halfway; the database is left in a
 half-migrated, unopenable state.
 
 > **Guardrail (already in Phase 0).** At boot, before any migration runs:
+>
 > 1. Take a `pre_migration` backup and verify its checksum.
 > 2. Run **all** pending migrations inside a single transaction.
 > 3. On any failure: roll back, restore the pre-migration file, and show a fatal-error window
@@ -88,25 +94,29 @@ half-migrated, unopenable state.
 > ones you need six months later.
 
 ### 3.4 Installing an older version over a newer one
+
 This is a realistic accident: he re-uses an old download link, or reinstalls from an old file on
 his desktop. The app is now older than the database. Old code against a newer schema silently
 writes wrong data or crashes.
 
 > **Guardrail.** At boot, compare `app_meta.schema_version` against the highest migration bundled
 > in the running build:
+>
 > - schema version **higher** than the app knows → **refuse to open the database**. Show:
->   *"This version of Aqua Nuqi (0.6.x) is older than your data, which was created with version
->   0.9.x. Please install the latest version. Your data is safe and has not been changed."*
+>   _"This version of Aqua Nuqi (0.6.x) is older than your data, which was created with version
+>   0.9.x. Please install the latest version. Your data is safe and has not been changed."_
 >   Offer a "Download latest" button and an "Open my data folder" button. Never migrate downwards.
 > - schema version lower → migrate as normal.
 
 ### 3.5 A manual uninstall, or a custom uninstall script
+
 If he uninstalls properly (Add/Remove Programs) rather than installing over the top, the
 `--updated` flag is absent. With our current config the data still survives, but any future
 `customUnInstall` macro that deletes folders would run.
 
 > **Guardrail.** If an `installer.nsh` with `customUnInstall` is ever added, every destructive
 > line must be wrapped:
+>
 > ```nsis
 > !macro customUnInstall
 >   ${IfNot} ${isUpdated}
@@ -114,6 +124,7 @@ If he uninstalls properly (Add/Remove Programs) rather than installing over the 
 >   ${EndIf}
 > !macroend
 > ```
+>
 > And in Phase 9, the uninstall flow gets an explicit **"also delete my business data"** checkbox,
 > unticked by default, with a warning that it cannot be undone.
 
@@ -144,15 +155,15 @@ question is which version he was on, and this is how you find out. Add `'app_upg
 
 Three options, in the order they become available:
 
-| Stage | How he updates | Effort for him |
-|---|---|---|
-| Phases 0B–8 | You send a WhatsApp message with the permanent download link. He downloads `Aqua-Nuqi-Setup.exe`, double-clicks, clicks through, done. Data intact. | ~2 minutes |
-| Phase 9 onwards | In-app auto-update. The app checks the stable channel on startup, downloads in the background, and offers "Restart to update". | One click |
-| Always available | He does nothing. The old version keeps working offline forever. | Zero |
+| Stage            | How he updates                                                                                                                                      | Effort for him |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| Phases 0B–8      | You send a WhatsApp message with the permanent download link. He downloads `Aqua-Nuqi-Setup.exe`, double-clicks, clicks through, done. Data intact. | ~2 minutes     |
+| Phase 9 onwards  | In-app auto-update. The app checks the stable channel on startup, downloads in the background, and offers "Restart to update".                      | One click      |
+| Always available | He does nothing. The old version keeps working offline forever.                                                                                     | Zero           |
 
-**Tell him explicitly, in writing, at handover:** *"Updating the app never affects your data.
+**Tell him explicitly, in writing, at handover:** _"Updating the app never affects your data.
 You do not need to uninstall the old version first — just run the new installer over it. If you
-ever see a warning that your data is newer than the app, stop and call me."*
+ever see a warning that your data is newer than the app, stop and call me."_
 
 ## 6. Moving to a new laptop
 
@@ -161,6 +172,7 @@ laptop, a shop migrates his files, and the `AppData\Roaming` folder is not copie
 hidden.
 
 **Documented procedure (goes in the handover document):**
+
 1. On the **old** laptop: open Aqua Nuqi → Settings → Backup → **Backup now**. Copy the resulting
    `.zip` to a USB drive.
 2. On the **new** laptop: install Aqua Nuqi from the standard download link.
@@ -179,21 +191,28 @@ hidden.
 
 Run before every **stable** release (Phase 0B §0B.4 makes this mandatory per phase):
 
-| # | Scenario | Expected |
-|---|---|---|
-| 1 | Install previous stable → create data → install new build over it | All data present, migrations applied, `app_upgrade` audit entry written |
-| 2 | Same, but skipping two versions (e.g. 0.4 → 0.7) | All intermediate migrations apply in order |
-| 3 | Install new build on a clean machine | First-run wizard, no errors |
-| 4 | Install an **older** build over a newer one | App refuses to open the database with the "app is older than your data" message; data unchanged |
-| 5 | Corrupt the DB, then launch | Clear error, offer restore from the most recent backup |
-| 6 | Kill the app mid-migration | Next launch restores the pre-migration backup and reports it |
-| 7 | Uninstall via Add/Remove Programs | Data folder still present |
-| 8 | Backup on machine A → restore on machine B | Identical row counts and identical report totals |
+| #   | Scenario                                                          | Expected                                                                                        |
+| --- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 1   | Install previous stable → create data → install new build over it | All data present, migrations applied, `app_upgrade` audit entry written                         |
+| 2   | Same, but skipping two versions (e.g. 0.4 → 0.7)                  | All intermediate migrations apply in order                                                      |
+| 3   | Install new build on a clean machine                              | First-run wizard, no errors                                                                     |
+| 4   | Install an **older** build over a newer one                       | App refuses to open the database with the "app is older than your data" message; data unchanged |
+| 5   | Corrupt the DB, then launch                                       | Clear error, offer restore from the most recent backup                                          |
+| 6   | Kill the app mid-migration                                        | Next launch restores the pre-migration backup and reports it                                    |
+| 7   | Uninstall via Add/Remove Programs                                 | Data folder still present                                                                       |
+| 8   | Backup on machine A → restore on machine B                        | Identical row counts and identical report totals                                                |
 
 Scenarios 1, 4 and 7 are the minimum for every release. The full matrix runs before v1.0 and after
 any migration that alters existing rows.
 
-## 8. Rules summary
+## 8. Local AppImage / install & wipe while developing
+
+To download a GitHub AppImage or Setup.exe, run it, wipe your **own** machine, and re-test
+first-run or upgrade, see [`DEV-RESET-LOCAL-DATA.md`](./DEV-RESET-LOCAL-DATA.md). Never confuse
+that with uninstalling on the client’s PC — production data must stay under `userData` and
+survive updates (sections above).
+
+## 9. Rules summary
 
 1. Data lives in `userData`. Never beside the executable.
 2. `appId`, `productName` and `package.json name` are frozen after the first stable release.
