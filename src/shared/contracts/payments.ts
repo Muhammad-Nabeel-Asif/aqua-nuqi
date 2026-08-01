@@ -18,6 +18,7 @@ export const paymentAllocationDto = z.object({
   invoiceId: z.number().int(),
   invoiceNo: z.string(),
   amount: z.number().int(),
+  status: z.enum(['active', 'superseded', 'void']),
 })
 
 export const paymentDto = z.object({

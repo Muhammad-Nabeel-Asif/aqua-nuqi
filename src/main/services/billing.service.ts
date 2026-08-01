@@ -73,8 +73,21 @@ export type InvoiceDto = {
   updatedAt: string
   createdBy: number | null
   lines: InvoiceLineDto[]
-  /** Remaining = totalPayable − paidTotal for non-void */
+  /**
+   * Remaining cash to collect on this document = totalPayable − paidTotal (non-void).
+   * totalPayable includes deposit lines so this matches the ledger effect of the bill.
+   */
   balanceDue: number
+  /** Active (+ historically voided) payment allocations against this invoice */
+  paymentHistory: Array<{
+    paymentId: number
+    receiptNo: string | null
+    paymentDate: string
+    method: string
+    amount: number
+    allocationStatus: 'active' | 'superseded' | 'void'
+    paymentStatus: 'active' | 'void'
+  }>
 }
 
 export type InvoicePreview = {
@@ -423,7 +436,11 @@ export function createBillingService(
     }
 
     const invoiceTotal = deliveriesTotal + chargesTotal - discountTotal + taxTotal
-    const totalPayable = openingBalance + invoiceTotal
+    // Deposit lines are non-revenue (excluded from invoice_total) but affect what is due.
+    const depositNet = lines
+      .filter((l) => l.lineType === 'deposit')
+      .reduce((s, l) => s + l.amount, 0)
+    const totalPayable = openingBalance + invoiceTotal + depositNet
 
     const warnings: string[] = []
     if (allDeliveries.length === 0) warnings.push('No deliveries in period')
@@ -465,7 +482,8 @@ export function createBillingService(
     return buildComposition(customerId, period)
   }
 
-  function clearDraftLinks(tx: AppDatabase, invoiceId: number): void {
+  /** Clear delivery/adjustment links so sources can be re-billed. Does not touch lines. */
+  function unlinkInvoiceSources(tx: AppDatabase, invoiceId: number): void {
     tx.update(deliveries)
       .set({ invoiceId: null, updatedAt: nowIsoUtc() })
       .where(eq(deliveries.invoiceId, invoiceId))
@@ -474,7 +492,23 @@ export function createBillingService(
       .set({ invoiceId: null })
       .where(eq(customerAdjustments.invoiceId, invoiceId))
       .run()
+  }
+
+  /** Hard-clear lines only when regenerating a draft (lines are about to be rewritten). */
+  function clearDraftLines(tx: AppDatabase, invoiceId: number): void {
+    unlinkInvoiceSources(tx, invoiceId)
     tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, invoiceId)).run()
+  }
+
+  function assertPeriodWritable(period: string, forceClosedPeriod?: boolean): void {
+    try {
+      periodService.guardPeriodOpen(period)
+    } catch (err) {
+      if (err instanceof AppError && err.code === 'PERIOD_LOCKED' && forceClosedPeriod) {
+        return
+      }
+      throw err
+    }
   }
 
   function persistLines(tx: AppDatabase, invoiceId: number, lines: BuiltLine[]): void {
@@ -539,6 +573,27 @@ export function createBillingService(
 
     const balanceDue = row.status === 'void' ? 0 : row.totalPayable - row.paidTotal
 
+    const paymentHistory = withLines
+      ? db
+          .select()
+          .from(paymentAllocations)
+          .where(eq(paymentAllocations.invoiceId, row.id))
+          .all()
+          .map((a) => {
+            const pay = db.select().from(payments).where(eq(payments.id, a.paymentId)).get()
+            return {
+              paymentId: a.paymentId,
+              receiptNo: pay?.receiptNo ?? null,
+              paymentDate: pay?.paymentDate ?? '',
+              method: pay?.method ?? '',
+              amount: a.amount,
+              allocationStatus: (a.status as 'active' | 'superseded' | 'void') ?? 'active',
+              paymentStatus: (pay?.status as 'active' | 'void') ?? 'void',
+            }
+          })
+          .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate))
+      : []
+
     return {
       id: row.id,
       uuid: row.uuid,
@@ -572,6 +627,7 @@ export function createBillingService(
       createdBy: row.createdBy,
       lines,
       balanceDue,
+      paymentHistory,
     }
   }
 
@@ -589,10 +645,13 @@ export function createBillingService(
       notes?: string
       /** When regenerating, allow replacing an existing draft */
       allowReplaceDraft?: boolean
+      /** Owner-confirmed write into a closed period */
+      forceClosedPeriod?: boolean
     } = {},
     userId?: number | null,
   ): InvoiceDto {
     assertPeriod(period)
+    assertPeriodWritable(period, opts.forceClosedPeriod)
     const preview = buildComposition(customerId, period)
     const existing = findExistingPeriodInvoice(customerId, period)
 
@@ -615,7 +674,7 @@ export function createBillingService(
     let invoiceId = 0
     db.transaction((tx) => {
       if (existing?.status === 'draft') {
-        clearDraftLinks(tx, existing.id)
+        clearDraftLines(tx, existing.id)
         const invoiceNo = existing.invoiceNo
         tx.update(invoices)
           .set({
@@ -696,12 +755,17 @@ export function createBillingService(
     return getById(invoiceId)
   }
 
-  function issueInvoice(invoiceId: number, userId?: number | null): InvoiceDto {
+  function issueInvoice(
+    invoiceId: number,
+    userId?: number | null,
+    opts: { forceClosedPeriod?: boolean } = {},
+  ): InvoiceDto {
     const row = db.select().from(invoices).where(eq(invoices.id, invoiceId)).get()
     if (!row) throw new AppError('NOT_FOUND', 'Invoice not found')
     if (row.status !== 'draft') {
       throw new AppError('INVOICE_ALREADY_ISSUED', `Invoice is ${row.status}, cannot issue`)
     }
+    assertPeriodWritable(row.period ?? row.periodStart.slice(0, 7), opts.forceClosedPeriod)
 
     // Opening balance is already in the ledger — append invoice_total only, never total_payable.
     // Prior customer credit is reflected in opening_balance / total_payable carry-forward.
@@ -757,15 +821,21 @@ export function createBillingService(
     return getById(invoiceId)
   }
 
-  function voidInvoice(invoiceId: number, reason: string, userId?: number | null): InvoiceDto {
+  function voidInvoice(
+    invoiceId: number,
+    reason: string,
+    userId?: number | null,
+    opts: { forceClosedPeriod?: boolean } = {},
+  ): InvoiceDto {
     if (!reason.trim()) throw new AppError('VALIDATION_FAILED', 'Void reason is required')
     const row = db.select().from(invoices).where(eq(invoices.id, invoiceId)).get()
     if (!row) throw new AppError('NOT_FOUND', 'Invoice not found')
     if (row.status === 'void') throw new AppError('CONFLICT', 'Invoice already void')
+    assertPeriodWritable(row.period ?? row.periodStart.slice(0, 7), opts.forceClosedPeriod)
     if (row.status === 'draft') {
-      // Draft: just clear links and mark void — no ledger to reverse
+      // Draft: unlink sources, keep lines for history — no ledger to reverse
       db.transaction((tx) => {
-        clearDraftLinks(tx, invoiceId)
+        unlinkInvoiceSources(tx, invoiceId)
         tx.update(invoices)
           .set({
             status: 'void',
@@ -788,11 +858,13 @@ export function createBillingService(
       return getById(invoiceId)
     }
 
-    // Check allocations
+    // Check active allocations only
     const allocs = db
       .select()
       .from(paymentAllocations)
-      .where(eq(paymentAllocations.invoiceId, invoiceId))
+      .where(
+        and(eq(paymentAllocations.invoiceId, invoiceId), eq(paymentAllocations.status, 'active')),
+      )
       .all()
     if (allocs.length > 0) {
       throw new AppError(
@@ -805,7 +877,8 @@ export function createBillingService(
       if (row.invoiceTotal !== 0) {
         ledger.reverseEntriesFor(tx, 'invoices', invoiceId, reason, userId)
       }
-      clearDraftLinks(tx, invoiceId)
+      // Keep invoice_lines so the voided document remains reproducible.
+      unlinkInvoiceSources(tx, invoiceId)
       tx.update(invoices)
         .set({
           status: 'void',
@@ -843,10 +916,12 @@ export function createBillingService(
       issueDate?: string
       includeZeroActivity?: boolean
       customerIds?: number[]
+      forceClosedPeriod?: boolean
     } = {},
     userId?: number | null,
   ): BatchResult {
     assertPeriod(period)
+    assertPeriodWritable(period, opts.forceClosedPeriod)
     const start = performance.now()
     const includeZero = opts.includeZeroActivity ?? false
 
@@ -917,7 +992,11 @@ export function createBillingService(
         const inv = generateInvoice(
           customerId,
           period,
-          { issueDate: opts.issueDate, allowReplaceDraft: true },
+          {
+            issueDate: opts.issueDate,
+            allowReplaceDraft: true,
+            forceClosedPeriod: opts.forceClosedPeriod,
+          },
           userId,
         )
         invoiceIds.push(inv.id)
@@ -1014,12 +1093,13 @@ export function createBillingService(
   function issueAll(
     invoiceIds: number[],
     userId?: number | null,
+    opts: { forceClosedPeriod?: boolean } = {},
   ): { issued: number; errors: string[] } {
     let issued = 0
     const errors: string[] = []
     for (const id of invoiceIds) {
       try {
-        issueInvoice(id, userId)
+        issueInvoice(id, userId, opts)
         issued += 1
       } catch (err) {
         errors.push(err instanceof AppError ? err.message : String(err))
@@ -1071,13 +1151,18 @@ export function createBillingService(
       .run()
   }
 
-  /** Revenue accrual for a period — deposits excluded by construction (not in invoice_total). */
+  /** Revenue accrual for a period — issued+ only; deposits excluded (not in invoice_total). */
   function revenueAccrual(period: string): number {
     assertPeriod(period)
     const rows = db
       .select({ invoiceTotal: invoices.invoiceTotal })
       .from(invoices)
-      .where(and(eq(invoices.period, period), ne(invoices.status, 'void')))
+      .where(
+        and(
+          eq(invoices.period, period),
+          sql`${invoices.status} IN ('issued','partially_paid','paid')`,
+        ),
+      )
       .all()
     return rows.reduce((s, r) => s + r.invoiceTotal, 0)
   }

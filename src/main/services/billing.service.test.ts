@@ -72,6 +72,7 @@ describe('billing Phase 3 acceptance', () => {
       receivables,
       owner,
       settings,
+      period,
     }
   }
 
@@ -263,8 +264,15 @@ describe('billing Phase 3 acceptance', () => {
     const issued = billing.issueInvoice(draft.id, owner.id)
     expect(Number(ledger.getBalance(c.id))).toBe(before + issued.invoiceTotal)
 
+    const lineCountBeforeVoid = issued.lines.length
+    expect(lineCountBeforeVoid).toBeGreaterThan(0)
+
     billing.voidInvoice(issued.id, 'Correction', owner.id)
     expect(Number(ledger.getBalance(c.id))).toBe(before)
+
+    const voided = billing.getById(issued.id)
+    expect(voided.status).toBe('void')
+    expect(voided.lines).toHaveLength(lineCountBeforeVoid)
 
     const rows = db.select().from(ledgerEntries).where(eq(ledgerEntries.customerId, c.id)).all()
     expect(rows.some((r) => r.entryType === 'invoice')).toBe(true)
@@ -369,12 +377,16 @@ describe('billing Phase 3 acceptance', () => {
 
     const draft = billing.generateInvoice(c.id, '2026-07', {}, owner.id)
     expect(draft.lines.some((l) => l.lineType === 'deposit')).toBe(true)
-    expect(draft.invoiceTotal).toBe(Number(toPaisa(300))) // 5×60 only — deposit not in total
+    expect(draft.invoiceTotal).toBe(Number(toPaisa(300))) // 5×60 only — deposit not in revenue
     expect(draft.chargesTotal).toBe(0)
+    // Document amount due includes deposit credit so it matches the ledger
+    expect(draft.totalPayable).toBe(Number(toPaisa(-700)))
+    expect(draft.balanceDue).toBe(Number(toPaisa(-700)))
 
-    billing.issueInvoice(draft.id, owner.id)
+    const issued = billing.issueInvoice(draft.id, owner.id)
     // Balance: −1000 + 300 invoice = −700
     expect(Number(ledger.getBalance(c.id))).toBe(Number(toPaisa(-700)))
+    expect(issued.balanceDue).toBe(Number(ledger.getBalance(c.id)))
 
     expect(billing.revenueAccrual('2026-07')).toBe(Number(toPaisa(300)))
     expect(billing.revenueCash('2026-07')).toBe(0)
@@ -425,7 +437,7 @@ describe('billing Phase 3 acceptance', () => {
   }, 60_000)
 
   it('10. ageing buckets across month boundary (1st vs 31st)', async () => {
-    const { receivables } = await setup()
+    const { customers, deliveries, billing, receivables, settings, owner } = await setup()
     // Due 2026-07-01, asOf 2026-08-01 → 31 days → 31-60
     expect(receivables.ageingBucket(receivables.daysBetween('2026-07-01', '2026-08-01'))).toBe(
       '31-60',
@@ -436,6 +448,47 @@ describe('billing Phase 3 acceptance', () => {
     )
     // Not yet due → current
     expect(receivables.ageingBucket(0)).toBe('current')
+
+    // Integration: real invoices through receivables.report()
+    settings.setMany({ 'invoice.dueDays': 0 }, { userId: owner.id })
+    const early = customers.create(
+      { name: 'Due 1st', rate: Number(toPaisa(100)), joinedOn: '2026-05-01' },
+      owner.id,
+    )
+    const late = customers.create(
+      { name: 'Due 31st', rate: Number(toPaisa(100)), joinedOn: '2026-05-01' },
+      owner.id,
+    )
+    deliveries.upsertDelivery({
+      customerId: early.id,
+      date: '2026-06-15',
+      quantity: 10,
+      userId: owner.id,
+    })
+    deliveries.upsertDelivery({
+      customerId: late.id,
+      date: '2026-07-15',
+      quantity: 5,
+      userId: owner.id,
+    })
+    const earlyInv = billing.issueInvoice(
+      billing.generateInvoice(early.id, '2026-06', { issueDate: '2026-07-01' }, owner.id).id,
+      owner.id,
+    )
+    const lateInv = billing.issueInvoice(
+      billing.generateInvoice(late.id, '2026-07', { issueDate: '2026-07-31' }, owner.id).id,
+      owner.id,
+    )
+    expect(earlyInv.dueDate).toBe('2026-07-01')
+    expect(lateInv.dueDate).toBe('2026-07-31')
+
+    const report = receivables.report('2026-08-01')
+    const earlyRow = report.outstanding.find((r) => r.customerId === early.id)
+    const lateRow = report.outstanding.find((r) => r.customerId === late.id)
+    expect(earlyRow?.ageingBucket).toBe('31-60')
+    expect(lateRow?.ageingBucket).toBe('1-30')
+    expect(report.bucketTotals['31-60']).toBeGreaterThanOrEqual(earlyRow!.balance)
+    expect(report.bucketTotals['1-30']).toBeGreaterThanOrEqual(lateRow!.balance)
   })
 
   it('11. recalculateLedger over seeded data is a no-op', async () => {
@@ -490,5 +543,154 @@ describe('billing Phase 3 acceptance', () => {
     expect(invoiceEntry.debit).toBe(inv.invoiceTotal)
     expect(invoiceEntry.debit).not.toBe(inv.totalPayable)
     expect(Number(ledger.getBalance(c.id))).toBe(Number(toPaisa(5060)))
+  })
+
+  it('closed period blocks generate/issue/void unless forceClosedPeriod', async () => {
+    const { customers, deliveries, billing, period, owner } = await setup()
+    const c = customers.create(
+      { name: 'Locked Bill', rate: Number(toPaisa(60)), joinedOn: '2026-06-01' },
+      owner.id,
+    )
+    deliveries.upsertDelivery({
+      customerId: c.id,
+      date: '2026-07-10',
+      quantity: 2,
+      userId: owner.id,
+    })
+    period.close('2026-07', owner.id)
+
+    expect(() => billing.generateInvoice(c.id, '2026-07', {}, owner.id)).toThrow(AppError)
+    try {
+      billing.generateInvoice(c.id, '2026-07', {}, owner.id)
+    } catch (e) {
+      expect((e as AppError).code).toBe('PERIOD_LOCKED')
+    }
+
+    const draft = billing.generateInvoice(c.id, '2026-07', { forceClosedPeriod: true }, owner.id)
+    expect(() => billing.issueInvoice(draft.id, owner.id)).toThrow(AppError)
+    const issued = billing.issueInvoice(draft.id, owner.id, { forceClosedPeriod: true })
+    expect(issued.status).toBe('issued')
+
+    expect(() => billing.voidInvoice(issued.id, 'oops', owner.id)).toThrow(AppError)
+    try {
+      billing.voidInvoice(issued.id, 'oops', owner.id)
+    } catch (e) {
+      expect((e as AppError).code).toBe('PERIOD_LOCKED')
+    }
+    const voided = billing.voidInvoice(issued.id, 'Correction', owner.id, {
+      forceClosedPeriod: true,
+    })
+    expect(voided.status).toBe('void')
+    expect(voided.lines.length).toBeGreaterThan(0)
+  })
+
+  it('revenueAccrual excludes drafts', async () => {
+    const { customers, deliveries, billing, owner } = await setup()
+    const c = customers.create(
+      { name: 'Draft Rev', rate: Number(toPaisa(50)), joinedOn: '2026-06-01' },
+      owner.id,
+    )
+    deliveries.upsertDelivery({
+      customerId: c.id,
+      date: '2026-07-08',
+      quantity: 4,
+      userId: owner.id,
+    })
+    const draft = billing.generateInvoice(c.id, '2026-07', {}, owner.id)
+    expect(draft.invoiceTotal).toBe(Number(toPaisa(200)))
+    expect(billing.revenueAccrual('2026-07')).toBe(0)
+
+    billing.issueInvoice(draft.id, owner.id)
+    expect(billing.revenueAccrual('2026-07')).toBe(Number(toPaisa(200)))
+  })
+
+  it('voidPayment soft-voids allocations (keeps history)', async () => {
+    const { customers, deliveries, billing, payments, db, owner } = await setup()
+    const c = customers.create(
+      { name: 'Alloc Hist', rate: Number(toPaisa(100)), joinedOn: '2026-06-01' },
+      owner.id,
+    )
+    deliveries.upsertDelivery({
+      customerId: c.id,
+      date: '2026-07-01',
+      quantity: 3,
+      userId: owner.id,
+    })
+    const inv = billing.issueInvoice(
+      billing.generateInvoice(c.id, '2026-07', {}, owner.id).id,
+      owner.id,
+    )
+    const pay = payments.recordPayment(
+      {
+        customerId: c.id,
+        date: '2026-08-01',
+        amount: Number(toPaisa(200)),
+        method: 'cash',
+      },
+      owner.id,
+    )
+    expect(pay.allocations).toHaveLength(1)
+    expect(pay.allocations[0]!.invoiceId).toBe(inv.id)
+
+    payments.voidPayment(pay.id, 'Misposted', owner.id)
+    const rows = db
+      .select()
+      .from(paymentAllocations)
+      .where(eq(paymentAllocations.paymentId, pay.id))
+      .all()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.status).toBe('void')
+
+    const history = billing.getById(inv.id).paymentHistory
+    expect(history.some((h) => h.paymentId === pay.id && h.allocationStatus === 'void')).toBe(true)
+  })
+
+  it('reallocate supersedes prior allocation rows', async () => {
+    const { customers, deliveries, billing, payments, db, owner } = await setup()
+    const c = customers.create(
+      { name: 'Realloc', rate: Number(toPaisa(100)), joinedOn: '2026-05-01' },
+      owner.id,
+    )
+    deliveries.upsertDelivery({
+      customerId: c.id,
+      date: '2026-06-10',
+      quantity: 2,
+      userId: owner.id,
+    })
+    deliveries.upsertDelivery({
+      customerId: c.id,
+      date: '2026-07-10',
+      quantity: 2,
+      userId: owner.id,
+    })
+    const inv1 = billing.issueInvoice(
+      billing.generateInvoice(c.id, '2026-06', {}, owner.id).id,
+      owner.id,
+    )
+    const inv2 = billing.issueInvoice(
+      billing.generateInvoice(c.id, '2026-07', {}, owner.id).id,
+      owner.id,
+    )
+    const pay = payments.recordPayment(
+      {
+        customerId: c.id,
+        date: '2026-08-01',
+        amount: Number(toPaisa(200)),
+        method: 'cash',
+        allocations: [{ invoiceId: inv1.id, amount: Number(toPaisa(200)) }],
+      },
+      owner.id,
+    )
+
+    payments.reallocate(pay.id, [{ invoiceId: inv2.id, amount: Number(toPaisa(200)) }], owner.id)
+    const rows = db
+      .select()
+      .from(paymentAllocations)
+      .where(eq(paymentAllocations.paymentId, pay.id))
+      .all()
+    expect(rows).toHaveLength(2)
+    expect(rows.filter((r) => r.status === 'superseded')).toHaveLength(1)
+    expect(rows.filter((r) => r.status === 'active')).toHaveLength(1)
+    expect(rows.find((r) => r.status === 'active')!.invoiceId).toBe(inv2.id)
   })
 })

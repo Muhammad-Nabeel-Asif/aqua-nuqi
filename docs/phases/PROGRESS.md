@@ -606,7 +606,7 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 
 ## Phase 3 — Billing, Customer Ledger & Payments
 
-**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.5.0`
+**Date:** 2026-08-01 · **Status:** partial · **package.json:** `0.5.0`
 
 ### Built
 
@@ -622,6 +622,7 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 ### Migrations added
 
 - `drizzle/0005_chilly_silverclaw.sql` — billing tables + delivery/adjustment invoice FKs
+- `drizzle/0006_alloc_status.sql` — `payment_allocations.status` (active/superseded/void)
 
 ### IPC channels added
 
@@ -684,7 +685,8 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
   voidReason, pdfPath, lastSharedAt, notes,
   createdAt, updatedAt, createdBy,
   lines: InvoiceLineDto[],  // includes id
-  balanceDue                 // totalPayable − paidTotal (0 if void)
+  balanceDue,                // totalPayable − paidTotal (0 if void)
+  paymentHistory             // allocations (active/superseded/void) for this invoice
 }
 ```
 
@@ -695,19 +697,38 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
   `revenueAccrual` / `revenueCash`).
 - Deposit adjustments ledger immediately; other adjustments hit the ledger via
   `invoice_total` on issue. Deposit lines appear on the invoice but are **not** in
-  `invoice_total` (avoids double-count + revenue inflation).
+  `invoice_total` (avoids double-count + revenue inflation). Document `total_payable` /
+  `balanceDue` **do** include deposit line amounts so cash-to-collect matches the ledger.
 - Credit/debit notes (FR-BL-11 Should): void + regenerate / adjustment path; no separate
   credit-note document type yet.
 - PDF/WhatsApp: buttons present, disabled with `TODO(phase-4)`.
+- `revenue_accrual` counts only `issued` / `partially_paid` / `paid` (drafts excluded).
 
 ### What the next phase must know
 
 - Issue appends ledger debit for **`invoice_total` only** — never `total_payable`.
-- Void appends `void_reversal` and clears `deliveries.invoice_id` / adjustment links.
+- Void appends `void_reversal`, clears delivery/adjustment links, and **keeps** `invoice_lines`.
+- `payment_allocations.status` is `active` | `superseded` | `void` (never hard-deleted).
+- Generate/issue respect period lock (`PERIOD_LOCKED`); owner may pass `forceClosedPeriod`.
 - `pdf_path` / `last_shared_at` columns exist; Phase 4 should fill them and enable print/share.
 - Walk-in customers are excluded from invoicing and receivables.
-- **Next phase is Phase 4 (PDF invoices & sharing).**
+- **Next phase is Phase 4 (PDF invoices & sharing)** after a stable Phase 3 release.
 
 ### Escalations / questions for the human
 
 - Confirm deposit-in-running-balance (vs Phase 1 AR exclusion) is the intended live behaviour.
+- Stable release + Windows upgrade matrix still required before calling Phase 3 complete
+  (latest stable remains v0.4.25; `0.5.x` has been pre-release only).
+
+### Review fixes (2026-08-01)
+
+- Period lock on `generateInvoice` / `generateBatch` / `issueInvoice` (+ `forceClosedPeriod`).
+- Void keeps `invoice_lines`; only draft regeneration hard-clears lines.
+- Deposit lines fold into `totalPayable` / `balanceDue` (still excluded from `invoice_total` /
+  revenue).
+- Soft-void / supersede `payment_allocations` (migration `0006_alloc_status`).
+- Invoice detail: payment history + status timeline; payments: reallocate UI + customer picker;
+  Ctrl+K “Record payment”; adjustment kinds expanded; Money/`formatMoney` in payments/
+  receivables CSV.
+- `revenueAccrual` excludes drafts; ageing integration test via `receivables.report()`.
+- Status → **partial** until stable Build & Release + upgrade matrix are recorded.

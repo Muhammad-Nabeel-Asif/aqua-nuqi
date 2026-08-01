@@ -26,6 +26,7 @@ export type PaymentAllocationDto = {
   invoiceId: number
   invoiceNo: string
   amount: number
+  status: 'active' | 'superseded' | 'void'
 }
 
 export type PaymentDto = {
@@ -100,9 +101,12 @@ export function createPaymentService(
         invoiceId: a.invoiceId,
         invoiceNo: inv?.invoiceNo ?? '',
         amount: a.amount,
+        status: (a.status as PaymentAllocationDto['status']) ?? 'active',
       }
     })
-    const allocated = allocations.reduce((s, a) => s + a.amount, 0)
+    const allocated = allocations
+      .filter((a) => a.status === 'active')
+      .reduce((s, a) => s + a.amount, 0)
     return {
       id: row.id,
       uuid: row.uuid,
@@ -222,6 +226,7 @@ export function createPaymentService(
             paymentId: row.id,
             invoiceId: a.invoiceId,
             amount: a.amount,
+            status: 'active',
           })
           .run()
         const inv = tx.select().from(invoices).where(eq(invoices.id, a.invoiceId)).get()!
@@ -266,7 +271,7 @@ export function createPaymentService(
       const allocs = tx
         .select()
         .from(paymentAllocations)
-        .where(eq(paymentAllocations.paymentId, id))
+        .where(and(eq(paymentAllocations.paymentId, id), eq(paymentAllocations.status, 'active')))
         .all()
 
       for (const a of allocs) {
@@ -274,7 +279,10 @@ export function createPaymentService(
         if (inv) {
           billing.updateInvoicePaid(tx, a.invoiceId, Math.max(0, inv.paidTotal - a.amount))
         }
-        tx.delete(paymentAllocations).where(eq(paymentAllocations.id, a.id)).run()
+        tx.update(paymentAllocations)
+          .set({ status: 'void' })
+          .where(eq(paymentAllocations.id, a.id))
+          .run()
       }
 
       ledger.reverseEntriesFor(tx, 'payments', id, reason, userId)
@@ -320,17 +328,22 @@ export function createPaymentService(
       const old = tx
         .select()
         .from(paymentAllocations)
-        .where(eq(paymentAllocations.paymentId, paymentId))
+        .where(
+          and(eq(paymentAllocations.paymentId, paymentId), eq(paymentAllocations.status, 'active')),
+        )
         .all()
       for (const a of old) {
         const inv = tx.select().from(invoices).where(eq(invoices.id, a.invoiceId)).get()
         if (inv) billing.updateInvoicePaid(tx, a.invoiceId, Math.max(0, inv.paidTotal - a.amount))
-        tx.delete(paymentAllocations).where(eq(paymentAllocations.id, a.id)).run()
+        tx.update(paymentAllocations)
+          .set({ status: 'superseded' })
+          .where(eq(paymentAllocations.id, a.id))
+          .run()
       }
       for (const a of allocations) {
         if (a.amount <= 0) continue
         tx.insert(paymentAllocations)
-          .values({ paymentId, invoiceId: a.invoiceId, amount: a.amount })
+          .values({ paymentId, invoiceId: a.invoiceId, amount: a.amount, status: 'active' })
           .run()
         const inv = tx.select().from(invoices).where(eq(invoices.id, a.invoiceId)).get()!
         billing.updateInvoicePaid(tx, a.invoiceId, inv.paidTotal + a.amount)

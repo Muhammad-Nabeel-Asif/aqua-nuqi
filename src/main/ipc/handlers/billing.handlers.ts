@@ -65,7 +65,11 @@ export function registerBillingHandlers(): void {
       item: getAppContext().billing.generateInvoice(
         input.customerId,
         input.period,
-        { issueDate: input.issueDate, notes: input.notes },
+        {
+          issueDate: input.issueDate,
+          notes: input.notes,
+          forceClosedPeriod: input.forceClosedPeriod,
+        },
         ctx.userId,
       ),
     }),
@@ -84,6 +88,7 @@ export function registerBillingHandlers(): void {
           issueDate: input.issueDate,
           includeZeroActivity: input.includeZeroActivity,
           customerIds: input.customerIds,
+          forceClosedPeriod: input.forceClosedPeriod,
         },
         ctx.userId,
       ),
@@ -95,7 +100,9 @@ export function registerBillingHandlers(): void {
     output: issueInvoiceOutput,
     roles: ['owner', 'operator'],
     handler: (input, ctx) => ({
-      item: getAppContext().billing.issueInvoice(input.id, ctx.userId),
+      item: getAppContext().billing.issueInvoice(input.id, ctx.userId, {
+        forceClosedPeriod: input.forceClosedPeriod,
+      }),
     }),
   })
 
@@ -104,7 +111,10 @@ export function registerBillingHandlers(): void {
     input: issueAllInput,
     output: issueAllOutput,
     roles: ['owner', 'operator'],
-    handler: (input, ctx) => getAppContext().billing.issueAll(input.invoiceIds, ctx.userId),
+    handler: (input, ctx) =>
+      getAppContext().billing.issueAll(input.invoiceIds, ctx.userId, {
+        forceClosedPeriod: input.forceClosedPeriod,
+      }),
   })
 
   defineHandler({
@@ -113,7 +123,9 @@ export function registerBillingHandlers(): void {
     output: voidInvoiceOutput,
     roles: ['owner'],
     handler: (input, ctx) => ({
-      item: getAppContext().billing.voidInvoice(input.id, input.reason, ctx.userId),
+      item: getAppContext().billing.voidInvoice(input.id, input.reason, ctx.userId, {
+        forceClosedPeriod: input.forceClosedPeriod,
+      }),
     }),
   })
 

@@ -29,6 +29,11 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ### Fixed
 
+- **Phase 3 review:** period lock on generate/issue/void (`forceClosedPeriod` confirm);
+  void keeps `invoice_lines`; deposit lines in `totalPayable`/`balanceDue`; soft-void
+  `payment_allocations` (migration `0006`); invoice payment history + reallocate UI;
+  `revenueAccrual` excludes drafts; ageing via `receivables.report()`; Money/`formatMoney`
+  in payments/receivables; Ctrl+K record payment; full adjustment kinds.
 - **Phase 2 criteria #9:** timed 100 consecutive qty→Enter strokes on `/deliveries/daily`
   (seeded demo, keyboard only) in **9.53 s** — under the 4-minute hard gate; Phase 2 marked
   complete.

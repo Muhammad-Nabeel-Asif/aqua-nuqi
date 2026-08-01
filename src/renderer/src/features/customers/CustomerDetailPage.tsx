@@ -449,9 +449,17 @@ function AdjustmentDialog({
   onClose: () => void
   onSaved: () => void
 }) {
-  const [kind, setKind] = useState<'discount' | 'other_charge' | 'deposit_received' | 'write_off'>(
-    'discount',
-  )
+  const [kind, setKind] = useState<
+    | 'discount'
+    | 'other_charge'
+    | 'write_off'
+    | 'deposit_received'
+    | 'deposit_refunded'
+    | 'damaged_bottle'
+    | 'lost_bottle'
+    | 'dispenser_rent'
+    | 'delivery_charge'
+  >('discount')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(todayBusinessDate())
   const [description, setDescription] = useState('')
@@ -468,8 +476,13 @@ function AdjustmentDialog({
           >
             <option value="discount">Discount</option>
             <option value="other_charge">Other charge</option>
+            <option value="delivery_charge">Delivery charge</option>
+            <option value="dispenser_rent">Dispenser rent</option>
+            <option value="damaged_bottle">Damaged bottle</option>
+            <option value="lost_bottle">Lost bottle</option>
             <option value="write_off">Write-off</option>
             <option value="deposit_received">Deposit received</option>
+            <option value="deposit_refunded">Deposit refunded</option>
           </select>
         </div>
         <div>

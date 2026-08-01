@@ -43,6 +43,13 @@
       "when": 1785574683540,
       "tag": "0005_chilly_silverclaw",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1785579000000,
+      "tag": "0006_alloc_status",
+      "breakpoints": true
     }
   ]
 }

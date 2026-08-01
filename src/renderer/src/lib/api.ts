@@ -369,8 +369,13 @@ export const api = {
         'invoices:previewBatch',
         input,
       ),
-    generate: (input: { customerId: number; period: string; issueDate?: string; notes?: string }) =>
-      invoke<{ item: import('@shared/contracts').InvoiceDto }>('invoices:generate', input),
+    generate: (input: {
+      customerId: number
+      period: string
+      issueDate?: string
+      notes?: string
+      forceClosedPeriod?: boolean
+    }) => invoke<{ item: import('@shared/contracts').InvoiceDto }>('invoices:generate', input),
     generateBatch: (input: {
       period: string
       filter: {
@@ -381,6 +386,7 @@ export const api = {
       }
       issueDate?: string
       includeZeroActivity?: boolean
+      forceClosedPeriod?: boolean
     }) =>
       invoke<{
         generated: number
@@ -388,12 +394,22 @@ export const api = {
         invoiceIds: number[]
         elapsedMs: number
       }>('invoices:generateBatch', input),
-    issue: (id: number) =>
-      invoke<{ item: import('@shared/contracts').InvoiceDto }>('invoices:issue', { id }),
-    issueAll: (invoiceIds: number[]) =>
-      invoke<{ issued: number; errors: string[] }>('invoices:issueAll', { invoiceIds }),
-    void: (id: number, reason: string) =>
-      invoke<{ item: import('@shared/contracts').InvoiceDto }>('invoices:void', { id, reason }),
+    issue: (id: number, forceClosedPeriod?: boolean) =>
+      invoke<{ item: import('@shared/contracts').InvoiceDto }>('invoices:issue', {
+        id,
+        forceClosedPeriod,
+      }),
+    issueAll: (invoiceIds: number[], forceClosedPeriod?: boolean) =>
+      invoke<{ issued: number; errors: string[] }>('invoices:issueAll', {
+        invoiceIds,
+        forceClosedPeriod,
+      }),
+    void: (id: number, reason: string, forceClosedPeriod?: boolean) =>
+      invoke<{ item: import('@shared/contracts').InvoiceDto }>('invoices:void', {
+        id,
+        reason,
+        forceClosedPeriod,
+      }),
     list: (
       input: {
         period?: string

@@ -11,6 +11,7 @@ import { Label } from '@renderer/components/ui/label'
 import { api } from '@renderer/lib/api'
 import type { InvoicePreviewDto } from '@shared/contracts'
 import { currentPeriod, previousPeriod } from '@shared/date'
+import { AppError } from '@shared/errors'
 
 export function GenerateBillsPage() {
   const qc = useQueryClient()
@@ -54,7 +55,7 @@ export function GenerateBillsPage() {
     setSelected(on ? new Set(generatable.map((r) => r.customerId)) : new Set())
   }
 
-  async function generate() {
+  async function generate(forceClosedPeriod = false) {
     const ids = selected.size ? [...selected] : generatable.map((r) => r.customerId)
     if (!ids.length) {
       toast({ title: 'Nothing to generate', variant: 'error' })
@@ -66,6 +67,7 @@ export function GenerateBillsPage() {
         period,
         filter: { mode: 'selected', customerIds: ids },
         includeZeroActivity: includeZero,
+        forceClosedPeriod,
       })
       setResult(res)
       setSelected(new Set())
@@ -73,6 +75,13 @@ export function GenerateBillsPage() {
       await qc.invalidateQueries({ queryKey: ['invoices'] })
       toast({ title: `${res.generated} invoices generated`, variant: 'success' })
     } catch (e) {
+      if (e instanceof AppError && e.code === 'PERIOD_LOCKED' && !forceClosedPeriod) {
+        setBusy(false)
+        if (window.confirm(`${e.message}\n\nGenerate bills for this closed period anyway?`)) {
+          await generate(true)
+        }
+        return
+      }
       toast({
         title: 'Batch failed',
         description: e instanceof Error ? e.message : 'Error',

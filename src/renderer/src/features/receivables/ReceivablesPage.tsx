@@ -7,6 +7,7 @@ import { PageHeader } from '@renderer/components/PageHeader'
 import { Button } from '@renderer/components/ui/button'
 import { RecordPaymentDialog } from '@renderer/features/payments/RecordPaymentDialog'
 import { api } from '@renderer/lib/api'
+import { formatMoney, type Paisa } from '@shared/money'
 import { toWhatsAppE164 } from '@shared/phone'
 
 export function ReceivablesPage() {
@@ -35,7 +36,7 @@ export function ReceivablesPage() {
         r.code,
         r.name,
         r.phone ?? '',
-        String(r.balance / 100),
+        formatMoney(r.balance as Paisa),
         r.ageingBucket,
         String(r.daysOverdue),
         r.oldestUnpaidInvoiceDate ?? '',

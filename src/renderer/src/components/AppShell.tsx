@@ -248,7 +248,14 @@ export function AppShell() {
         </main>
       </div>
 
-      <CommandPalette items={items.map((i) => ({ to: i.to, label: i.label }))} />
+      <CommandPalette
+        items={[
+          ...items.map((i) => ({ to: i.to, label: i.label })),
+          ...(user && (user.role === 'owner' || user.role === 'operator')
+            ? [{ to: '/payments?record=1', label: 'Record payment' }]
+            : []),
+        ]}
+      />
       {locked ? <LockOverlay /> : null}
       {/* keep idle tracker referenced to avoid unused lint in future */}
       <span className="hidden">{idleMs}</span>

@@ -1,6 +1,6 @@
 # Aqua Nuqi — Data Model (authoritative)
 
-> This is the **single source of truth** for the database schema. Phase documents tell you *which*
+> This is the **single source of truth** for the database schema. Phase documents tell you _which_
 > tables to create in that phase; the exact definition always comes from here.
 > If a phase needs a column that is not here, add it here first (and note it in `PROGRESS.md`).
 
@@ -37,31 +37,31 @@ CREATE TABLE settings (
 
 Known setting keys (typed accessors in `settingsService`):
 
-| Key | Type | Default |
-|---|---|---|
-| `business.name` | string | "" |
-| `business.logoPath` | string | "" |
-| `business.address` | string | "" |
-| `business.phone` / `business.phone2` | string | "" |
-| `business.email` | string | "" |
-| `business.bankDetails` | string | "" |
-| `business.taxNumber` | string | "" |
-| `locale.currencyCode` / `currencySymbol` | string | `PKR` / `Rs` |
-| `locale.decimalPlaces` | number | 0 |
-| `locale.dateFormat` | string | `dd-MM-yyyy` |
-| `invoice.numberPrefix` | string | `INV` |
-| `invoice.numberFormat` | string | `{prefix}-{YYYY}-{MM}-{seq:4}` |
-| `invoice.dueDays` | number | 10 |
-| `invoice.footerNote` | string | "" |
-| `invoice.showBottleBalance` | boolean | true |
-| `billing.defaultBillingDay` | number | 1 |
-| `tax.enabled` / `tax.rate` | boolean / number | false / 0 |
-| `backup.folder` | string | `<userData>/backups` |
-| `backup.onExit` / `backup.daily` / `backup.weekly` | boolean | true |
-| `backup.keepDaily` / `keepWeekly` | number | 14 / 8 |
-| `backup.secondaryFolder` | string | "" |
-| `security.autoLockMinutes` | number | 15 |
-| `inventory.lowStockThreshold` | number | 0 |
+| Key                                                | Type             | Default                        |
+| -------------------------------------------------- | ---------------- | ------------------------------ |
+| `business.name`                                    | string           | ""                             |
+| `business.logoPath`                                | string           | ""                             |
+| `business.address`                                 | string           | ""                             |
+| `business.phone` / `business.phone2`               | string           | ""                             |
+| `business.email`                                   | string           | ""                             |
+| `business.bankDetails`                             | string           | ""                             |
+| `business.taxNumber`                               | string           | ""                             |
+| `locale.currencyCode` / `currencySymbol`           | string           | `PKR` / `Rs`                   |
+| `locale.decimalPlaces`                             | number           | 0                              |
+| `locale.dateFormat`                                | string           | `dd-MM-yyyy`                   |
+| `invoice.numberPrefix`                             | string           | `INV`                          |
+| `invoice.numberFormat`                             | string           | `{prefix}-{YYYY}-{MM}-{seq:4}` |
+| `invoice.dueDays`                                  | number           | 10                             |
+| `invoice.footerNote`                               | string           | ""                             |
+| `invoice.showBottleBalance`                        | boolean          | true                           |
+| `billing.defaultBillingDay`                        | number           | 1                              |
+| `tax.enabled` / `tax.rate`                         | boolean / number | false / 0                      |
+| `backup.folder`                                    | string           | `<userData>/backups`           |
+| `backup.onExit` / `backup.daily` / `backup.weekly` | boolean          | true                           |
+| `backup.keepDaily` / `keepWeekly`                  | number           | 14 / 8                         |
+| `backup.secondaryFolder`                           | string           | ""                             |
+| `security.autoLockMinutes`                         | number           | 15                             |
+| `inventory.lowStockThreshold`                      | number           | 0                              |
 
 ```sql
 CREATE TABLE users (
@@ -287,7 +287,8 @@ CREATE INDEX idx_deliveries_employee  ON deliveries(employee_id, delivery_date);
 ```
 
 **Rules**
-- Exactly one *recorded* row per customer/date/product (FR-DL-05).
+
+- Exactly one _recorded_ row per customer/date/product (FR-DL-05).
 - `amount = quantity * rate` for `per_bottle` customers; `0` when `is_free = 1`; `0` for
   `monthly_package` customers (the package charge is added at invoice time), but `rate` is still
   snapshotted for reporting.
@@ -390,7 +391,8 @@ CREATE TABLE payment_allocations (
   id INTEGER PRIMARY KEY,
   payment_id INTEGER NOT NULL REFERENCES payments(id),
   invoice_id INTEGER NOT NULL REFERENCES invoices(id),
-  amount INTEGER NOT NULL CHECK (amount > 0)
+  amount INTEGER NOT NULL CHECK (amount > 0),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','superseded','void'))
 );
 CREATE INDEX idx_alloc_payment ON payment_allocations(payment_id);
 CREATE INDEX idx_alloc_invoice ON payment_allocations(invoice_id);
@@ -415,6 +417,7 @@ CREATE INDEX idx_ledger_customer ON ledger_entries(customer_id, entry_date, id);
 ```
 
 **Rules**
+
 - Deposits are recorded in the ledger **and** in `customers.security_deposit_held`, but are
   excluded from all revenue/profit calculations (FR-BL-14).
 - Voiding an invoice or payment does **not** delete ledger rows; it appends a `void_reversal`
@@ -646,15 +649,15 @@ CREATE INDEX idx_stock_product ON stock_movements(product_id, bottle_state);
 
 **Movement recipes**
 
-| Event | Movements created |
-|---|---|
-| Buy 50 new bottles | `supplier → plant`, state `empty`, reason `purchase` (+ an expense) |
-| Fill 40 bottles | `plant → plant`, `empty` out / `filled` in — record as two rows: `empty: plant→none (production)` and `filled: none→plant (production)` |
-| Load van with 60 filled | `filled: plant → van`, reason `load_to_van` |
-| Deliver 3 to customer | `filled: van → customer` (or `plant → customer` if trips are not used), reason `delivery` |
-| Collect 3 empties | `empty: customer → van`, reason `empty_pickup` |
-| Van returns | `filled: van → plant` (unload), `empty: van → plant` |
-| Bottle broken | `empty|filled: plant → scrap`, reason `damaged` |
+| Event                   | Movements created                                                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Buy 50 new bottles      | `supplier → plant`, state `empty`, reason `purchase` (+ an expense)                                                                     |
+| Fill 40 bottles         | `plant → plant`, `empty` out / `filled` in — record as two rows: `empty: plant→none (production)` and `filled: none→plant (production)` |
+| Load van with 60 filled | `filled: plant → van`, reason `load_to_van`                                                                                             |
+| Deliver 3 to customer   | `filled: van → customer` (or `plant → customer` if trips are not used), reason `delivery`                                               |
+| Collect 3 empties       | `empty: customer → van`, reason `empty_pickup`                                                                                          |
+| Van returns             | `filled: van → plant` (unload), `empty: van → plant`                                                                                    |
+| Bottle broken           | `empty                                                                                                                                  | filled: plant → scrap`, reason `damaged` |
 
 Derived stock = Σ(in) − Σ(out) per `(product, state, location)`.
 
@@ -697,8 +700,8 @@ customer_balance(c)
 invoice.total_payable = opening_balance + invoice_total
 invoice.invoice_total = deliveries_total + charges_total − discount_total + tax_total
 
-revenue_accrual(period)  = Σ invoices.invoice_total  where status != 'void' and period overlaps
-                           (deposits excluded by construction — they are adjustments, not revenue)
+revenue_accrual(period)  = Σ invoices.invoice_total  where status IN ('issued','partially_paid','paid')
+                           (drafts excluded; deposits excluded by construction — not in invoice_total)
 revenue_cash(period)     = Σ payments.amount where status='active' and payment_date in period
                            (excluding deposit receipts)
 expenses_total(period)   = Σ expenses.amount where status='active' and expense_date in period
@@ -707,8 +710,8 @@ net_profit(period)       = revenue(period) − expenses_total(period)
 cost_per_bottle(period)  = expenses_total(period) / Σ deliveries.quantity in period
 ```
 
-> **Accounting note that must be honoured:** security deposits are a *liability*, not revenue.
-> Employee advances are *not* an expense at the time they are given — they become an expense when
+> **Accounting note that must be honoured:** security deposits are a _liability_, not revenue.
+> Employee advances are _not_ an expense at the time they are given — they become an expense when
 > the salary is charged. If an advance is recorded as an expense when paid out, it must be reversed
 > in the payroll month to avoid double counting. Implement it as: advance payout creates an
 > `Employee Advance` expense; the payroll run then books salary expense **net of** advances already

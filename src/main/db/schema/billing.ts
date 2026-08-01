@@ -120,9 +120,15 @@ export const paymentAllocations = sqliteTable(
       .notNull()
       .references(() => invoices.id),
     amount: integer('amount').notNull(),
+    /** active | superseded | void — never hard-deleted */
+    status: text('status').notNull().default('active'),
   },
   (t) => ({
     amountCheck: check('payment_allocations_amount_check', sql`${t.amount} > 0`),
+    statusCheck: check(
+      'payment_allocations_status_check',
+      sql`${t.status} IN ('active','superseded','void')`,
+    ),
     paymentIdx: index('idx_alloc_payment').on(t.paymentId),
     invoiceIdx: index('idx_alloc_invoice').on(t.invoiceId),
   }),

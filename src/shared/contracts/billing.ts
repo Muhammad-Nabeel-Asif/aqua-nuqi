@@ -61,6 +61,17 @@ export const invoiceDto = z.object({
   createdBy: z.number().int().nullable(),
   lines: z.array(invoiceLineDto),
   balanceDue: z.number().int(),
+  paymentHistory: z.array(
+    z.object({
+      paymentId: z.number().int(),
+      receiptNo: z.string().nullable(),
+      paymentDate: z.string(),
+      method: z.string(),
+      amount: z.number().int(),
+      allocationStatus: z.enum(['active', 'superseded', 'void']),
+      paymentStatus: z.enum(['active', 'void']),
+    }),
+  ),
 })
 export type InvoiceDto = z.infer<typeof invoiceDto>
 
@@ -114,6 +125,7 @@ export const generateInvoiceInput = z.object({
   period,
   issueDate: businessDate.optional(),
   notes: z.string().optional(),
+  forceClosedPeriod: z.boolean().optional(),
 })
 export const generateInvoiceOutput = z.object({ item: invoiceDto })
 
@@ -123,6 +135,7 @@ export const generateBatchInput = z.object({
   issueDate: businessDate.optional(),
   includeZeroActivity: z.boolean().optional(),
   customerIds: z.array(z.number().int().positive()).optional(),
+  forceClosedPeriod: z.boolean().optional(),
 })
 export const generateBatchOutput = z.object({
   generated: z.number().int(),
@@ -138,17 +151,22 @@ export const generateBatchOutput = z.object({
   elapsedMs: z.number(),
 })
 
-export const issueInvoiceInput = z.object({ id: z.number().int().positive() })
+export const issueInvoiceInput = z.object({
+  id: z.number().int().positive(),
+  forceClosedPeriod: z.boolean().optional(),
+})
 export const issueInvoiceOutput = z.object({ item: invoiceDto })
 
 export const voidInvoiceInput = z.object({
   id: z.number().int().positive(),
   reason: z.string().trim().min(1),
+  forceClosedPeriod: z.boolean().optional(),
 })
 export const voidInvoiceOutput = z.object({ item: invoiceDto })
 
 export const issueAllInput = z.object({
   invoiceIds: z.array(z.number().int().positive()).min(1),
+  forceClosedPeriod: z.boolean().optional(),
 })
 export const issueAllOutput = z.object({
   issued: z.number().int(),
