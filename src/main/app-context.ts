@@ -12,6 +12,7 @@ import type { DeliveryService } from '@main/services/delivery.service'
 import type { LedgerService } from '@main/services/ledger.service'
 import type { MasterDataService } from '@main/services/master-data.service'
 import type { PaymentService } from '@main/services/payment.service'
+import type { PdfService } from '@main/services/pdf.service'
 import type { PeriodService } from '@main/services/period.service'
 import type { RateService } from '@main/services/rate.service'
 import type { ReceivablesService } from '@main/services/receivables.service'
@@ -42,6 +43,7 @@ export type AppContext = {
   billing: BillingService
   payments: PaymentService
   receivables: ReceivablesService
+  pdf: PdfService
   appVersion: string
   schemaVersion: number
   setupRequired: boolean

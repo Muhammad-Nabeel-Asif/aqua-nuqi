@@ -16,6 +16,20 @@ export const SETTING_DEFAULTS = {
   'invoice.dueDays': 10,
   'invoice.footerNote': '',
   'invoice.showBottleBalance': true,
+  'invoice.showRateColumn': true,
+  'invoice.accentColour': '#0284c7',
+  'invoice.termsText':
+    'Payment is due by the due date. Late payments may attract additional charges.',
+  'invoice.defaultPageSize': 'A4',
+  'invoice.whatsappTemplate':
+    'Assalam-o-Alaikum {customerName},\n\nYour water bill for {period} is ready.\nUnits: {units}\nThis month: {amount}\nPrevious balance: {previousBalance}\n*Total payable: {totalPayable}*\nDue: {dueDate}\n\n— {businessName}',
+  'invoice.emailSubjectTemplate': 'Invoice {period} — {businessName}',
+  'invoice.emailBodyTemplate':
+    'Dear {customerName},\n\nPlease find your bill for {period}.\nTotal payable: {totalPayable}\nDue date: {dueDate}\n\nRegards,\n{businessName}',
+  'documents.folder': '',
+  'locale.numberingSystem': 'lakh_crore',
+  'print.defaultPrinter': '',
+  'print.defaultThermalPrinter': '',
   'billing.defaultBillingDay': 1,
   'tax.enabled': false,
   'tax.rate': 0,

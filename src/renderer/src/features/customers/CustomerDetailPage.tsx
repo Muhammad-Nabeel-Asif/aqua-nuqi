@@ -364,40 +364,64 @@ function CustomerLedgerTab({ customerId }: { customerId: number }) {
     queryFn: () => api.ledger.get(customerId),
   })
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b text-left">
-          <th className="py-2">Date</th>
-          <th>Description</th>
-          <th className="text-right">Debit</th>
-          <th className="text-right">Credit</th>
-          <th className="text-right">Balance</th>
-        </tr>
-      </thead>
-      <tbody>
-        {(q.data?.items ?? []).map((r) => (
-          <tr key={r.id} className="border-b">
-            <td className="py-2">
-              <DateText value={r.entryDate} />
-            </td>
-            <td>
-              {r.description}
-              {r.isNonRevenue ? ' (non-revenue)' : ''}
-              {r.refTable === 'invoices' && r.refId != null && (
-                <Link className="ml-2 text-sky-700" to={`/billing/invoices/${r.refId}`}>
-                  view
-                </Link>
-              )}
-            </td>
-            <td className="text-right">{r.debit ? <Money value={r.debit} /> : '—'}</td>
-            <td className="text-right">{r.credit ? <Money value={r.credit} /> : '—'}</td>
-            <td className="text-right">
-              <Money value={r.balanceAfter} />
-            </td>
+    <div>
+      <div className="mb-3 flex justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            void api.pdf
+              .generateStatement(customerId, { openAfter: true })
+              .then((r) =>
+                toast({ title: 'Statement saved', description: r.path, variant: 'success' }),
+              )
+              .catch((e) =>
+                toast({
+                  title: 'Statement failed',
+                  description: e instanceof Error ? e.message : 'Error',
+                  variant: 'error',
+                }),
+              )
+          }
+        >
+          Print statement
+        </Button>
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-left">
+            <th className="py-2">Date</th>
+            <th>Description</th>
+            <th className="text-right">Debit</th>
+            <th className="text-right">Credit</th>
+            <th className="text-right">Balance</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {(q.data?.items ?? []).map((r) => (
+            <tr key={r.id} className="border-b">
+              <td className="py-2">
+                <DateText value={r.entryDate} />
+              </td>
+              <td>
+                {r.description}
+                {r.isNonRevenue ? ' (non-revenue)' : ''}
+                {r.refTable === 'invoices' && r.refId != null && (
+                  <Link className="ml-2 text-sky-700" to={`/billing/invoices/${r.refId}`}>
+                    view
+                  </Link>
+                )}
+              </td>
+              <td className="text-right">{r.debit ? <Money value={r.debit} /> : '—'}</td>
+              <td className="text-right">{r.credit ? <Money value={r.credit} /> : '—'}</td>
+              <td className="text-right">
+                <Money value={r.balanceAfter} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

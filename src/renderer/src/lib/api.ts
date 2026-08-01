@@ -563,6 +563,93 @@ export const api = {
         totalCredit: number
       }>('receivables:report', asOf ? { asOf } : {}),
   },
+  print: {
+    getJob: (jobId: string) =>
+      invoke<{
+        jobId: string
+        template: import('@shared/contracts').PrintTemplateId
+        payload: unknown
+        pageSize: import('@shared/contracts').PageSizeSpec
+        accentColour: string
+      }>('print:getJob', { jobId }),
+    documentReady: (jobId: string) => invoke<{ ok: true }>('print:documentReady', { jobId }),
+  },
+  pdf: {
+    generateInvoice: (invoiceId: number, openAfter?: boolean) =>
+      invoke<{ path: string; invoiceId: number }>('pdf:generateInvoice', {
+        invoiceId,
+        openAfter,
+      }),
+    batchGenerate: (input: {
+      period?: string
+      invoiceIds?: number[]
+      filter?: {
+        mode: 'all' | 'area' | 'route' | 'selected'
+        areaId?: number
+        routeId?: number
+        customerIds?: number[]
+      }
+      jobId?: string
+    }) =>
+      invoke<{
+        generated: number
+        cancelled: boolean
+        folder: string
+        files: string[]
+        errors: Array<{ invoiceId: number; message: string }>
+        elapsedMs: number
+      }>('pdf:batchGenerate', input),
+    cancelBatch: (jobId: string) => invoke<{ ok: true }>('pdf:cancelBatch', { jobId }),
+    printInvoice: (invoiceId: number, deviceName?: string) =>
+      invoke<{ ok: true }>('pdf:printInvoice', { invoiceId, deviceName }),
+    generateReceipt: (paymentId: number, variant: 'a5' | 'thermal' = 'a5', openAfter?: boolean) =>
+      invoke<{ path: string }>('pdf:generateReceipt', { paymentId, variant, openAfter }),
+    generateDeliverySlip: (deliveryId: number, openAfter?: boolean) =>
+      invoke<{ path: string }>('pdf:generateDeliverySlip', { deliveryId, openAfter }),
+    generateStatement: (
+      customerId: number,
+      opts: { from?: string; to?: string; openAfter?: boolean } = {},
+    ) => invoke<{ path: string }>('pdf:generateStatement', { customerId, ...opts }),
+    generateDeliveryCard: (customerId: number, period: string, openAfter?: boolean) =>
+      invoke<{ path: string }>('pdf:generateDeliveryCard', {
+        customerId,
+        period,
+        openAfter,
+      }),
+    generateBottlesOut: (
+      input: {
+        search?: string
+        routeId?: number
+        areaId?: number
+        minBottles?: number
+        openAfter?: boolean
+      } = {},
+    ) => invoke<{ path: string }>('pdf:generateBottlesOut', input),
+    generateReceivables: (asOf?: string, openAfter?: boolean) =>
+      invoke<{ path: string }>('pdf:generateReceivables', { asOf, openAfter }),
+    exportTable: (input: import('@shared/contracts').ExportTableInput) =>
+      invoke<{ path: string }>('pdf:exportTable', input),
+    exportExcel: (input: import('@shared/contracts').ExportExcelInput) =>
+      invoke<{ path: string }>('pdf:exportExcel', input),
+    shareWhatsApp: (invoiceId: number, phoneOverride?: string) =>
+      invoke<{
+        ok: true
+        waUrl: string
+        pdfPath: string | null
+        phoneWarning: string | null
+        e164: string | null
+      }>('pdf:shareWhatsApp', { invoiceId, phoneOverride }),
+    shareEmail: (invoiceId: number) =>
+      invoke<{ ok: true; mailtoUrl: string; pdfPath: string | null }>('pdf:shareEmail', {
+        invoiceId,
+      }),
+    saveAs: (sourcePath: string, defaultName?: string) =>
+      invoke<{ path: string | null }>('pdf:saveAs', { sourcePath, defaultName }),
+    open: (path: string) => invoke<{ ok: true }>('pdf:open', { path }),
+    showInFolder: (path: string) => invoke<{ ok: true }>('pdf:showInFolder', { path }),
+    uploadLogo: (sourcePath: string) =>
+      invoke<{ logoPath: string }>('pdf:uploadLogo', { sourcePath }),
+  },
   ...(import.meta.env.DEV
     ? {
         dev: {

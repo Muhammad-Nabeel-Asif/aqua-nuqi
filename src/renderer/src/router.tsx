@@ -17,6 +17,7 @@ import { ComingSoonPage } from './features/placeholder/ComingSoonPage'
 import { ReceivablesPage } from './features/receivables/ReceivablesPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { SetupWizard } from './features/setup/SetupWizard'
+import { PrintJobPage } from './print/PrintJobPage'
 import { useSessionStore } from './stores/session'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -40,6 +41,10 @@ function RequireOwner({ children }: { children: React.ReactNode }) {
 }
 
 export const router = createHashRouter([
+  {
+    path: '/print/:template',
+    element: <PrintJobPage />,
+  },
   {
     path: '/setup',
     element: (

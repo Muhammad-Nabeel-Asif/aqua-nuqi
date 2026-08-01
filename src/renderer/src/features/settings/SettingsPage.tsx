@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/u
 import { api } from '@renderer/lib/api'
 import { useSessionStore } from '@renderer/stores/session'
 import { AppError } from '@shared/errors'
+import { InvoiceSettingsPanel } from './InvoiceSettingsPanel'
 import { MasterDataPanel } from './MasterDataPanel'
 
 export function SettingsPage() {
@@ -152,9 +153,7 @@ export function SettingsPage() {
           <TabsTrigger value="business">Business profile</TabsTrigger>
           <TabsTrigger value="locale">Localisation</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="invoice" disabled>
-            Invoice
-          </TabsTrigger>
+          <TabsTrigger value="invoice">Invoice</TabsTrigger>
           <TabsTrigger value="backup" disabled>
             Backup
           </TabsTrigger>
@@ -189,6 +188,10 @@ export function SettingsPage() {
             onChange={(v) => setBusiness({ ...business, bankDetails: v })}
           />
           <Button onClick={() => void saveBusiness()}>Save</Button>
+        </TabsContent>
+
+        <TabsContent value="invoice">
+          <InvoiceSettingsPanel />
         </TabsContent>
 
         <TabsContent value="master">

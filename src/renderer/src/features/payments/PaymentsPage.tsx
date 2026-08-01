@@ -146,6 +146,50 @@ export function PaymentsPage() {
                   <Money value={p.unallocated} />
                 </td>
                 <td className="p-2 space-x-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      void api.pdf
+                        .generateReceipt(p.id, 'a5', true)
+                        .then((r) =>
+                          toast({ title: 'Receipt PDF', description: r.path, variant: 'success' }),
+                        )
+                        .catch((e) =>
+                          toast({
+                            title: 'Receipt failed',
+                            description: e instanceof Error ? e.message : 'Error',
+                            variant: 'error',
+                          }),
+                        )
+                    }
+                  >
+                    Receipt A5
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      void api.pdf
+                        .generateReceipt(p.id, 'thermal', true)
+                        .then((r) =>
+                          toast({
+                            title: 'Thermal receipt',
+                            description: r.path,
+                            variant: 'success',
+                          }),
+                        )
+                        .catch((e) =>
+                          toast({
+                            title: 'Receipt failed',
+                            description: e instanceof Error ? e.message : 'Error',
+                            variant: 'error',
+                          }),
+                        )
+                    }
+                  >
+                    80 mm
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => setReallocate(p)}>
                     Reallocate
                   </Button>

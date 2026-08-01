@@ -10,6 +10,7 @@ import {
   resolveMigrationsFolder,
   runBootMigrations,
 } from './db/migrate'
+import { createPdfPlatformFromElectron } from './ipc/handlers/pdf.handlers'
 import { setRouterAuth } from './ipc/router'
 import { configureLogger, log } from './lib/logger'
 import {
@@ -32,10 +33,12 @@ import { createDeliveryService } from './services/delivery.service'
 import { createLedgerService } from './services/ledger.service'
 import { createMasterDataService } from './services/master-data.service'
 import { createPaymentService } from './services/payment.service'
+import { createPdfService } from './services/pdf.service'
 import { createPeriodService } from './services/period.service'
 import { createRateService } from './services/rate.service'
 import { createReceivablesService } from './services/receivables.service'
 import { createSettingsService } from './services/settings.service'
+import { destroyPrintPool, printTemplate, renderTemplateToPdf } from './windows/print-window'
 
 function readAppVersion(): string {
   const candidates = [
@@ -138,6 +141,22 @@ export function bootstrapApp(): BootstrapResult {
     const billing = createBillingService(db, audit, period, settings, balances, ledger)
     const payments = createPaymentService(db, audit, period, balances, ledger, billing)
     const receivables = createReceivablesService(db)
+    const pdf = createPdfService(
+      db,
+      audit,
+      settings,
+      billing,
+      payments,
+      ledger,
+      customers,
+      deliveries,
+      receivables,
+      {
+        renderPdf: renderTemplateToPdf,
+        print: printTemplate,
+      },
+      createPdfPlatformFromElectron(),
+    )
 
     const setupRequired = dbMissing || !auth.hasAnyUser()
     const schemaVersion =
@@ -167,6 +186,7 @@ export function bootstrapApp(): BootstrapResult {
       billing,
       payments,
       receivables,
+      pdf,
       appVersion,
       schemaVersion: schemaVersion || getSchemaVersion(),
       setupRequired,
@@ -207,6 +227,7 @@ export function shutdownApp(): void {
   } catch (err) {
     log.error('Shutdown error', err)
   } finally {
+    destroyPrintPool()
     closeDatabase()
   }
 }

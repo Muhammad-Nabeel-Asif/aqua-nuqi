@@ -6,6 +6,14 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ### Added
 
+- **Phase 4 — PDF documents, printing & sharing:** Electron `printToPDF` engine with a pooled
+  hidden BrowserWindow rendering React + Tailwind templates (invoice A4, payment receipt A5/80 mm,
+  delivery slip 80 mm, customer statement, monthly delivery card, bottles-out & receivables reports,
+  generic `exportTable`). Pakistani `numberToWords` (lakh/crore); batch PDF export with progress /
+  cancel; WhatsApp via `wa.me` + `showItemInFolder` (no unofficial automation); Settings → Invoice
+  customisation (logo, accent, bottle box, WhatsApp template). Excel export via existing `xlsx`.
+  Bundled Noto Sans + Noto Nastaliq Urdu for offline Urdu names. Completes the minimum shippable
+  product for replacing paper cards and hand-written bills.
 - **Phase 3 — Billing, ledger & payments:** append-only `ledgerService` with back-dated
   `balance_after` recompute; monthly invoice generate/issue/void (gapless
   `INV-{YYYY}-{MM}-{seq:4}`); FIFO payment allocation + customer credit; receivables ageing;

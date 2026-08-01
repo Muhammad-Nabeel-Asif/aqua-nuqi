@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
+import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { RecordPaymentDialog } from '@renderer/features/payments/RecordPaymentDialog'
 import { api } from '@renderer/lib/api'
@@ -19,40 +20,46 @@ export function ReceivablesPage() {
   })
   const data = q.data
 
-  function exportCsv() {
+  async function exportCsv() {
     if (!data) return
-    const rows = [
-      [
-        'code',
-        'name',
-        'phone',
-        'balance',
-        'bucket',
-        'days_overdue',
-        'oldest_unpaid',
-        'last_payment',
+    await api.pdf.exportExcel({
+      title: `Receivables ${data.asOf}`,
+      fileName: `receivables-${data.asOf}.xlsx`,
+      openAfter: true,
+      columns: [
+        { key: 'code', header: 'Code' },
+        { key: 'name', header: 'Name' },
+        { key: 'phone', header: 'Phone' },
+        { key: 'balance', header: 'Balance', align: 'right' },
+        { key: 'bucket', header: 'Bucket' },
+        { key: 'daysOverdue', header: 'Days overdue', align: 'right' },
+        { key: 'oldestUnpaid', header: 'Oldest unpaid' },
+        { key: 'lastPayment', header: 'Last payment' },
       ],
-      ...data.outstanding.map((r) => [
-        r.code,
-        r.name,
-        r.phone ?? '',
-        formatMoney(r.balance as Paisa),
-        r.ageingBucket,
-        String(r.daysOverdue),
-        r.oldestUnpaidInvoiceDate ?? '',
-        r.lastPaymentDate ?? '',
-      ]),
-    ]
-    const csv = rows
-      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `receivables-${data.asOf}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+      rows: data.outstanding.map((r) => ({
+        code: r.code,
+        name: r.name,
+        phone: r.phone,
+        balance: formatMoney(r.balance as Paisa),
+        bucket: r.ageingBucket,
+        daysOverdue: r.daysOverdue,
+        oldestUnpaid: r.oldestUnpaidInvoiceDate,
+        lastPayment: r.lastPaymentDate,
+      })),
+    })
+  }
+
+  async function exportPdf() {
+    try {
+      const r = await api.pdf.generateReceivables(undefined, true)
+      toast({ title: 'Receivables PDF saved', description: r.path, variant: 'success' })
+    } catch (e) {
+      toast({
+        title: 'PDF export failed',
+        description: e instanceof Error ? e.message : 'Error',
+        variant: 'error',
+      })
+    }
   }
 
   return (
@@ -62,11 +69,10 @@ export function ReceivablesPage() {
         subtitle={data ? `As of ${data.asOf}` : 'Loading…'}
         actions={
           <>
-            <Button variant="outline" onClick={exportCsv}>
-              Export CSV
+            <Button variant="outline" onClick={() => void exportCsv()}>
+              Export Excel
             </Button>
-            {/* TODO(phase-4): PDF export */}
-            <Button disabled title="TODO(phase-4)">
+            <Button variant="outline" onClick={() => void exportPdf()}>
               Export PDF
             </Button>
           </>

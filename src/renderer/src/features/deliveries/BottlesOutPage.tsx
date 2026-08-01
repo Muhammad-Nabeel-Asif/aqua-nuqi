@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
+import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
@@ -20,15 +21,37 @@ export function BottlesOutPage() {
       }),
   })
 
+  async function exportPdf() {
+    try {
+      const r = await api.pdf.generateBottlesOut({
+        search: search || undefined,
+        routeId: routeId ? Number(routeId) : undefined,
+        openAfter: true,
+      })
+      toast({ title: 'Bottles-out PDF saved', description: r.path, variant: 'success' })
+    } catch (e) {
+      toast({
+        title: 'PDF export failed',
+        description: e instanceof Error ? e.message : 'Error',
+        variant: 'error',
+      })
+    }
+  }
+
   return (
     <div>
       <PageHeader
         title="Bottles out"
         subtitle="Customers holding bottles, sorted by quantity"
         actions={
-          <Button variant="outline" asChild>
-            <Link to="/deliveries/daily">Daily entry</Link>
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => void exportPdf()}>
+              Export PDF
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/deliveries/daily">Daily entry</Link>
+            </Button>
+          </>
         }
       />
       <div className="mb-3 flex gap-2">

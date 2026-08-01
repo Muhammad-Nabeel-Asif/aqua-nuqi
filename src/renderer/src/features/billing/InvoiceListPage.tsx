@@ -4,11 +4,13 @@ import { Link } from 'react-router-dom'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
+import { ProgressDialog } from '@renderer/components/ProgressDialog'
 import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
 import { previousPeriod, currentPeriod } from '@shared/date'
+import { useBatchPdfExport } from './useBatchPdfExport'
 
 export function InvoiceListPage() {
   const qc = useQueryClient()
@@ -17,6 +19,7 @@ export function InvoiceListPage() {
   const [search, setSearch] = useState('')
   const [overdueOnly, setOverdueOnly] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  const batchPdf = useBatchPdfExport()
 
   const q = useQuery({
     queryKey: ['invoices', period, status, search, overdueOnly],
@@ -59,12 +62,29 @@ export function InvoiceListPage() {
             >
               Issue selected
             </Button>
-            {/* TODO(phase-4): enable PDF export */}
-            <Button disabled title="TODO(phase-4)">
+            <Button
+              disabled={!selected.size && !period}
+              onClick={() =>
+                void batchPdf.run(
+                  selected.size
+                    ? { invoiceIds: [...selected] }
+                    : { period, filter: { mode: 'all' } },
+                )
+              }
+            >
               Export PDFs
             </Button>
           </>
         }
+      />
+      <ProgressDialog
+        open={batchPdf.progress.open}
+        title="Exporting invoice PDFs"
+        current={batchPdf.progress.current}
+        total={batchPdf.progress.total}
+        message={batchPdf.progress.message}
+        cancelling={batchPdf.progress.cancelling}
+        onCancel={() => batchPdf.cancel()}
       />
 
       <div className="mb-4 flex flex-wrap gap-3">
@@ -115,6 +135,7 @@ export function InvoiceListPage() {
               <th className="p-2 text-right">Paid</th>
               <th className="p-2 text-right">Balance</th>
               <th className="p-2">Status</th>
+              <th className="p-2">Shared</th>
               <th className="p-2">Due</th>
             </tr>
           </thead>
@@ -155,6 +176,15 @@ export function InvoiceListPage() {
                   <Money value={inv.balanceDue} />
                 </td>
                 <td className="p-2 capitalize">{inv.status.replace(/_/g, ' ')}</td>
+                <td className="p-2">
+                  {inv.lastSharedAt ? (
+                    <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800">
+                      Shared
+                    </span>
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 <td className="p-2">{inv.dueDate ? <DateText value={inv.dueDate} /> : '—'}</td>
               </tr>
             ))}

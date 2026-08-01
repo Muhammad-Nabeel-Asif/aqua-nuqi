@@ -1,0 +1,70 @@
+@import './print-fonts.css';
+
+.print-root {
+  font-family: 'Noto Sans', 'Noto Nastaliq Urdu', sans-serif;
+  color: #0f172a;
+  background: #fff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-root .urdu,
+.print-root [lang='ur'],
+.print-root .customer-name {
+  font-family: 'Noto Nastaliq Urdu', 'Noto Sans', sans-serif;
+  line-height: 1.8;
+}
+
+.print-root table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.print-root th,
+.print-root td {
+  border-bottom: 1px solid #cbd5e1;
+  padding: 4px 6px;
+  font-size: 11px;
+  vertical-align: top;
+}
+
+.print-root thead {
+  display: table-header-group;
+}
+
+.print-root th {
+  background: #f1f5f9;
+  font-weight: 700;
+  text-align: left;
+}
+
+.print-root .num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.print-root .shadow-none,
+.print-root * {
+  box-shadow: none !important;
+}
+
+@media print {
+  .print-root {
+    background: #fff;
+  }
+}
+
+@page {
+  margin: 12mm;
+}
+
+@page.thermal {
+  size: 80mm 297mm;
+  margin: 3mm;
+}
+
+@page.a5 {
+  size: A5;
+  margin: 8mm;
+}

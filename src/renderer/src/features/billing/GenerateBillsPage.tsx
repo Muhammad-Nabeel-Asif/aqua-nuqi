@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
+import { ProgressDialog } from '@renderer/components/ProgressDialog'
 import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
@@ -12,6 +13,7 @@ import { api } from '@renderer/lib/api'
 import type { InvoicePreviewDto } from '@shared/contracts'
 import { currentPeriod, previousPeriod } from '@shared/date'
 import { AppError } from '@shared/errors'
+import { useBatchPdfExport } from './useBatchPdfExport'
 
 export function GenerateBillsPage() {
   const qc = useQueryClient()
@@ -28,6 +30,7 @@ export function GenerateBillsPage() {
     elapsedMs: number
   } | null>(null)
   const [busy, setBusy] = useState(false)
+  const batchPdf = useBatchPdfExport()
 
   const areas = useQuery({ queryKey: ['areas'], queryFn: () => api.areas.list() })
   const routes = useQuery({ queryKey: ['routes'], queryFn: () => api.routes.list() })
@@ -108,6 +111,15 @@ export function GenerateBillsPage() {
           </>
         }
       />
+      <ProgressDialog
+        open={batchPdf.progress.open}
+        title="Exporting invoice PDFs"
+        current={batchPdf.progress.current}
+        total={batchPdf.progress.total}
+        message={batchPdf.progress.message}
+        cancelling={batchPdf.progress.cancelling}
+        onCancel={() => batchPdf.cancel()}
+      />
 
       <div className="mb-4 grid gap-4 rounded-lg border bg-white p-4 md:grid-cols-4">
         <div>
@@ -180,8 +192,16 @@ export function GenerateBillsPage() {
         <Button disabled={busy} onClick={() => void generate()}>
           Generate selected
         </Button>
-        {/* TODO(phase-4): enable PDF export */}
-        <Button disabled title="TODO(phase-4)">
+        <Button
+          disabled={!result?.invoiceIds.length}
+          variant="outline"
+          onClick={() =>
+            void batchPdf.run({
+              period,
+              invoiceIds: result?.invoiceIds,
+            })
+          }
+        >
           Export PDFs
         </Button>
         {result && (

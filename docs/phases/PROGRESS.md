@@ -756,3 +756,143 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
   receivables CSV.
 - `revenueAccrual` excludes drafts; ageing integration test via `receivables.report()`.
 - Stable **v0.5.29** published; Phase 2→3 boot-upgrade test PASS; status → **complete**.
+
+---
+
+## Phase 4 — PDF Documents, Printing & Sharing
+
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.6.0`
+
+### Built
+
+- Pooled hidden print window (`src/main/windows/print-window.ts`) + `pdf.service.ts` (no Electron
+  imports; renderer/platform injected from bootstrap)
+- React print templates under `src/renderer/src/print/templates/` with local Noto Sans +
+  Noto Nastaliq Urdu (`resources/fonts/` + bundled renderer assets)
+- Invoice detail: live print preview, Save PDF / Print / WhatsApp / Email / Save as
+- Batch PDF export with progress dialog + cancel (Generate bills + Invoice list)
+- Payment receipts (A5 + 80 mm), delivery slip, customer statement, delivery card PDF,
+  bottles-out + receivables print layouts
+- Settings → Invoice tab (logo upload, accent, bottle/rate toggles, terms, WhatsApp template,
+  documents folder) with live preview
+- `numberToWords` (Pakistani lakh/crore) + unit tests
+- Generic `exportTable` / `exportExcel` wired to receivables (and available to all list screens)
+
+### Migrations added
+
+- None (uses existing `invoices.pdf_path` / `last_shared_at`)
+
+### IPC channels added
+
+- `print:getJob`, `print:documentReady`
+- `pdf:generateInvoice`, `pdf:batchGenerate`, `pdf:cancelBatch`, `pdf:printInvoice`
+- `pdf:generateReceipt`, `pdf:generateDeliverySlip`, `pdf:generateStatement`
+- `pdf:generateDeliveryCard`, `pdf:generateBottlesOut`, `pdf:generateReceivables`
+- `pdf:exportTable`, `pdf:exportExcel`
+- `pdf:shareWhatsApp`, `pdf:shareEmail`, `pdf:saveAs`, `pdf:open`, `pdf:showInFolder`
+- `pdf:uploadLogo`
+
+### Settings keys added
+
+- `invoice.showRateColumn`, `invoice.accentColour`, `invoice.termsText`,
+  `invoice.defaultPageSize`, `invoice.whatsappTemplate`, `invoice.emailSubjectTemplate`,
+  `invoice.emailBodyTemplate`, `documents.folder`, `locale.numberingSystem`,
+  `print.defaultPrinter`, `print.defaultThermalPrinter`
+
+### Error codes added
+
+- None
+
+### `pdf.service` API
+
+```ts
+createPdfService(db, audit, settings, billing, payments, ledger, customers, deliveries, receivables, renderer, platform)
+
+pdf.generateInvoicePdf(invoiceId, { openAfter?, userId? }) => { path, invoiceId }
+pdf.batchGenerateInvoices({ period?, invoiceIds?, filter?, jobId? }, userId?) => {
+  generated, cancelled, folder, files, errors, elapsedMs
+}
+pdf.cancelBatch(jobId)
+pdf.printInvoice(invoiceId, { deviceName?, silent? })
+pdf.generateReceiptPdf(paymentId, 'a5'|'thermal', opts)
+pdf.generateDeliverySlip(deliveryId, opts)
+pdf.generateStatementPdf(customerId, { from?, to? }, opts)
+pdf.generateDeliveryCardPdf(customerId, period, opts)
+pdf.generateBottlesOutPdf(filters, opts)
+pdf.generateReceivablesPdf(asOf?, opts)
+pdf.exportTable(input: ExportTableInput, opts) => { path }
+pdf.exportExcel(input: ExportExcelInput, opts) => { path }  // SheetJS `xlsx`
+pdf.shareWhatsApp(invoiceId, { phoneOverride?, userId? })  // wa.me + showItemInFolder + clipboard
+pdf.shareEmail(invoiceId, opts)
+pdf.savePdfAs(sourcePath, defaultName?)
+pdf.ensureInvoicePdf / buildInvoicePayload / businessHeader / documentsRoot
+```
+
+Progress events: `pdf:batchProgress` → `{ jobId, current, total, status, fileName?, message? }`
+
+### Template registry
+
+`PrintTemplateId` → component in `src/renderer/src/print/templates/registry.tsx`:
+
+| id                        | Component                | Page size      |
+| ------------------------- | ------------------------ | -------------- |
+| `invoice`                 | `InvoiceTemplate`        | A4             |
+| `payment-receipt-a5`      | `PaymentReceiptTemplate` | A5             |
+| `payment-receipt-thermal` | `PaymentReceiptTemplate` | 80 mm          |
+| `delivery-slip`           | `DeliverySlipTemplate`   | 80 mm          |
+| `customer-statement`      | `StatementTemplate`      | A4             |
+| `delivery-card`           | `DeliveryCardTemplate`   | A4             |
+| `bottles-out`             | `BottlesOutTemplate`     | A4 landscape   |
+| `receivables`             | `ReceivablesTemplate`    | A4 landscape   |
+| `table-export`            | `TableExportTemplate`    | A4 / landscape |
+
+Print route (no auth shell): `#/print/:template?jobId=…` → `PrintJobPage` → `print:documentReady`.
+
+### `exportTable` signature
+
+```ts
+exportTable({
+  title: string
+  columns: Array<{ key: string; header: string; align?: 'left'|'right'|'center'; width?: number }>
+  rows: Array<Record<string, string | number | null>>
+  filters?: Array<{ label: string; value: string }>
+  orientation?: 'portrait' | 'landscape'
+  fileName?: string
+  openAfter?: boolean
+}): Promise<{ path: string }>
+```
+
+### Excel library chosen
+
+**`xlsx` (SheetJS)** — already in the project from Phase 1 import/export. No `exceljs` added.
+
+### Deviations from the spec
+
+- Electron BrowserWindow / `printToPDF` lives in `src/main/windows/print-window.ts` (eslint
+  forbids Electron imports under `services/`); `pdf.service.ts` stays pure and receives
+  `renderer` + `platform` adapters from bootstrap.
+- Page “x of y” uses CSS `counter(page)` / `counter(pages)` (Chromium print); verified 60-line
+  invoices paginate to 2 pages with repeated `<thead>`.
+- WhatsApp is shell-only (`wa.me` + reveal PDF); no whatsapp-web.js / Baileys (per docs/05).
+
+### Acceptance verification (2026-08-01)
+
+- `node scripts/verify-phase4-pdfs.mjs`: 26-line invoice = 1 page; 60-line = 2 pages with
+  repeated header; Urdu `علی خان` in `pdftotext` (Noto Nastaliq); 80 mm thermal receipt PDF;
+  preview PNG inspected for Urdu glyphs (not boxes).
+- Unit: `numberToWords` zero / 1,250 / 3,700 / 1,25,000 / 1,20,00,000 + paisa; batch cancel;
+  regenerate keeps snapshotted totals; exportTable/exportExcel.
+- `npm run typecheck && npm run lint && npm run test && npm run build` PASS.
+
+### What the next phase must know
+
+- Reuse `pdf.exportTable` / print templates for Phase 8 reports; do not add Puppeteer/pdfmake.
+- Documents default to `<Documents>/AquaNuqi/...` or `documents.folder`.
+- Invoice PDFs: `<docs>/Invoices/<YYYY-MM>/<invoiceNo>-<code>-<slug>.pdf`.
+- Logo files live in `userData/logos/` via `pdf:uploadLogo`.
+- **Next phase is Phase 5 (Expenses)** (or follow the phase order in `docs/phases/`).
+- Stable release for 0.6.x should be triggered after push (Build & Release → stable).
+
+### Escalations / questions for the human
+
+- None blocking. Optional: confirm accent/logo defaults after first client install.
