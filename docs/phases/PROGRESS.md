@@ -290,7 +290,7 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 
 ## Phase 1 — Customers, Master Data & Pricing
 
-**Date:** 2026-07-31 · **Status:** complete · **package.json:** `0.3.0` · **stable:** [v0.3.17](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.3.17)
+**Date:** 2026-07-31 · **Status:** complete · **package.json:** `0.3.0` · **stable:** [v0.3.21](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.3.21)
 
 ### Windows upgrade matrix (2026-08-01)
 
@@ -300,7 +300,8 @@ audit.withAudit(tx, input, () => { /* mutation */ })
 | #4 Downgrade refusal (older build over newer → older-than-data) | **PASS** |
 | Uninstall leaves `AppData\Roaming\Aqua Nuqi`                    | **PASS** |
 
-- **Installer used:** stable **v0.3.17** (schema ≥2 via migrations 0001 + 0002).
+- **Installer tested:** stable **v0.3.17** (schema ≥2 via migrations 0001 + 0002).
+- **Current stable (includes list-filter fix):** **v0.3.21**.
 - **Windows (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe
 
 ### Built
