@@ -23,9 +23,15 @@
 .print-root th,
 .print-root td {
   border-bottom: 1px solid #cbd5e1;
-  padding: 4px 6px;
-  font-size: 11px;
+  padding: 2px 4px;
+  font-size: 10px;
   vertical-align: top;
+}
+
+.print-root.invoice-print th,
+.print-root.invoice-print td {
+  padding: 1px 4px;
+  font-size: 9px;
 }
 
 .print-root thead {
@@ -55,16 +61,9 @@
   }
 }
 
+/* Page size/margins come from each template's `@page` rule (thermal needs CSS size
+   with preferCSSPageSize — Electron micron pageSize alone produced a broken MediaBox). */
 @page {
-  margin: 12mm;
-}
-
-@page.thermal {
-  size: 80mm 297mm;
-  margin: 3mm;
-}
-
-@page.a5 {
-  size: A5;
-  margin: 8mm;
+  size: A4;
+  margin: 10mm;
 }

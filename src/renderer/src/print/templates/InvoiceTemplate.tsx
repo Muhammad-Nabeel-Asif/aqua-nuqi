@@ -90,18 +90,19 @@ export function InvoiceTemplate({
   const accent = business.accentColour
 
   return (
-    <div className="print-root mx-auto max-w-[210mm] bg-white p-2 text-[11px] leading-snug">
+    <div className="print-root invoice-print mx-auto max-w-[210mm] bg-white text-[9.5px] leading-tight">
       <BusinessHeader
+        compact
         business={business}
         rightSlot={
-          <div className="text-right">
+          <div className="text-right leading-snug">
             <div
-              className="inline-block px-3 py-1 text-sm font-bold tracking-wide text-white"
+              className="inline-block px-2 py-0.5 text-xs font-bold tracking-wide text-white"
               style={{ background: accent }}
             >
               INVOICE / BILL
             </div>
-            <div className="mt-2 text-sm font-semibold">{invoice.invoiceNo}</div>
+            <div className="mt-1 text-xs font-semibold">{invoice.invoiceNo}</div>
             <div>Issue: {fmtDate(invoice.issueDate)}</div>
             <div>Due: {fmtDate(invoice.dueDate)}</div>
             <div>
@@ -114,27 +115,27 @@ export function InvoiceTemplate({
         }
       />
 
-      <div className="mb-3 grid grid-cols-2 gap-3">
-        <div className="rounded border border-slate-200 p-2">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+      <div className="mb-1.5 grid grid-cols-2 gap-2">
+        <div className="border border-slate-200 px-1.5 py-1">
+          <div className="mb-0.5 text-[8px] font-semibold uppercase tracking-wide text-slate-500">
             Bill to
           </div>
-          <div className="customer-name text-sm font-bold" lang="ur">
+          <div className="customer-name text-xs font-bold leading-snug" lang="ur">
             {customer.name}
           </div>
           <div className="text-slate-600">{customer.code}</div>
           {customer.addressLine ? (
-            <div className="mt-1 whitespace-pre-line text-slate-600">{customer.addressLine}</div>
+            <div className="mt-0.5 whitespace-pre-line text-slate-600">{customer.addressLine}</div>
           ) : null}
-          <div className="mt-1 text-slate-600">
+          <div className="mt-0.5 text-slate-600">
             {[customer.phonePrimary, customer.phoneSecondary].filter(Boolean).join(' · ')}
           </div>
         </div>
         <div
-          className="rounded border-2 p-2"
+          className="border-2 px-1.5 py-1"
           style={{ borderColor: accent, background: `${accent}10` }}
         >
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          <div className="mb-0.5 text-[8px] font-semibold uppercase tracking-wide text-slate-500">
             Summary
           </div>
           <div className="flex justify-between">
@@ -146,26 +147,26 @@ export function InvoiceTemplate({
             <span className="num font-medium">{m(invoice.invoiceTotal)}</span>
           </div>
           <div
-            className="mt-2 flex items-end justify-between border-t pt-2"
+            className="mt-1 flex items-end justify-between border-t pt-1"
             style={{ borderColor: accent }}
           >
-            <span className="text-sm font-bold">Total payable</span>
-            <span className="num text-xl font-bold" style={{ color: accent }}>
+            <span className="text-xs font-bold">Total payable</span>
+            <span className="num text-base font-bold" style={{ color: accent }}>
               {m(invoice.totalPayable)}
             </span>
           </div>
         </div>
       </div>
 
-      <table className="mb-3">
+      <table className="mb-1.5 invoice-lines">
         <thead>
           <tr>
-            <th className="w-8">#</th>
-            <th className="w-20">Date</th>
+            <th className="w-6">#</th>
+            <th className="w-16">Date</th>
             <th>Description</th>
-            <th className="num w-14">Units</th>
-            {business.showRateColumn ? <th className="num w-20">Rate</th> : null}
-            <th className="num w-24">Amount</th>
+            <th className="num w-12">Units</th>
+            {business.showRateColumn ? <th className="num w-16">Rate</th> : null}
+            <th className="num w-20">Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -182,11 +183,11 @@ export function InvoiceTemplate({
         </tbody>
       </table>
 
-      <div className="mb-3 grid grid-cols-2 gap-3">
+      <div className="mb-1.5 grid grid-cols-2 gap-2">
         <div>
           {business.showBottleBalance ? (
-            <div className="rounded border border-slate-200 p-2">
-              <div className="mb-1 text-[10px] font-semibold uppercase text-slate-500">
+            <div className="border border-slate-200 px-1.5 py-1">
+              <div className="mb-0.5 text-[8px] font-semibold uppercase text-slate-500">
                 Bottle summary
               </div>
               <div className="flex justify-between">
@@ -207,9 +208,9 @@ export function InvoiceTemplate({
               </div>
             </div>
           ) : null}
-          <div className="mt-2 text-[10px] italic text-slate-600">{amountInWords}</div>
+          <div className="mt-1 text-[8px] italic text-slate-600">{amountInWords}</div>
         </div>
-        <div className="rounded border border-slate-200 p-2">
+        <div className="border border-slate-200 px-1.5 py-1">
           <div className="flex justify-between">
             <span>Total units</span>
             <span className="num">{invoice.deliveriesQty}</span>
@@ -232,7 +233,7 @@ export function InvoiceTemplate({
               <span className="num">{m(invoice.taxTotal)}</span>
             </div>
           ) : null}
-          <div className="mt-1 flex justify-between border-t pt-1 font-semibold">
+          <div className="mt-0.5 flex justify-between border-t pt-0.5 font-semibold">
             <span>This period total</span>
             <span className="num">{m(invoice.invoiceTotal)}</span>
           </div>
@@ -241,7 +242,7 @@ export function InvoiceTemplate({
             <span className="num">{m(invoice.openingBalance)}</span>
           </div>
           <div
-            className="mt-2 flex justify-between border-t-2 pt-2 text-base font-bold"
+            className="mt-1 flex justify-between border-t-2 pt-1 text-sm font-bold"
             style={{ borderColor: accent, color: accent }}
           >
             <span>TOTAL PAYABLE</span>
@@ -250,35 +251,35 @@ export function InvoiceTemplate({
         </div>
       </div>
 
-      <div className="mb-3 rounded border border-slate-200 p-2">
-        <div className="mb-1 text-[10px] font-semibold uppercase text-slate-500">Payment</div>
+      <div className="mb-1 border border-slate-200 px-1.5 py-1">
+        <div className="mb-0.5 text-[8px] font-semibold uppercase text-slate-500">Payment</div>
         {business.bankDetails ? (
           <div className="whitespace-pre-line text-slate-700">{business.bankDetails}</div>
         ) : (
           <div className="text-slate-500">Bank / JazzCash / Easypaisa details in settings.</div>
         )}
-        <div className="mt-1">Due date: {fmtDate(invoice.dueDate)}</div>
+        <div className="mt-0.5">Due date: {fmtDate(invoice.dueDate)}</div>
         {business.termsText ? (
-          <div className="mt-1 text-[10px] text-slate-600">{business.termsText}</div>
+          <div className="mt-0.5 text-[8px] text-slate-600">{business.termsText}</div>
         ) : null}
       </div>
 
-      <footer className="mt-4 border-t pt-2 text-[9px] text-slate-500">
+      <footer className="border-t pt-1 text-[8px] text-slate-500">
         <div>{business.footerNote}</div>
-        <div className="mt-1 flex justify-between">
+        <div className="mt-0.5 flex justify-between">
           <span>This is a computer-generated invoice</span>
           <span>Generated {fmtTs(generatedAt)}</span>
         </div>
-        {/* CSS counters for page x of y when Chromium paginates */}
-        <div className="mt-1 text-center print:block">
-          Page <span className="page-number" /> of <span className="pages-number" />
-        </div>
+        {/* Page x of y is injected by Electron printToPDF footerTemplate (body counters are unsupported). */}
       </footer>
 
       <style>{`
-        @page { margin: 12mm; }
-        .page-number::after { content: counter(page); }
-        .pages-number::after { content: counter(pages); }
+        @page { size: A4; margin: 8mm 10mm 14mm 10mm; }
+        .invoice-print .invoice-lines th,
+        .invoice-print .invoice-lines td {
+          padding: 1px 4px;
+          font-size: 9px;
+        }
       `}</style>
     </div>
   )

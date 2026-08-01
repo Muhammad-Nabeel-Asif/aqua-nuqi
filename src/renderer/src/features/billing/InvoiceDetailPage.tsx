@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
@@ -8,7 +8,10 @@ import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { RecordPaymentDialog } from '@renderer/features/payments/RecordPaymentDialog'
 import { api } from '@renderer/lib/api'
-import { InvoiceTemplate } from '@renderer/print/templates/InvoiceTemplate'
+import {
+  InvoiceTemplate,
+  type InvoiceTemplateProps,
+} from '@renderer/print/templates/InvoiceTemplate'
 import { AppError } from '@shared/errors'
 import '@renderer/print/print.css'
 
@@ -18,82 +21,29 @@ export function InvoiceDetailPage() {
   const [payOpen, setPayOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [waHint, setWaHint] = useState(false)
-  const [previewPayload, setPreviewPayload] = useState<
-    Parameters<typeof InvoiceTemplate>[0] | null
-  >(null)
 
   const q = useQuery({
     queryKey: ['invoice', id],
     queryFn: () => api.invoices.get(id),
     enabled: Number.isFinite(id),
   })
-  const settingsQ = useQuery({
-    queryKey: ['settings', 'print-preview'],
-    queryFn: () => api.settings.get(),
+  /** Same payload as PDF generation — WYSIWYG with logo, phones, empties, amount-in-words. */
+  const previewQ = useQuery({
+    queryKey: ['invoice-print-payload', id],
+    queryFn: () => api.pdf.getInvoicePrintPayload(id),
+    enabled: Number.isFinite(id) && !!q.data?.item,
   })
   const inv = q.data?.item
-
-  useEffect(() => {
-    if (!inv || !settingsQ.data) return
-    const v = settingsQ.data.values
-    setPreviewPayload({
-      business: {
-        name: String(v['business.name'] ?? 'Aqua Nuqi'),
-        address: String(v['business.address'] ?? ''),
-        phone: String(v['business.phone'] ?? ''),
-        phone2: String(v['business.phone2'] ?? ''),
-        email: String(v['business.email'] ?? ''),
-        bankDetails: String(v['business.bankDetails'] ?? ''),
-        taxNumber: String(v['business.taxNumber'] ?? ''),
-        logoDataUrl: null,
-        accentColour: String(v['invoice.accentColour'] ?? '#0284c7'),
-        footerNote: String(v['invoice.footerNote'] ?? ''),
-        termsText: String(v['invoice.termsText'] ?? ''),
-        showBottleBalance: Boolean(v['invoice.showBottleBalance']),
-        showRateColumn: Boolean(v['invoice.showRateColumn']),
-        currencySymbol: String(v['locale.currencySymbol'] ?? 'Rs'),
-        decimalPlaces: Number(v['locale.decimalPlaces'] ?? 0),
-      },
-      invoice: {
-        invoiceNo: inv.invoiceNo,
-        period: inv.period,
-        periodStart: inv.periodStart,
-        periodEnd: inv.periodEnd,
-        issueDate: inv.issueDate,
-        dueDate: inv.dueDate,
-        openingBalance: inv.openingBalance,
-        deliveriesQty: inv.deliveriesQty,
-        deliveriesTotal: inv.deliveriesTotal,
-        chargesTotal: inv.chargesTotal,
-        discountTotal: inv.discountTotal,
-        taxTotal: inv.taxTotal,
-        invoiceTotal: inv.invoiceTotal,
-        totalPayable: inv.totalPayable,
-        bottlesWithCustomerAtIssue: inv.bottlesWithCustomerAtIssue,
-        status: inv.status,
-        lines: inv.lines.map((l) => ({
-          lineNo: l.lineNo,
-          lineType: l.lineType,
-          lineDate: l.lineDate,
-          description: l.description,
-          quantity: l.quantity,
-          rate: l.rate,
-          amount: l.amount,
-        })),
-      },
-      customer: {
-        code: inv.customerCode,
-        name: inv.customerName,
-        addressLine: null,
-        phonePrimary: null,
-        phoneSecondary: null,
-        securityDepositHeld: 0,
-      },
-      emptiesReturned: 0,
-      amountInWords: '',
-      generatedAt: new Date().toISOString(),
-    })
-  }, [inv, settingsQ.data])
+  const previewPayload: InvoiceTemplateProps | null = previewQ.data
+    ? {
+        business: previewQ.data.business,
+        invoice: previewQ.data.invoice,
+        customer: previewQ.data.customer,
+        emptiesReturned: previewQ.data.emptiesReturned,
+        amountInWords: previewQ.data.amountInWords,
+        generatedAt: previewQ.data.generatedAt,
+      }
+    : null
 
   if (!inv) return <div className="p-8">Loading…</div>
 

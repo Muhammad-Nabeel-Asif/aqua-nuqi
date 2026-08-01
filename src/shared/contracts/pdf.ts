@@ -68,10 +68,51 @@ export const printInvoiceOutput = z.object({ ok: z.literal(true) })
 
 export const generateReceiptPdfInput = z.object({
   paymentId: z.number().int().positive(),
-  variant: z.enum(['a5', 'thermal']).default('a5'),
+  /** Omit to use `invoice.defaultPageSize` (A4→a5, thermal→thermal). */
+  variant: z.enum(['a5', 'thermal']).optional(),
   openAfter: z.boolean().optional(),
 })
 export const generateReceiptPdfOutput = z.object({ path: z.string() })
+
+export const businessHeaderOutput = z.object({
+  name: z.string(),
+  address: z.string(),
+  phone: z.string(),
+  phone2: z.string(),
+  email: z.string(),
+  bankDetails: z.string(),
+  taxNumber: z.string(),
+  logoDataUrl: z.string().nullable(),
+  accentColour: z.string(),
+  footerNote: z.string(),
+  termsText: z.string(),
+  showBottleBalance: z.boolean(),
+  showRateColumn: z.boolean(),
+  currencySymbol: z.string(),
+  decimalPlaces: z.number().int(),
+  numberingSystem: z.string(),
+})
+
+export const getInvoicePrintPayloadInput = z.object({
+  invoiceId: z.number().int().positive(),
+})
+/** Same shape as `buildInvoicePayload` — kept loose so DTO evolution does not break IPC. */
+export const getInvoicePrintPayloadOutput = z.object({
+  kind: z.literal('invoice'),
+  business: z.any(),
+  invoice: z.any(),
+  customer: z.object({
+    code: z.string(),
+    name: z.string(),
+    addressLine: z.string().nullable(),
+    phonePrimary: z.string().nullable(),
+    phoneSecondary: z.string().nullable(),
+    securityDepositHeld: z.number().int(),
+  }),
+  emptiesReturned: z.number().int(),
+  amountInWords: z.string(),
+  generatedAt: z.string(),
+})
 
 export const generateDeliverySlipInput = z.object({
   deliveryId: z.number().int().positive(),

@@ -4,6 +4,15 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Phase 4 review:** real InvoiceTemplate fits 26 lines on one A4 page; page numbers via
+  `printToPDF` footerTemplate; thermal 80 mm MediaBox via `preferCSSPageSize` + CSS `@page`;
+  WYSIWYG invoice preview (`pdf:getInvoicePrintPayload`); receipt balance from ledger as-of
+  payment; issued invoice empties/deposit freeze; batch cancel test with slow renderer; thermal
+  printer + default page-size settings wired; customers/matrix `exportTable`; orphan
+  `lib/print-window.ts` removed; verifier uses `#/print/:template?fixture=…`.
+
 ### Added
 
 - **Phase 4 — PDF documents, printing & sharing:** Electron `printToPDF` engine with a pooled

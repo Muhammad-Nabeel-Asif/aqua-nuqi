@@ -15,6 +15,10 @@ export function InvoiceSettingsPanel() {
     queryKey: ['settings', 'invoice'],
     queryFn: () => api.settings.get(),
   })
+  const headerQuery = useQuery({
+    queryKey: ['pdf', 'businessHeader'],
+    queryFn: () => api.pdf.businessHeader(),
+  })
   const [form, setForm] = useState({
     accentColour: '#0284c7',
     showBottleBalance: true,
@@ -22,6 +26,8 @@ export function InvoiceSettingsPanel() {
     footerNote: '',
     termsText: '',
     defaultPageSize: 'A4',
+    defaultPrinter: '',
+    defaultThermalPrinter: '',
     whatsappTemplate: '',
     documentsFolder: '',
     logoPath: '',
@@ -37,6 +43,8 @@ export function InvoiceSettingsPanel() {
       footerNote: String(v['invoice.footerNote'] ?? ''),
       termsText: String(v['invoice.termsText'] ?? ''),
       defaultPageSize: String(v['invoice.defaultPageSize'] ?? 'A4'),
+      defaultPrinter: String(v['print.defaultPrinter'] ?? ''),
+      defaultThermalPrinter: String(v['print.defaultThermalPrinter'] ?? ''),
       whatsappTemplate: String(v['invoice.whatsappTemplate'] ?? ''),
       documentsFolder: String(v['documents.folder'] ?? ''),
       logoPath: String(v['business.logoPath'] ?? ''),
@@ -44,15 +52,17 @@ export function InvoiceSettingsPanel() {
   }, [settingsQuery.data])
 
   const preview = useMemo(() => {
+    const h = headerQuery.data
     const business = {
-      name: String(settingsQuery.data?.values['business.name'] ?? 'Aqua Nuqi'),
-      address: String(settingsQuery.data?.values['business.address'] ?? ''),
-      phone: String(settingsQuery.data?.values['business.phone'] ?? ''),
-      phone2: String(settingsQuery.data?.values['business.phone2'] ?? ''),
-      email: String(settingsQuery.data?.values['business.email'] ?? ''),
-      bankDetails: String(settingsQuery.data?.values['business.bankDetails'] ?? ''),
-      taxNumber: String(settingsQuery.data?.values['business.taxNumber'] ?? ''),
-      logoDataUrl: null as string | null,
+      name: h?.name ?? String(settingsQuery.data?.values['business.name'] ?? 'Aqua Nuqi'),
+      address: h?.address ?? String(settingsQuery.data?.values['business.address'] ?? ''),
+      phone: h?.phone ?? String(settingsQuery.data?.values['business.phone'] ?? ''),
+      phone2: h?.phone2 ?? String(settingsQuery.data?.values['business.phone2'] ?? ''),
+      email: h?.email ?? String(settingsQuery.data?.values['business.email'] ?? ''),
+      bankDetails:
+        h?.bankDetails ?? String(settingsQuery.data?.values['business.bankDetails'] ?? ''),
+      taxNumber: h?.taxNumber ?? String(settingsQuery.data?.values['business.taxNumber'] ?? ''),
+      logoDataUrl: h?.logoDataUrl ?? null,
       accentColour: form.accentColour,
       footerNote: form.footerNote,
       termsText: form.termsText,
@@ -117,7 +127,7 @@ export function InvoiceSettingsPanel() {
         />
       </div>
     )
-  }, [form, settingsQuery.data])
+  }, [form, settingsQuery.data, headerQuery.data])
 
   async function save() {
     try {
@@ -131,9 +141,12 @@ export function InvoiceSettingsPanel() {
           'invoice.defaultPageSize': form.defaultPageSize,
           'invoice.whatsappTemplate': form.whatsappTemplate,
           'documents.folder': form.documentsFolder,
+          'print.defaultPrinter': form.defaultPrinter,
+          'print.defaultThermalPrinter': form.defaultThermalPrinter,
         },
       })
       await qc.invalidateQueries({ queryKey: ['settings'] })
+      await qc.invalidateQueries({ queryKey: ['pdf', 'businessHeader'] })
       toast({ title: 'Invoice settings saved', variant: 'success' })
     } catch (err) {
       toast({
@@ -154,6 +167,7 @@ export function InvoiceSettingsPanel() {
       const up = await api.pdf.uploadLogo(r.path)
       setForm((f) => ({ ...f, logoPath: up.logoPath }))
       await qc.invalidateQueries({ queryKey: ['settings'] })
+      await qc.invalidateQueries({ queryKey: ['pdf', 'businessHeader'] })
       toast({ title: 'Logo uploaded', variant: 'success' })
     } catch (err) {
       toast({
@@ -208,15 +222,31 @@ export function InvoiceSettingsPanel() {
           Show rate column
         </label>
         <div className="space-y-1.5">
-          <Label>Default page size</Label>
+          <Label>Default receipt page size</Label>
           <select
             className="flex h-9 w-full rounded-md border px-3 text-sm"
             value={form.defaultPageSize}
             onChange={(e) => setForm({ ...form, defaultPageSize: e.target.value })}
           >
-            <option value="A4">A4</option>
+            <option value="A4">A5 / A4 (standard receipt)</option>
             <option value="thermal">Thermal 80 mm (receipts)</option>
           </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Default printer (A4 / invoices)</Label>
+          <Input
+            value={form.defaultPrinter}
+            onChange={(e) => setForm({ ...form, defaultPrinter: e.target.value })}
+            placeholder="System default if empty"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Default thermal printer</Label>
+          <Input
+            value={form.defaultThermalPrinter}
+            onChange={(e) => setForm({ ...form, defaultThermalPrinter: e.target.value })}
+            placeholder="Device name for 80 mm receipts / slips"
+          />
         </div>
         <div className="space-y-1.5">
           <Label>Footer note</Label>

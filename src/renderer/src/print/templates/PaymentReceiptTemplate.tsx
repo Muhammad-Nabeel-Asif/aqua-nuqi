@@ -45,6 +45,9 @@ export function PaymentReceiptTemplate({
     <div
       className={`print-root bg-white ${thermal ? 'w-[72mm] p-1 text-[10px]' : 'mx-auto max-w-[148mm] p-3 text-[11px]'}`}
     >
+      <style>
+        {thermal ? '@page { size: 80mm 297mm; margin: 3mm; }' : '@page { size: A5; margin: 8mm; }'}
+      </style>
       {!thermal ? (
         <BusinessHeader
           business={business}

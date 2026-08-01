@@ -30,6 +30,7 @@ export function DeliverySlipTemplate({
   const m = (p: number) => fmtMoney(p, business.currencySymbol, business.decimalPlaces)
   return (
     <div className="print-root w-[72mm] bg-white p-1 text-[10px]">
+      <style>{`@page { size: 80mm 297mm; margin: 3mm; }`}</style>
       <div className="mb-2 text-center">
         <div className="font-bold" style={{ color: business.accentColour }}>
           {business.name}

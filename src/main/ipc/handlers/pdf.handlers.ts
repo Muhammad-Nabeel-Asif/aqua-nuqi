@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { app, BrowserWindow, clipboard, dialog, shell } from 'electron'
+import { z } from 'zod'
 import { getAppContext } from '@main/app-context'
 import { defineHandler } from '@main/ipc/router'
 import { getPrintJob, signalDocumentReady } from '@main/windows/print-window'
@@ -29,8 +30,11 @@ import {
   generateReceivablesPdfOutput,
   generateStatementPdfInput,
   generateStatementPdfOutput,
+  getInvoicePrintPayloadInput,
+  getInvoicePrintPayloadOutput,
   getPrintJobInput,
   getPrintJobOutput,
+  businessHeaderOutput,
   openPdfInput,
   openPdfOutput,
   printInvoiceInput,
@@ -80,6 +84,22 @@ export function registerPdfHandlers(): void {
       signalDocumentReady(input.jobId)
       return { ok: true as const }
     },
+  })
+
+  defineHandler({
+    channel: 'pdf:businessHeader',
+    input: z.object({}),
+    output: businessHeaderOutput,
+    roles: 'authenticated',
+    handler: () => pdf().businessHeader(),
+  })
+
+  defineHandler({
+    channel: 'pdf:getInvoicePrintPayload',
+    input: getInvoicePrintPayloadInput,
+    output: getInvoicePrintPayloadOutput,
+    roles: 'authenticated',
+    handler: (input) => pdf().buildInvoicePayload(input.invoiceId),
   })
 
   defineHandler({

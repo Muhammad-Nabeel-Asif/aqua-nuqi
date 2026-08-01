@@ -2,6 +2,13 @@ import { join } from 'node:path'
 import { BrowserWindow } from 'electron'
 import { log } from '@main/lib/logger'
 import type { PageSizeSpec, PrintTemplateId } from '@shared/contracts/pdf'
+import {
+  PDF_EMPTY_HEADER_TEMPLATE,
+  PDF_PAGE_FOOTER_TEMPLATE,
+  pdfPageNumbersEnabled,
+  preferCssPageSize,
+  toElectronPageSize,
+} from '@shared/print-page-size'
 
 export type PrintJobRecord = {
   jobId: string
@@ -115,11 +122,6 @@ async function getPoolWindow(): Promise<BrowserWindow> {
   return poolWindow
 }
 
-function toElectronPageSize(pageSize: PageSizeSpec): string | { width: number; height: number } {
-  if (typeof pageSize === 'string') return pageSize
-  return { width: pageSize.widthMicrons, height: pageSize.heightMicrons }
-}
-
 export type RenderPdfOptions = {
   jobId: string
   template: PrintTemplateId
@@ -152,15 +154,31 @@ export async function renderTemplateToPdf(opts: RenderPdfOptions): Promise<Buffe
     })
     await Promise.race([job.ready.promise, timeout])
 
+    const cssPage = preferCssPageSize(opts.pageSize)
+    const pageNumbers = pdfPageNumbersEnabled(opts.pageSize)
     const pdf = await win.webContents.printToPDF({
       printBackground: true,
-      pageSize: toElectronPageSize(opts.pageSize) as
-        'A4' | 'A5' | 'Letter' | { width: number; height: number },
+      // Thermal: prefer CSS `@page { size: 80mm … }` — micron pageSize alone produced a
+      // broken MediaBox (~28 m wide) in Chromium/Electron.
+      preferCSSPageSize: cssPage,
+      ...(cssPage
+        ? {}
+        : {
+            pageSize: toElectronPageSize(opts.pageSize) as 'A4' | 'A5' | 'Letter',
+          }),
       landscape: opts.landscape ?? false,
+      displayHeaderFooter: pageNumbers,
+      ...(pageNumbers
+        ? {
+            headerTemplate: PDF_EMPTY_HEADER_TEMPLATE,
+            footerTemplate: PDF_PAGE_FOOTER_TEMPLATE,
+          }
+        : {}),
       margins: {
         marginType: 'custom',
         top: opts.margins?.top ?? 0.4,
-        bottom: opts.margins?.bottom ?? 0.4,
+        // Leave room for the Chromium footer when page numbers are on.
+        bottom: opts.margins?.bottom ?? (pageNumbers ? 0.55 : 0.4),
         left: opts.margins?.left ?? 0.45,
         right: opts.margins?.right ?? 0.45,
       },

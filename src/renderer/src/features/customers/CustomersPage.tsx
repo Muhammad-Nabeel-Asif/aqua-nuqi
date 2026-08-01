@@ -117,6 +117,50 @@ export function CustomersPage() {
     a.download = r.fileName
     a.click()
   }
+
+  async function exportCustomersPdf() {
+    const items = query.data?.items ?? []
+    try {
+      const r = await api.pdf.exportTable({
+        title: 'Customers',
+        fileName: 'customers.pdf',
+        openAfter: true,
+        orientation: 'landscape',
+        filters: [
+          ...(search ? [{ label: 'Search', value: search }] : []),
+          ...(status ? [{ label: 'Status', value: status }] : []),
+          ...(type ? [{ label: 'Type', value: type }] : []),
+        ],
+        columns: [
+          { key: 'code', header: 'Code' },
+          { key: 'name', header: 'Name' },
+          { key: 'area', header: 'Area' },
+          { key: 'route', header: 'Route' },
+          { key: 'phone', header: 'Phone' },
+          { key: 'balance', header: 'Balance', align: 'right' },
+          { key: 'bottles', header: 'Bottles', align: 'right' },
+          { key: 'status', header: 'Status' },
+        ],
+        rows: items.map((c) => ({
+          code: c.code,
+          name: c.name,
+          area: c.areaName ?? '',
+          route: c.routeName ?? '',
+          phone: c.phonePrimary ?? '',
+          balance: c.balance,
+          bottles: c.bottlesWithCustomer,
+          status: c.status,
+        })),
+      })
+      toast({ title: 'Customers PDF saved', description: r.path, variant: 'success' })
+    } catch (e) {
+      toast({
+        title: 'PDF export failed',
+        description: e instanceof Error ? e.message : 'Error',
+        variant: 'error',
+      })
+    }
+  }
   return (
     <div>
       <PageHeader
@@ -182,7 +226,10 @@ export function CustomersPage() {
           Bulk rate change
         </Button>
         <Button variant="outline" onClick={() => void exportCustomers()}>
-          Export
+          Export CSV
+        </Button>
+        <Button variant="outline" onClick={() => void exportCustomersPdf()}>
+          Export PDF
         </Button>
         {selected.length > 0 && (
           <>

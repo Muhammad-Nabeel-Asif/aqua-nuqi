@@ -112,6 +112,45 @@ export function MonthMatrixPage() {
     URL.revokeObjectURL(url)
   }
 
+  async function exportGridPdf() {
+    const data = grid.data
+    if (!data) return
+    try {
+      const r = await api.pdf.exportTable({
+        title: `Delivery matrix ${period}`,
+        fileName: `deliveries-${period}.pdf`,
+        openAfter: true,
+        orientation: 'landscape',
+        filters: [
+          ...(routeId ? [{ label: 'Route', value: routeId }] : []),
+          ...(areaId ? [{ label: 'Area', value: areaId }] : []),
+          ...(search ? [{ label: 'Search', value: search }] : []),
+        ],
+        columns: [
+          { key: 'code', header: 'Code' },
+          { key: 'name', header: 'Name' },
+          { key: 'units', header: 'Units', align: 'right' },
+          { key: 'empties', header: 'Empties', align: 'right' },
+          { key: 'amount', header: 'Amount', align: 'right' },
+        ],
+        rows: data.rows.map((row) => ({
+          code: row.code,
+          name: row.name,
+          units: row.totalUnits,
+          empties: row.totalEmpties,
+          amount: row.totalAmount,
+        })),
+      })
+      toast({ title: 'Matrix PDF saved', description: r.path, variant: 'success' })
+    } catch (e) {
+      toast({
+        title: 'PDF export failed',
+        description: e instanceof Error ? e.message : 'Error',
+        variant: 'error',
+      })
+    }
+  }
+
   function printGrid() {
     window.print()
   }
@@ -135,6 +174,9 @@ export function MonthMatrixPage() {
             </Button>
             <Button variant="outline" onClick={() => void exportGrid('xlsx')}>
               Export Excel
+            </Button>
+            <Button variant="outline" onClick={() => void exportGridPdf()}>
+              Export PDF
             </Button>
             <Button variant="outline" onClick={printGrid}>
               Print

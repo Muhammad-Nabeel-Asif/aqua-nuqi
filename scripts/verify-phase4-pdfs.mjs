@@ -1,18 +1,26 @@
 /**
- * Headless Phase 4 PDF acceptance checks (printToPDF + Urdu + thermal size).
- * Writes under /tmp to avoid Electron load quirks with spaces in the project path.
+ * Phase 4 PDF acceptance against the real built renderer print route
+ * (`#/print/:template?fixture=…` → InvoiceTemplate / PaymentReceiptTemplate).
+ *
+ * Requires `npm run build` first. Writes under /tmp; mirrors to docs/phases/.phase4-pdf-verify.
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
-import { spawn } from 'node:child_process'
+import { spawn, execFileSync } from 'node:child_process'
 
 const require = createRequire(import.meta.url)
 const electronPath = require('electron')
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const rendererHtml = path.join(root, 'out/renderer/index.html')
+if (!fs.existsSync(rendererHtml)) {
+  console.error('Missing out/renderer/index.html — run npm run build first')
+  process.exit(1)
+}
+
 const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aqua-phase4-pdf-'))
 const mirrorDir = path.join(root, 'docs/phases/.phase4-pdf-verify')
 fs.mkdirSync(mirrorDir, { recursive: true })
@@ -23,44 +31,18 @@ const fs = require('fs');
 const path = require('path');
 
 const outDir = process.env.PHASE4_OUT;
-const fontRegular = process.env.PHASE4_FONT_SANS;
-const fontUrdu = process.env.PHASE4_FONT_URDU;
+const rendererHtml = process.env.PHASE4_RENDERER_HTML;
 const resultPath = path.join(outDir, 'result.json');
 
 function writeResult(obj) {
   fs.writeFileSync(resultPath, JSON.stringify(obj, null, 2));
 }
 
-function toFileUrl(p) {
-  return 'file://' + encodeURI(path.resolve(p).replace(/\\\\/g, '/'));
-}
-
-function buildHtml(lineCount, title) {
-  const urdu = 'علی خان';
-  const rows = Array.from({ length: lineCount }, (_, i) => {
-    const day = String((i % 28) + 1).padStart(2, '0');
-    return '<tr><td>' + (i + 1) + '</td><td>2026-07-' + day +
-      '</td><td>19 L Bottle</td><td class="num">2</td><td class="num">Rs 60</td><td class="num">Rs 120</td></tr>';
-  }).join('');
-  return \`<!doctype html><html><head><meta charset="utf-8">
-<style>
-@font-face { font-family: 'Noto Sans'; src: url('\${toFileUrl(fontRegular)}'); }
-@font-face { font-family: 'Noto Nastaliq Urdu'; src: url('\${toFileUrl(fontUrdu)}'); }
-body { font-family: 'Noto Sans', 'Noto Nastaliq Urdu', sans-serif; font-size: 11px; }
-.customer-name { font-family: 'Noto Nastaliq Urdu', 'Noto Sans', sans-serif; font-size: 16px; font-weight: bold; }
-table { width: 100%; border-collapse: collapse; }
-th, td { border-bottom: 1px solid #ccc; padding: 3px; }
-thead { display: table-header-group; }
-.num { text-align: right; font-variant-numeric: tabular-nums; }
-.total { font-size: 18px; font-weight: bold; color: #0284c7; }
-</style></head><body>
-<h1>\${title}</h1>
-<div class="customer-name" lang="ur">\${urdu}</div>
-<table><thead><tr><th>#</th><th>Date</th><th>Description</th><th>Units</th><th>Rate</th><th>Amount</th></tr></thead>
-<tbody>\${rows}</tbody></table>
-<p class="total">TOTAL PAYABLE Rs 3,700</p>
-<p>Rupees Three Thousand Seven Hundred Only</p>
-</body></html>\`;
+function pdfMediaBoxWidthPts(buf) {
+  const s = buf.toString('latin1');
+  const m = /\\/MediaBox\\s*\\[\\s*[0-9.]+\\s+[0-9.]+\\s+([0-9.]+)\\s+([0-9.]+)\\s*\\]/.exec(s);
+  if (!m) return null;
+  return Number(m[1]);
 }
 
 app.whenReady().then(async () => {
@@ -69,43 +51,100 @@ app.whenReady().then(async () => {
     show: false,
     width: 900,
     height: 1400,
-    webPreferences: { sandbox: false, webSecurity: false },
+    webPreferences: {
+      sandbox: false,
+      contextIsolation: false,
+      nodeIntegration: false,
+    },
   });
   try {
-    async function render(html, fileName, pageSize) {
-      const htmlPath = path.join(outDir, fileName.replace('.pdf', '.html'));
-      fs.writeFileSync(htmlPath, html, 'utf8');
-      await win.loadFile(htmlPath);
+    async function renderFixture(hashPath, fileName, opts = {}) {
+      const url = 'file://' + rendererHtml.replace(/\\\\/g, '/') + '#' + hashPath;
+      await win.loadURL(url);
+      // Wait for fixture PrintJobPage to mark ready (fonts + images).
+      const deadline = Date.now() + 20000;
+      let ready = false;
+      while (Date.now() < deadline) {
+        ready = await win.webContents.executeJavaScript(
+          "document.documentElement.dataset.printReady === '1' && !document.body.innerText.includes('Unexpected Application Error') && !document.body.innerText.includes('Preparing document')",
+        );
+        if (ready) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!ready) {
+        const snippet = await win.webContents.executeJavaScript(
+          'document.body.innerText.slice(0, 500)',
+        );
+        throw new Error('Print fixture not ready for ' + hashPath + ': ' + snippet);
+      }
       await win.webContents.executeJavaScript('document.fonts.ready.then(() => true)');
-      await new Promise((r) => setTimeout(r, 250));
-      const buf = await win.webContents.printToPDF({
+      await new Promise((r) => setTimeout(r, 200));
+      const pdfOpts = {
         printBackground: true,
-        pageSize,
-        margins: { marginType: 'custom', top: 0.4, bottom: 0.4, left: 0.45, right: 0.45 },
-      });
+        preferCSSPageSize: !!opts.preferCSSPageSize,
+        displayHeaderFooter: !!opts.pageNumbers,
+        margins: {
+          marginType: 'custom',
+          top: opts.margins?.top ?? 0.35,
+          bottom: opts.margins?.bottom ?? (opts.pageNumbers ? 0.55 : 0.35),
+          left: opts.margins?.left ?? 0.4,
+          right: opts.margins?.right ?? 0.4,
+        },
+      };
+      if (opts.pageSize) pdfOpts.pageSize = opts.pageSize;
+      if (opts.pageNumbers) {
+        pdfOpts.headerTemplate = '<div></div>';
+        pdfOpts.footerTemplate =
+          '<div style="font-size:9px;width:100%;text-align:center;color:#64748b;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>';
+      }
+      const buf = await win.webContents.printToPDF(pdfOpts);
       const dest = path.join(outDir, fileName);
       fs.writeFileSync(dest, buf);
-      return { dest, buf };
+      return { dest, buf, mediaWidth: pdfMediaBoxWidthPts(buf) };
     }
 
-    const onePage = await render(buildHtml(26, 'INVOICE 26 lines'), 'invoice-26.pdf', 'A4');
-    results.checks.push({ name: 'invoice-26-exists', pass: fs.existsSync(onePage.dest), size: onePage.buf.length });
+    const onePage = await renderFixture(
+      '/print/invoice?fixture=invoice-26',
+      'invoice-26.pdf',
+      { pageSize: 'A4', pageNumbers: true },
+    );
+    results.checks.push({
+      name: 'invoice-26-exists',
+      pass: fs.existsSync(onePage.dest),
+      size: onePage.buf.length,
+    });
 
-    const multi = await render(buildHtml(60, 'INVOICE 60 lines'), 'invoice-60.pdf', 'A4');
-    results.checks.push({ name: 'invoice-60-exists', pass: fs.existsSync(multi.dest), size: multi.buf.length });
-    results.checks.push({ name: 'invoice-60-larger-or-equal', pass: multi.buf.length >= onePage.buf.length });
+    const multi = await renderFixture(
+      '/print/invoice?fixture=invoice-60',
+      'invoice-60.pdf',
+      { pageSize: 'A4', pageNumbers: true },
+    );
+    results.checks.push({
+      name: 'invoice-60-exists',
+      pass: fs.existsSync(multi.dest),
+      size: multi.buf.length,
+    });
 
-    const thermalHtml = \`<!doctype html><html><head><meta charset="utf-8">
-<style>
-@font-face { font-family: 'Noto Nastaliq Urdu'; src: url('\${toFileUrl(fontUrdu)}'); }
-body{font-family:'Noto Nastaliq Urdu',sans-serif;font-size:10px;width:72mm}
-</style></head>
-<body><h1>PAYMENT RECEIPT</h1><div lang="ur">علی خان</div>
-<p>Amount: Rs 1,250</p><p>Rupees One Thousand Two Hundred Fifty Only</p></body></html>\`;
-    const thermal = await render(thermalHtml, 'receipt-80mm.pdf', { width: 80000, height: 200000 });
-    results.checks.push({ name: 'thermal-80mm-exists', pass: fs.existsSync(thermal.dest), size: thermal.buf.length });
+    const thermal = await renderFixture(
+      '/print/payment-receipt-thermal?fixture=receipt-thermal',
+      'receipt-80mm.pdf',
+      {
+        preferCSSPageSize: true,
+        margins: { top: 0.15, bottom: 0.15, left: 0.12, right: 0.12 },
+      },
+    );
+    results.checks.push({
+      name: 'thermal-80mm-exists',
+      pass: fs.existsSync(thermal.dest),
+      size: thermal.buf.length,
+    });
+    // 80mm ≈ 226.77 pt; allow 200–260 pt (reject the ~5.76e6 broken MediaBox).
+    results.checks.push({
+      name: 'thermal-mediabox-width-pts',
+      pass: thermal.mediaWidth != null && thermal.mediaWidth >= 200 && thermal.mediaWidth <= 260,
+      mediaWidth: thermal.mediaWidth,
+    });
 
-    // Text extraction is done by the parent via pdftotext (CID fonts hide strings in the PDF binary).
     results.outDir = outDir;
     results.ok = results.checks.every((c) => c.pass);
     writeResult(results);
@@ -121,20 +160,11 @@ body{font-family:'Noto Nastaliq Urdu',sans-serif;font-size:10px;width:72mm}
 const tmp = path.join(os.tmpdir(), `phase4-pdf-verify-${Date.now()}.cjs`)
 fs.writeFileSync(tmp, runner)
 
-// Copy fonts into /tmp so @font-face paths have no spaces
-const fontDir = path.join(outDir, 'fonts')
-fs.mkdirSync(fontDir, { recursive: true })
-const sans = path.join(fontDir, 'NotoSans-Regular.ttf')
-const urdu = path.join(fontDir, 'NotoNastaliqUrdu-Regular.ttf')
-fs.copyFileSync(path.join(root, 'resources/fonts/NotoSans-Regular.ttf'), sans)
-fs.copyFileSync(path.join(root, 'resources/fonts/NotoNastaliqUrdu-Regular.ttf'), urdu)
-
 const child = spawn(electronPath, [tmp], {
   env: {
     ...process.env,
     PHASE4_OUT: outDir,
-    PHASE4_FONT_SANS: sans,
-    PHASE4_FONT_URDU: urdu,
+    PHASE4_RENDERER_HTML: rendererHtml,
     ELECTRON_RUN_AS_NODE: '',
   },
   stdio: 'inherit',
@@ -148,7 +178,6 @@ const result = JSON.parse(fs.readFileSync(path.join(outDir, 'result.json'), 'utf
 
 function pdfText(file) {
   try {
-    const { execFileSync } = require('node:child_process')
     return execFileSync('pdftotext', ['-layout', file, '-'], { encoding: 'utf8' })
   } catch {
     return ''
@@ -156,7 +185,6 @@ function pdfText(file) {
 }
 function pdfPages(file) {
   try {
-    const { execFileSync } = require('node:child_process')
     const info = execFileSync('pdfinfo', [file], { encoding: 'utf8' })
     const m = /^Pages:\s+(\d+)/m.exec(info)
     return m ? Number(m[1]) : 0
@@ -169,7 +197,6 @@ const t26 = pdfText(path.join(outDir, 'invoice-26.pdf'))
 const t60 = pdfText(path.join(outDir, 'invoice-60.pdf'))
 const t60p2 = (() => {
   try {
-    const { execFileSync } = require('node:child_process')
     return execFileSync(
       'pdftotext',
       ['-f', '2', '-l', '2', '-layout', path.join(outDir, 'invoice-60.pdf'), '-'],
@@ -188,14 +215,20 @@ result.checks.push({
   pages: pages26,
 })
 result.checks.push({
-  name: 'invoice-60-two-pages-with-header',
-  pass: pages60 >= 2 && /#\s+Date|Description/.test(t60p2) && /TOTAL PAYABLE/.test(t60),
+  name: 'invoice-60-paginates-with-header-and-page-numbers',
+  pass:
+    pages60 >= 2 &&
+    /#\s*Date|Description/.test(t60p2) &&
+    /TOTAL PAYABLE/.test(t60) &&
+    /Page\s+2\s+of\s+2/.test(t60),
   pages: pages60,
+  samplePageText: t60.match(/Page\s+\d+\s+of\s+\d+/)?.[0] ?? null,
 })
 result.checks.push({
   name: 'urdu-name-renders',
-  pass: /علی/.test(t26),
-  sample: t26.split('\n').find((l) => /علی/.test(l)) ?? null,
+  // pdftotext may reorder RTL glyphs; accept Arabic script or the literal name.
+  pass: /علی/.test(t26) || /[\u0600-\u06FF]{2,}/.test(t26),
+  sample: t26.split('\n').find((l) => /[\u0600-\u06FF]/.test(l)) ?? null,
 })
 result.checks.push({
   name: 'thermal-receipt-text',

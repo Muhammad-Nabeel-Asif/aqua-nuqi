@@ -600,9 +600,33 @@ export const api = {
         elapsedMs: number
       }>('pdf:batchGenerate', input),
     cancelBatch: (jobId: string) => invoke<{ ok: true }>('pdf:cancelBatch', { jobId }),
+    businessHeader: () =>
+      invoke<{
+        name: string
+        address: string
+        phone: string
+        phone2: string
+        email: string
+        bankDetails: string
+        taxNumber: string
+        logoDataUrl: string | null
+        accentColour: string
+        footerNote: string
+        termsText: string
+        showBottleBalance: boolean
+        showRateColumn: boolean
+        currencySymbol: string
+        decimalPlaces: number
+        numberingSystem: string
+      }>('pdf:businessHeader', {}),
+    getInvoicePrintPayload: (invoiceId: number) =>
+      invoke<import('@renderer/print/templates/InvoiceTemplate').InvoiceTemplateProps>(
+        'pdf:getInvoicePrintPayload',
+        { invoiceId },
+      ),
     printInvoice: (invoiceId: number, deviceName?: string) =>
       invoke<{ ok: true }>('pdf:printInvoice', { invoiceId, deviceName }),
-    generateReceipt: (paymentId: number, variant: 'a5' | 'thermal' = 'a5', openAfter?: boolean) =>
+    generateReceipt: (paymentId: number, variant?: 'a5' | 'thermal', openAfter?: boolean) =>
       invoke<{ path: string }>('pdf:generateReceipt', { paymentId, variant, openAfter }),
     generateDeliverySlip: (deliveryId: number, openAfter?: boolean) =>
       invoke<{ path: string }>('pdf:generateDeliverySlip', { deliveryId, openAfter }),

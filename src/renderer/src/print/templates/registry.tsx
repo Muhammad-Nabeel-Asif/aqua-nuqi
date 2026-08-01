@@ -15,12 +15,25 @@ export const PRINT_TEMPLATE_REGISTRY: Record<
 > = {
   invoice: (p) => <InvoiceTemplate {...(p as Parameters<typeof InvoiceTemplate>[0])} />,
   'payment-receipt-a5': (p) => (
-    <PaymentReceiptTemplate {...(p as Parameters<typeof PaymentReceiptTemplate>[0])} variant="a5" />
+    <PaymentReceiptTemplate
+      variant="a5"
+      business={p.business as Parameters<typeof PaymentReceiptTemplate>[0]['business']}
+      payment={p.payment as Parameters<typeof PaymentReceiptTemplate>[0]['payment']}
+      balanceAfter={Number(p.balanceAfter ?? 0)}
+      amountInWords={String(p.amountInWords ?? '')}
+      receivedBy={String(p.receivedBy ?? '')}
+      generatedAt={String(p.generatedAt ?? '')}
+    />
   ),
   'payment-receipt-thermal': (p) => (
     <PaymentReceiptTemplate
-      {...(p as Parameters<typeof PaymentReceiptTemplate>[0])}
       variant="thermal"
+      business={p.business as Parameters<typeof PaymentReceiptTemplate>[0]['business']}
+      payment={p.payment as Parameters<typeof PaymentReceiptTemplate>[0]['payment']}
+      balanceAfter={Number(p.balanceAfter ?? 0)}
+      amountInWords={String(p.amountInWords ?? '')}
+      receivedBy={String(p.receivedBy ?? '')}
+      generatedAt={String(p.generatedAt ?? '')}
     />
   ),
   'delivery-slip': (p) => (

@@ -761,7 +761,7 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 
 ## Phase 4 — PDF Documents, Printing & Sharing
 
-**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.6.0`
+**Date:** 2026-08-01 · **Status:** partial · **package.json:** `0.6.0` · **stable:** [v0.6.32](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.6.32) (pre-review); review fixes not yet released
 
 ### Built
 
@@ -774,9 +774,9 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 - Payment receipts (A5 + 80 mm), delivery slip, customer statement, delivery card PDF,
   bottles-out + receivables print layouts
 - Settings → Invoice tab (logo upload, accent, bottle/rate toggles, terms, WhatsApp template,
-  documents folder) with live preview
+  documents folder, default / thermal printers) with live preview (logo via `pdf:businessHeader`)
 - `numberToWords` (Pakistani lakh/crore) + unit tests
-- Generic `exportTable` / `exportExcel` wired to receivables (and available to all list screens)
+- Generic `exportTable` / `exportExcel` wired to receivables, customers, and month matrix
 
 ### Migrations added
 
@@ -786,6 +786,7 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 
 - `print:getJob`, `print:documentReady`
 - `pdf:generateInvoice`, `pdf:batchGenerate`, `pdf:cancelBatch`, `pdf:printInvoice`
+- `pdf:getInvoicePrintPayload`, `pdf:businessHeader`
 - `pdf:generateReceipt`, `pdf:generateDeliverySlip`, `pdf:generateStatement`
 - `pdf:generateDeliveryCard`, `pdf:generateBottlesOut`, `pdf:generateReceivables`
 - `pdf:exportTable`, `pdf:exportExcel`
@@ -871,17 +872,24 @@ exportTable({
 - Electron BrowserWindow / `printToPDF` lives in `src/main/windows/print-window.ts` (eslint
   forbids Electron imports under `services/`); `pdf.service.ts` stays pure and receives
   `renderer` + `platform` adapters from bootstrap.
-- Page “x of y” uses CSS `counter(page)` / `counter(pages)` (Chromium print); verified 60-line
-  invoices paginate to 2 pages with repeated `<thead>`.
+- Page “x of y” uses Electron `displayHeaderFooter` + `footerTemplate` (`pageNumber` /
+  `totalPages` classes). Body CSS `counter(page)` does not advance under `printToPDF`.
+- Thermal 80 mm PDFs use `preferCSSPageSize: true` with `@page { size: 80mm 297mm }` (micron
+  `pageSize` alone produced a ~28 m-wide MediaBox in Electron 33).
 - WhatsApp is shell-only (`wa.me` + reveal PDF); no whatsapp-web.js / Baileys (per docs/05).
+- Excel via existing `xlsx` (SheetJS), not `exceljs`.
 
-### Acceptance verification (2026-08-01)
+### Acceptance verification (2026-08-01, post-review)
 
-- `node scripts/verify-phase4-pdfs.mjs`: 26-line invoice = 1 page; 60-line = 2 pages with
-  repeated header; Urdu `علی خان` in `pdftotext` (Noto Nastaliq); 80 mm thermal receipt PDF;
-  preview PNG inspected for Urdu glyphs (not boxes).
-- Unit: `numberToWords` zero / 1,250 / 3,700 / 1,25,000 / 1,20,00,000 + paisa; batch cancel;
-  regenerate keeps snapshotted totals; exportTable/exportExcel.
+- `node scripts/verify-phase4-pdfs.mjs` (requires `npm run build`): loads real
+  `#/print/:template?fixture=…` routes (`InvoiceTemplate` / `PaymentReceiptTemplate`).
+  - 26-line invoice → **1 page**; 60-line → **2 pages** with repeated `<thead>` and
+    **Page 1 of 2 / Page 2 of 2**; Urdu Arabic script in `pdftotext`; thermal MediaBox width
+    ≈ **227 pts** (80 mm).
+- Unit: `numberToWords`; batch cancel with slow renderer (`cancelled === true`,
+  `generated < total`); receipt `balanceAfter` from ledger; issued invoice empties/deposit
+  ignore later live edits; thermal printer deviceName from settings; print-page-size helpers;
+  WYSIWYG payload fields; exportTable/exportExcel.
 - `npm run typecheck && npm run lint && npm run test && npm run build` PASS.
 
 ### What the next phase must know
@@ -890,9 +898,30 @@ exportTable({
 - Documents default to `<Documents>/AquaNuqi/...` or `documents.folder`.
 - Invoice PDFs: `<docs>/Invoices/<YYYY-MM>/<invoiceNo>-<code>-<slug>.pdf`.
 - Logo files live in `userData/logos/` via `pdf:uploadLogo`.
+- Preview IPC: `pdf:getInvoicePrintPayload` / `pdf:businessHeader` (same payload as PDF gen).
+- Thermal print jobs read `print.defaultThermalPrinter`; receipt default variant follows
+  `invoice.defaultPageSize` (`thermal` → thermal, else A5).
 - **Next phase is Phase 5 (Expenses)** (or follow the phase order in `docs/phases/`).
-- Stable release for 0.6.x should be triggered after push (Build & Release → stable).
+- Status stays **partial** until review-fix build is published as stable and upgrade matrix
+  recorded.
 
 ### Escalations / questions for the human
 
-- None blocking. Optional: confirm accent/logo defaults after first client install.
+- Trigger Build & Release → **stable** after merging review fixes; re-run Windows upgrade checks
+  and record the new 0.6.x tag here.
+
+### Review fixes (2026-08-01)
+
+- Invoice density + margins so 26 delivery lines fit one A4 page; page numbers via
+  `printToPDF` footerTemplate (not body CSS counters).
+- Thermal PDFs: `preferCSSPageSize` + `@page { size: 80mm … }`; MediaBox ≈ 227 pts.
+- WYSIWYG preview from `pdf:getInvoicePrintPayload`; settings preview loads logo via
+  `pdf:businessHeader`.
+- Receipt `balanceAfter` from ledger payment entry; issued invoices use linked-delivery
+  empties + deposit-as-of-issue-date (not live customer card / deposit).
+- Batch cancel test injects slow renderer; asserts `cancelled` and partial generation.
+- `invoice.defaultPageSize` / `print.defaultThermalPrinter` wired for receipts; Settings UI
+  exposes printer device names.
+- `exportTable` on Customers + Month Matrix; deleted orphan `src/main/lib/print-window.ts`.
+- Verifier rewritten against real print fixtures; PROGRESS acceptance claims corrected;
+  status → **partial** until post-fix stable release.

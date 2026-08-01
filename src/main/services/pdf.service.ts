@@ -1,8 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { eq } from 'drizzle-orm'
+import { and, eq, inArray, lte, sql } from 'drizzle-orm'
 import type { AppDatabase } from '@main/db/client'
-import { customers, invoices } from '@main/db/schema'
+import { customers, deliveries as deliveriesTable, invoices, ledgerEntries } from '@main/db/schema'
 import { newUuid } from '@main/lib/ids'
 import type {
   BatchProgressEvent,
@@ -172,20 +172,86 @@ export function createPdfService(
     db.update(invoices).set({ pdfPath, updatedAt: now }).where(eq(invoices.id, invoiceId)).run()
   }
 
+  /** Empties on delivery rows linked to this invoice (frozen once invoiced). */
+  function emptiesFromInvoiceLines(invoice: ReturnType<BillingService['getById']>): number {
+    const ids = invoice.lines
+      .map((l) => l.deliveryId)
+      .filter((id): id is number => typeof id === 'number' && id > 0)
+    if (!ids.length) return 0
+    const rows = db
+      .select({ empties: deliveriesTable.emptiesCollected })
+      .from(deliveriesTable)
+      .where(inArray(deliveriesTable.id, ids))
+      .all()
+    return rows.reduce((sum, r) => sum + r.empties, 0)
+  }
+
+  /** Deposit held as of a business date (ledger deposit_received − deposit_refunded). */
+  function securityDepositAsOf(customerId: number, asOfDate: string): number {
+    const rows = db
+      .select({
+        entryType: ledgerEntries.entryType,
+        debit: ledgerEntries.debit,
+        credit: ledgerEntries.credit,
+      })
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.customerId, customerId),
+          lte(ledgerEntries.entryDate, asOfDate),
+          sql`${ledgerEntries.entryType} IN ('deposit_received', 'deposit_refunded')`,
+        ),
+      )
+      .all()
+    let held = 0
+    for (const r of rows) {
+      if (r.entryType === 'deposit_received') held += r.credit
+      else if (r.entryType === 'deposit_refunded') held -= r.debit
+    }
+    return Math.max(0, held)
+  }
+
+  /** Closing balance on the ledger entry for this payment (not live AR). */
+  function balanceAfterPayment(paymentId: number, customerId: number): number {
+    const entry = db
+      .select({ balanceAfter: ledgerEntries.balanceAfter })
+      .from(ledgerEntries)
+      .where(and(eq(ledgerEntries.refTable, 'payments'), eq(ledgerEntries.refId, paymentId)))
+      .get()
+    if (entry) return entry.balanceAfter
+    return customersSvc.getById(customerId).balance
+  }
+
+  function defaultReceiptVariant(): 'a5' | 'thermal' {
+    // Stored as string; defaults type is literal 'A4' but UI also allows 'thermal'.
+    return String(settings.get('invoice.defaultPageSize')) === 'thermal' ? 'thermal' : 'a5'
+  }
+
+  function thermalPrinterName(): string | undefined {
+    return settings.get('print.defaultThermalPrinter') || undefined
+  }
+
   function buildInvoicePayload(invoiceId: number): InvoicePrintPayload {
     const invoice = billing.getById(invoiceId)
     const customer = customersSvc.getById(invoice.customerId)
+    const isDraft = invoice.status === 'draft'
     let empties = 0
-    if (invoice.period) {
-      try {
-        const card = deliveries.getCustomerCard({
-          customerId: invoice.customerId,
-          period: invoice.period,
-        })
-        empties = card.totalEmpties
-      } catch {
-        empties = 0
+    let depositHeld = customer.securityDepositHeld
+    if (isDraft) {
+      if (invoice.period) {
+        try {
+          empties = deliveries.getCustomerCard({
+            customerId: invoice.customerId,
+            period: invoice.period,
+          }).totalEmpties
+        } catch {
+          empties = 0
+        }
       }
+    } else {
+      // Issued+ documents must not pick up later empties/deposit edits.
+      empties = emptiesFromInvoiceLines(invoice)
+      depositHeld = securityDepositAsOf(invoice.customerId, invoice.issueDate)
     }
     return {
       kind: 'invoice',
@@ -197,7 +263,7 @@ export function createPdfService(
         addressLine: customer.addressLine,
         phonePrimary: customer.phonePrimary,
         phoneSecondary: customer.phoneSecondary,
-        securityDepositHeld: customer.securityDepositHeld,
+        securityDepositHeld: depositHeld,
       },
       emptiesReturned: empties,
       amountInWords: words(invoice.totalPayable),
@@ -398,29 +464,29 @@ export function createPdfService(
 
   async function generateReceiptPdf(
     paymentId: number,
-    variant: 'a5' | 'thermal',
+    variant: 'a5' | 'thermal' | undefined,
     opts: { openAfter?: boolean; userId?: number | null } = {},
   ): Promise<{ path: string }> {
+    const resolved = variant ?? defaultReceiptVariant()
     const payment = payments.getById(paymentId)
-    const bal = customersSvc.getById(payment.customerId)
     const business = businessHeader()
     const payload = {
       kind: 'payment-receipt' as const,
-      variant,
+      variant: resolved,
       business,
       payment,
-      balanceAfter: bal.balance,
+      balanceAfter: balanceAfterPayment(paymentId, payment.customerId),
       amountInWords: words(payment.amount),
       receivedBy: '',
       generatedAt: nowIsoUtc(),
     }
-    const pageSize: PageSizeSpec = variant === 'thermal' ? THERMAL_80MM_PAGE : 'A5'
+    const pageSize: PageSizeSpec = resolved === 'thermal' ? THERMAL_80MM_PAGE : 'A5'
     const template: PrintTemplateId =
-      variant === 'thermal' ? 'payment-receipt-thermal' : 'payment-receipt-a5'
+      resolved === 'thermal' ? 'payment-receipt-thermal' : 'payment-receipt-a5'
     const fileName = `RCV-${payment.receiptNo ?? payment.id}-${slugifyName(payment.customerName)}.pdf`
     const dest = path.join(miscDir('Receipts'), fileName)
     const margins =
-      variant === 'thermal'
+      resolved === 'thermal'
         ? { top: 0.15, bottom: 0.15, left: 0.12, right: 0.12 }
         : { top: 0.35, bottom: 0.35, left: 0.4, right: 0.4 }
     await writePdf(template, payload, dest, pageSize, { margins })
@@ -429,11 +495,48 @@ export function createPdfService(
       action: 'export',
       entityTable: 'payments',
       entityId: paymentId,
-      summary: `Generated ${variant} receipt PDF`,
-      after: { path: dest },
+      summary: `Generated ${resolved} receipt PDF`,
+      after: { path: dest, thermalPrinter: thermalPrinterName() ?? null },
     })
     if (opts.openAfter) await platform.openPath(dest)
     return { path: dest }
+  }
+
+  async function printReceipt(
+    paymentId: number,
+    variant: 'a5' | 'thermal' | undefined,
+    opts: { deviceName?: string; silent?: boolean } = {},
+  ): Promise<void> {
+    const resolved = variant ?? defaultReceiptVariant()
+    const payment = payments.getById(paymentId)
+    const business = businessHeader()
+    const payload = {
+      kind: 'payment-receipt' as const,
+      variant: resolved,
+      business,
+      payment,
+      balanceAfter: balanceAfterPayment(paymentId, payment.customerId),
+      amountInWords: words(payment.amount),
+      receivedBy: '',
+      generatedAt: nowIsoUtc(),
+    }
+    const pageSize: PageSizeSpec = resolved === 'thermal' ? THERMAL_80MM_PAGE : 'A5'
+    const template: PrintTemplateId =
+      resolved === 'thermal' ? 'payment-receipt-thermal' : 'payment-receipt-a5'
+    const device =
+      opts.deviceName ||
+      (resolved === 'thermal'
+        ? thermalPrinterName() || settings.get('print.defaultPrinter') || undefined
+        : settings.get('print.defaultPrinter') || undefined)
+    await renderer.print({
+      jobId: newUuid(),
+      template,
+      payload,
+      pageSize,
+      accentColour: business.accentColour,
+      deviceName: device || undefined,
+      silent: opts.silent,
+    })
   }
 
   async function generateDeliverySlip(
@@ -796,6 +899,7 @@ export function createPdfService(
     cancelBatch,
     printInvoice,
     generateReceiptPdf,
+    printReceipt,
     generateDeliverySlip,
     generateStatementPdf,
     generateDeliveryCardPdf,
@@ -810,6 +914,8 @@ export function createPdfService(
     businessHeader,
     ensureInvoicePdf,
     documentsRoot,
+    defaultReceiptVariant,
+    thermalPrinterName,
   }
 }
 
