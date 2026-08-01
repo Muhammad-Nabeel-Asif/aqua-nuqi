@@ -26,6 +26,7 @@ import { createBackupService } from './services/backup.service'
 import { createBalanceService } from './services/balance.service'
 import { createCustomerImportService } from './services/customer-import.service'
 import { createCustomerService } from './services/customer.service'
+import { createDeliveryService } from './services/delivery.service'
 import { createMasterDataService } from './services/master-data.service'
 import { createPeriodService } from './services/period.service'
 import { createRateService } from './services/rate.service'
@@ -126,6 +127,7 @@ export function bootstrapApp(): BootstrapResult {
     const balances = createBalanceService(db, raw)
     const customers = createCustomerService(db, audit, period, rates, balances)
     const customerImport = createCustomerImportService(db, customers, masterData)
+    const deliveries = createDeliveryService(db, audit, period, rates, balances)
 
     const setupRequired = dbMissing || !auth.hasAnyUser()
     const schemaVersion =
@@ -149,6 +151,7 @@ export function bootstrapApp(): BootstrapResult {
       balances,
       customers,
       customerImport,
+      deliveries,
       appVersion,
       schemaVersion: schemaVersion || getSchemaVersion(),
       setupRequired,

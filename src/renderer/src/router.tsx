@@ -4,6 +4,10 @@ import { LoginPage } from './features/auth/LoginPage'
 import { CustomerDetailPage } from './features/customers/CustomerDetailPage'
 import { CustomersPage } from './features/customers/CustomersPage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
+import { BottlesOutPage } from './features/deliveries/BottlesOutPage'
+import { CustomerCardPage } from './features/deliveries/CustomerCardPage'
+import { DailyEntryPage } from './features/deliveries/DailyEntryPage'
+import { MonthMatrixPage } from './features/deliveries/MonthMatrixPage'
 import { ComingSoonPage } from './features/placeholder/ComingSoonPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { SetupWizard } from './features/setup/SetupWizard'
@@ -51,10 +55,12 @@ export const router = createHashRouter([
     ),
     children: [
       { index: true, element: <DashboardPage /> },
-      { path: 'deliveries/daily', element: <ComingSoonPage title="Daily deliveries" phase={2} /> },
-      { path: 'deliveries/matrix', element: <ComingSoonPage title="Month matrix" phase={2} /> },
+      { path: 'deliveries/daily', element: <DailyEntryPage /> },
+      { path: 'deliveries/matrix', element: <MonthMatrixPage /> },
+      { path: 'deliveries/bottles-out', element: <BottlesOutPage /> },
       { path: 'customers', element: <CustomersPage /> },
       { path: 'customers/:id', element: <CustomerDetailPage /> },
+      { path: 'customers/:id/card/:period', element: <CustomerCardPage /> },
       { path: 'billing/generate', element: <ComingSoonPage title="Generate invoices" phase={3} /> },
       { path: 'billing/invoices', element: <ComingSoonPage title="Invoices" phase={3} /> },
       {

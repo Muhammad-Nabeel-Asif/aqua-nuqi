@@ -15,6 +15,7 @@ import { todayBusinessDate, firstOfNextMonth } from '@shared/date'
 import { AppError } from '@shared/errors'
 import { toPaisa } from '@shared/money'
 import { toWhatsAppE164 } from '@shared/phone'
+import { CustomerCardView } from '../deliveries/CustomerCardView'
 import { CustomerFormDialog } from './CustomerFormDialog'
 
 export function CustomerDetailPage() {
@@ -182,15 +183,16 @@ export function CustomerDetailPage() {
             </table>
           </div>
         </TabsContent>
-        {(['delivery', 'ledger', 'invoices'] as const).map((tab) => (
+        <TabsContent value="delivery" className="rounded-lg border bg-white p-4">
+          <CustomerCardView customerId={id} showHeader />
+        </TabsContent>
+        {(['ledger', 'invoices'] as const).map((tab) => (
           <TabsContent
             key={tab}
             value={tab}
             className="rounded-lg border bg-white p-8 text-center text-muted-foreground"
           >
-            {tab === 'delivery'
-              ? 'Delivery card will be available in Phase 2.'
-              : 'This section will be available in Phase 3.'}
+            This section will be available in Phase 3.
           </TabsContent>
         ))}
         <TabsContent value="history">

@@ -7,6 +7,7 @@ import {
   customerRates,
   customers,
   customerSchedules,
+  deliveries,
   ledgerEntries,
   products,
   routes,
@@ -410,7 +411,14 @@ export function createCustomerService(
       .from(ledgerEntries)
       .where(eq(ledgerEntries.customerId, customerId))
       .all()
-    return rows.some((r) => AR_ENTRY_TYPES.has(r.entryType))
+    if (rows.some((r) => AR_ENTRY_TYPES.has(r.entryType))) return true
+    const d = db
+      .select({ id: deliveries.id })
+      .from(deliveries)
+      .where(eq(deliveries.customerId, customerId))
+      .limit(1)
+      .get()
+    return Boolean(d)
   }
 
   function create(rawInput: CreateCustomerInput, userId?: number | null): CustomerDto {

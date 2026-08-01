@@ -6,6 +6,11 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ### Added
 
+- **Phase 2 — Delivery tracking:** `deliveries` table with partial unique slot index; keyboard-first
+  Daily Entry, Month Matrix, and per-customer Monthly Card; autosave with optimistic updates;
+  walk-in cash sales via system `WALK-IN` customer; bottles-out list; missed-delivery indicator;
+  rate snapshotted at insert; `PERIOD_LOCKED` / `DELIVERY_INVOICED` write guards; 4–5 months of
+  seeded delivery history. **Stock movements deliberately deferred to Phase 7** (with backfill).
 - **Phase 1 — Customers & master data:** areas, routes, products management; customer CRUD with
   dated rate history (`rateService.getRateFor`); opening balances via `ledger_entries`;
   materialised `customer_balances` + recalculate; CSV/Excel import with column mapping and

@@ -126,11 +126,22 @@ export function createBalanceService(db: AppDatabase, raw: RawDatabase) {
   }
 
   function syncFromSources(customerId: number, tx: DbLike = db): void {
+    let lastDeliveryDate: string | null | undefined = undefined
+    if (tableExists('deliveries')) {
+      const row = raw
+        .prepare(
+          `SELECT max(delivery_date) as d FROM deliveries
+           WHERE customer_id = ? AND status = 'recorded'`,
+        )
+        .get(customerId) as { d: string | null }
+      lastDeliveryDate = row.d
+    }
     upsertSummary(
       customerId,
       {
         balance: computeLiveBalance(customerId, tx),
         bottlesWithCustomer: computeLiveBottles(customerId, tx),
+        lastDeliveryDate,
       },
       tx,
     )

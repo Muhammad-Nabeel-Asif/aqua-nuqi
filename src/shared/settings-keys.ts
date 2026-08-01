@@ -28,6 +28,7 @@ export const SETTING_DEFAULTS = {
   'backup.secondaryFolder': '',
   'security.autoLockMinutes': 15,
   'inventory.lowStockThreshold': 0,
+  'deliveries.missedDaysThreshold': 10,
 } as const
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS

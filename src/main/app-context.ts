@@ -6,6 +6,7 @@ import type { BackupService } from '@main/services/backup.service'
 import type { BalanceService } from '@main/services/balance.service'
 import type { CustomerImportService } from '@main/services/customer-import.service'
 import type { CustomerService } from '@main/services/customer.service'
+import type { DeliveryService } from '@main/services/delivery.service'
 import type { MasterDataService } from '@main/services/master-data.service'
 import type { PeriodService } from '@main/services/period.service'
 import type { RateService } from '@main/services/rate.service'
@@ -30,6 +31,7 @@ export type AppContext = {
   balances: BalanceService
   customers: CustomerService
   customerImport: CustomerImportService
+  deliveries: DeliveryService
   appVersion: string
   schemaVersion: number
   setupRequired: boolean

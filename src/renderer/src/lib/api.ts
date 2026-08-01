@@ -290,11 +290,75 @@ export const api = {
     recalculate: (customerId?: number) =>
       invoke<{ updated: number }>('balances:recalculate', customerId ? { customerId } : {}),
   },
+  deliveries: {
+    upsert: (input: import('@shared/contracts').UpsertDeliveryInput) =>
+      invoke<{ item: import('@shared/contracts').DeliveryDto }>('deliveries:upsert', input),
+    void: (id: number, reason: string) =>
+      invoke<{ item: import('@shared/contracts').DeliveryDto }>('deliveries:void', {
+        id,
+        reason,
+      }),
+    get: (id: number) =>
+      invoke<{ item: import('@shared/contracts').DeliveryDto }>('deliveries:get', { id }),
+    getDayList: (input: import('@shared/contracts').DayListFilters) =>
+      invoke<import('@shared/contracts').GetDayListOutput>('deliveries:getDayList', input),
+    getMonthGrid: (input: import('@shared/contracts').GetMonthGridInput) =>
+      invoke<import('@shared/contracts').GetMonthGridOutput>('deliveries:getMonthGrid', input),
+    getCustomerCard: (input: import('@shared/contracts').GetCustomerCardInput) =>
+      invoke<import('@shared/contracts').GetCustomerCardOutput>(
+        'deliveries:getCustomerCard',
+        input,
+      ),
+    summary: (input: import('@shared/contracts').DeliverySummaryInput) =>
+      invoke<import('@shared/contracts').DeliverySummaryOutput>('deliveries:summary', input),
+    copyPreviousDay: (input: { date: string; routeId?: number; productId?: number }) =>
+      invoke<import('@shared/contracts').CopyPreviousDayOutput>(
+        'deliveries:copyPreviousDay',
+        input,
+      ),
+    walkIn: (input: import('@shared/contracts').WalkInSaleInput) =>
+      invoke<{ item: import('@shared/contracts').DeliveryDto }>('deliveries:walkIn', input),
+    bottlesOut: (
+      input: {
+        search?: string
+        routeId?: number
+        areaId?: number
+        minBottles?: number
+      } = {},
+    ) => invoke<import('@shared/contracts').BottlesOutOutput>('deliveries:bottlesOut', input),
+    missed: (input: { asOf?: string; thresholdDays?: number; routeId?: number } = {}) =>
+      invoke<import('@shared/contracts').MissedDeliveriesOutput>('deliveries:missed', input),
+    recordLoss: (input: {
+      customerId: number
+      date: string
+      kind: 'damaged_bottle' | 'lost_bottle'
+      quantity: number
+      amount?: number
+      description?: string
+    }) => invoke<{ id: number; bottlesWithCustomer: number }>('deliveries:recordLoss', input),
+    exportMonthGrid: (
+      input: import('@shared/contracts').GetMonthGridInput & { format: 'csv' | 'xlsx' },
+    ) =>
+      invoke<{ fileName: string; mimeType: string; base64: string }>(
+        'deliveries:exportMonthGrid',
+        input,
+      ),
+    todaySummary: (date?: string) =>
+      invoke<{ customersServed: number; totalBottles: number; totalAmount: number }>(
+        'deliveries:todaySummary',
+        date ? { date } : {},
+      ),
+  },
   ...(import.meta.env.DEV
     ? {
         dev: {
           seedDemo: () =>
-            invoke<{ areas: number; routes: number; customers: number }>('dev:seedDemo', {}),
+            invoke<{
+              areas: number
+              routes: number
+              customers: number
+              deliveries: number
+            }>('dev:seedDemo', {}),
         },
       }
     : {}),

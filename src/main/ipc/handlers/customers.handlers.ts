@@ -52,6 +52,7 @@ const seedDemoOutput = z.object({
   areas: z.number().int(),
   routes: z.number().int(),
   customers: z.number().int(),
+  deliveries: z.number().int(),
 })
 
 export function registerCustomerHandlers(): void {

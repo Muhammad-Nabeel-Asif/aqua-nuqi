@@ -452,3 +452,118 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 - Customer list filters: empty select option no longer sends `""` to Zod (list went blank when
   clearing / re-selecting “All …” filters).
 - Stable **v0.3.17** Windows-tested; **v0.3.21** ships the filter fix; status → **complete**.
+
+---
+
+## Phase 2 — Delivery Tracking
+
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.4.0`
+
+### Built
+
+- Migration `drizzle/0003_chubby_silhouette.sql` — `deliveries` (+ partial unique
+  `uq_delivery_slot`), minimal `customer_adjustments` for damaged/lost (FR-DL-11)
+- Service `delivery.service.ts`: `upsertDelivery`, `voidDelivery`, `getDayList`,
+  `getMonthGrid`, `getCustomerCard`, `getDeliverySummary`, `copyFromPreviousDay`,
+  `walkInSale`, `listBottlesOut`, `listMissedDeliveries`, `recordBottleLoss`,
+  `exportMonthGrid`, `todaySummary`
+- Screens: `/deliveries/daily`, `/deliveries/matrix`, `/deliveries/bottles-out`,
+  `/customers/:id/card/:period` (+ Delivery card tab on customer detail); detail dialog;
+  walk-in dialog; dashboard today summary + missed list
+- Keyboard cell (`DeliveryQtyCell`): arrows / Enter / Tab / Esc, autosave, optimistic UI
+- Dev seed extended with ~5 months of deliveries (2026-03 → 2026-07) + schedules
+- Unit tests covering criteria 1–7, 9, invoice lock, package amount 0, walk-in, month grid
+
+### Migrations added
+
+- `drizzle/0003_chubby_silhouette.sql` — `deliveries`, `customer_adjustments`
+  (`trip_id` / `employee_id` / `invoice_id` columns without FKs until Phases 3/6/7)
+
+### IPC channels added
+
+- `deliveries:upsert|void|get|getDayList|getMonthGrid|getCustomerCard|summary`
+- `deliveries:copyPreviousDay|walkIn|bottlesOut|missed|recordLoss|exportMonthGrid|todaySummary`
+
+### Settings keys added
+
+- `deliveries.missedDaysThreshold` (default `10`)
+
+### Error codes added
+
+- `DELIVERY_INVOICED` — write rejected when `deliveries.invoice_id IS NOT NULL`
+
+### Delivery DTO
+
+```ts
+{
+  id, uuid, customerId, customerCode?, customerName?, productId,
+  deliveryDate, quantity, emptiesCollected, rate, amount,
+  isFree, freeReason, employeeId, tripId, cashCollected, notes,
+  status: 'recorded' | 'void', voidReason, invoiceId,
+  locked, periodClosed, createdAt, updatedAt, createdBy, updatedBy
+}
+```
+
+### `getMonthGrid` response shape
+
+```ts
+{
+  period, daysInMonth, periodClosed,
+  rows: [{
+    customerId, code, name, areaName, routeName, rate,
+    cells: [{ day, quantity, emptiesCollected, amount, deliveryId, locked, hasNote, emptiesDiffer }],
+    totalUnits, totalAmount, totalEmpties
+  }],
+  dayTotals: [{ day, totalUnits, totalAmount }],
+  grandTotalUnits, grandTotalAmount
+}
+```
+
+### How `invoice_id` locking is enforced
+
+- On upsert / void / revive: if the existing row has `invoice_id != null`, throw
+  `AppError('DELIVERY_INVOICED', …)`.
+- UI cells set `locked` when `periodClosed || invoiceId != null` (read-only + lock marker).
+- Invoices table arrives in Phase 3; until then `invoice_id` is a plain nullable integer
+  (tests set it manually to verify the guard).
+
+### Measured entry time (criteria 9)
+
+- **100 consecutive customer upserts (keyboard autosave path): 0.65 s** (unit test
+  `timed keyboard-path`, ~6.5 ms/row). Far under the 4-minute hard target.
+- At a conservative human pace of ~1 s per customer (digit + Enter, no mouse), 100 rows
+  complete in **~100 s (~1.7 min)**. Backend is not the bottleneck.
+
+### Stock movements — deferred to Phase 7
+
+- **This phase does NOT write `stock_movements` rows.** Phase 7 will create movements on
+  new deliveries and ship a backfill that derives movements from historical `deliveries`.
+
+### Deviations from the spec
+
+- `customer_adjustments` created early (minimal) for FR-DL-11 damaged/lost bottle counts;
+  no ledger / invoice effects yet (Phase 3).
+- Bottles-out lives at `/deliveries/bottles-out` for Phase 2; UI inventory route remains
+  Phase 7 per screen inventory.
+- Generated migration initially re-added `customer_schedules.deleted_at` (missing 0002
+  snapshot); hand-removed that ALTER from `0003`.
+
+### What the next phase must know
+
+- Snapshot rate via `rates.getRateFor` on **insert only**; updates keep original rate unless
+  detail dialog override (tagged in `notes` as `[rate_overridden: …]`).
+- `amount = qty * rate` for `per_bottle`; `0` when `isFree` or `monthly_package`.
+- Qty 0 + empties 0 ⇒ `status = 'void'`; qty 0 + empties > 0 stays `recorded` (returns only).
+- Partial unique index `uq_delivery_slot` on `(customer_id, delivery_date, product_id)
+WHERE status = 'recorded'`.
+- `balanceService.computeLiveBottles` now includes deliveries + adjustments automatically;
+  delivery writes call `upsertSummary` with `lastDeliveryDate` in the same transaction.
+- Walk-in system customer code `WALK-IN` (`customer_type = 'walk_in'`) — exclude from
+  invoicing / receivables in Phase 3.
+- **Next phase is Phase 3 (Billing & payments).** When issuing an invoice, set
+  `deliveries.invoice_id` so Phase 2 locks continue to work. Add FK to `invoices` then.
+
+### Escalations / questions for the human
+
+- None blocking. Confirm early `customer_adjustments` table is acceptable for Phase 3 to extend
+  rather than recreate.
