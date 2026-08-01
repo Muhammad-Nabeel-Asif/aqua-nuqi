@@ -1216,7 +1216,7 @@ deduction) — intentional.
 
 ## Phase 7 — Bottle Inventory, Vehicles & Trip Reconciliation
 
-**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.9.0`
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.9.0` · **stable:** [v0.9.49](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.9.49)
 
 ### Built
 
@@ -1332,9 +1332,17 @@ damaged / lost / scrapped reasons.
   active trip-linked movements (load/unload **and** close-time `lost` van→scrap). Scrap
   balances exclude inflows that have a `[reversal of #id]` sibling so a voided mistaken
   write-off does not permanently inflate breakage or leave `filledInVans` negative.
+- Stable **[v0.9.49](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.9.49)**
+  published after review fixes (`package.json` remains `0.9.0`). Schema version **12**
+  (migration `0011_inventory_trips`). Phase 7 done — next is Phase 8.
+- **Windows (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe
+- **Ubuntu (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.AppImage
+- **Debian (stable):** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.deb
 
 ### Escalations / questions for the human
 
 - Confirm default deposit rate used for bottles-out value/shortfall matches the client's
   actual bottle deposit (product `default_deposit`).
 - Optional: demo seed for vehicles + sample open trip.
+- On-device overlay install of previous stable → **v0.9.49** (schema 11→12 + stock backfill)
+  not run in this environment; unit suite covers migration + backfill + review probes.
