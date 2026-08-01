@@ -97,6 +97,18 @@ export function createCustomerService(
   rateService: RateService,
   balanceService: BalanceService,
   ledgerService?: LedgerService,
+  stockService?: {
+    writeCustomerOpeningMovement: (
+      tx: AppDatabase,
+      opts: {
+        customerId: number
+        openingBottles: number
+        date: string
+        productId?: number
+        userId?: number | null
+      },
+    ) => void
+  },
 ) {
   function peekNextCode(): string {
     const row = db.select().from(sequences).where(eq(sequences.name, CUSTOMER_CODE_SEQ)).get()
@@ -603,6 +615,17 @@ export function createCustomerService(
 
       balanceService.syncFromSources(row.id, tx)
 
+      if (openingBottles > 0) {
+        const openDate = openingAsOf ?? input.joinedOn ?? todayBusinessDate()
+        stockService?.writeCustomerOpeningMovement(tx, {
+          customerId: row.id,
+          openingBottles,
+          date: openDate,
+          productId: input.productId,
+          userId,
+        })
+      }
+
       if (input.rate != null) {
         const productId = input.productId ?? rateService.resolveDefaultProductId()
         const from = openingAsOf ?? input.joinedOn ?? todayBusinessDate()
@@ -794,6 +817,13 @@ export function createCustomerService(
 
         if (openingsChanged) {
           replaceOpeningLedger(existing.id, nextOpeningBalance, nextOpeningAsOf, userId, tx)
+          const openDate = nextOpeningAsOf ?? existing.joinedOn ?? todayBusinessDate()
+          stockService?.writeCustomerOpeningMovement(tx, {
+            customerId: existing.id,
+            openingBottles: nextOpeningBottles,
+            date: openDate,
+            userId,
+          })
         }
 
         if (depositChanged) {

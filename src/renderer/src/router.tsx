@@ -19,6 +19,10 @@ import { EmployeesPage } from './features/employees/EmployeesPage'
 import { PayrollPage } from './features/employees/PayrollPage'
 import { ExpenseCategoriesPage } from './features/expenses/ExpenseCategoriesPage'
 import { ExpensesPage } from './features/expenses/ExpensesPage'
+import { InventoryBottlesOutPage } from './features/inventory/InventoryBottlesOutPage'
+import { InventoryPage } from './features/inventory/InventoryPage'
+import { TripsPage } from './features/inventory/TripsPage'
+import { VehiclesPage } from './features/inventory/VehiclesPage'
 import { PaymentsPage } from './features/payments/PaymentsPage'
 import { ComingSoonPage } from './features/placeholder/ComingSoonPage'
 import { ReceivablesPage } from './features/receivables/ReceivablesPage'
@@ -141,9 +145,10 @@ export const router = createHashRouter([
           </RequireOwner>
         ),
       },
-      { path: 'inventory', element: <ComingSoonPage title="Inventory" phase={7} /> },
-      { path: 'inventory/trips', element: <ComingSoonPage title="Trips" phase={7} /> },
-      { path: 'inventory/bottles-out', element: <ComingSoonPage title="Bottles out" phase={7} /> },
+      { path: 'inventory', element: <InventoryPage /> },
+      { path: 'inventory/vehicles', element: <VehiclesPage /> },
+      { path: 'inventory/trips', element: <TripsPage /> },
+      { path: 'inventory/bottles-out', element: <InventoryBottlesOutPage /> },
       { path: 'reports', element: <ComingSoonPage title="Reports" phase={8} /> },
       {
         path: 'settings',

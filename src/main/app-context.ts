@@ -21,6 +21,9 @@ import type { PeriodService } from '@main/services/period.service'
 import type { RateService } from '@main/services/rate.service'
 import type { ReceivablesService } from '@main/services/receivables.service'
 import type { SettingsService } from '@main/services/settings.service'
+import type { StockService } from '@main/services/stock.service'
+import type { TripService } from '@main/services/trip.service'
+import type { VehicleService } from '@main/services/vehicle.service'
 
 export type BootFatal =
   | { type: 'fatal_path'; message: string }
@@ -48,6 +51,9 @@ export type AppContext = {
   payments: PaymentService
   receivables: ReceivablesService
   expenses: ExpenseService
+  stock: StockService
+  vehicles: VehicleService
+  trips: TripService
   employees: EmployeeService
   attendance: AttendanceService
   payroll: PayrollService

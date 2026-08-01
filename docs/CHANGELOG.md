@@ -4,6 +4,20 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-08-01
+
+### Added
+
+- **Phase 7 — Bottle inventory, vehicles & trip reconciliation:** append-only `stock_movements`
+  ledger with derived balances (`filledAtPlant`, `emptyAtPlant`, `filledInVans`, `emptyInVans`,
+  `withCustomers`, `scrapped`, `totalOwned`). Deliveries write plant↔customer (or van↔customer
+  when a trip is linked) movements; updates use **reversal-by-replace**. Idempotent backfill for
+  historical deliveries/openings/adjustments. Opening stock, purchase (creates read-only Bottle
+  purchase expense), production, damage/loss/scrap, and manual adjustments. Vehicles CRUD +
+  trip load-out / close with expected vs actual for filled, empties and cash (note required on
+  variance). Bottles-out recovery report. Low-stock alert via `inventory.lowStockThreshold`.
+  Migration `0011_inventory_trips`.
+
 ## [0.8.0] — 2026-08-01
 
 ### Added

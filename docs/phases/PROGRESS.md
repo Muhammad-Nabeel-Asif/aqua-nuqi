@@ -1211,3 +1211,97 @@ deduction) — intentional.
 
 - Confirm no EOBI / social-security / tax deductions are needed before Phase 8 P&L.
 - Optional: add `employeeId` filter to `deliveries:getDayList` for Daily Entry.
+
+---
+
+## Phase 7 — Bottle Inventory, Vehicles & Trip Reconciliation
+
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.9.0`
+
+### Built
+
+- Migration `drizzle/0011_inventory_trips.sql` — `vehicles`, `trips`, `stock_movements`; deferred
+  FKs `deliveries.trip_id → trips`, `expenses.vehicle_id → vehicles` (schema version **12**).
+- Idempotent TS backfill `backfill-stock-movements.ts` (run from `migrate.ts` on every boot):
+  customer opening bottles, recorded deliveries, lost/damaged adjustments. Logs rows created.
+- Services: `stock.service` (record / getBalances / ops), `vehicle.service`, `trip.service`.
+- Wired `deliveryService.upsertDelivery` / void / walk-in / bottle-loss into stock movements;
+  auto-links open trip when `employeeId` + date match. Customer opening bottles write
+  `opening_stock` movements. Payroll performance `cashVariance` from closed trips.
+- Screens: `/inventory`, `/inventory/vehicles`, `/inventory/trips`, `/inventory/bottles-out`.
+- Unit tests covering AC1–AC10 (stock arithmetic, backfill consistency, trip variance + note).
+
+### Migrations added
+
+- `drizzle/0011_inventory_trips.sql` — vehicles, trips, stock_movements + FK rebuilds
+
+### IPC channels added
+
+- `inventory:getBalances|listMovements|recordOpeningStock|purchaseBottles|recordProduction|recordDamage|recordAdjustment|bottlesOut|recordBottleReturn`
+- `vehicles:list|get|create|update`
+- `trips:list|get|start|close|void|employeeVarianceSummary`
+
+### Settings keys used
+
+- `inventory.lowStockThreshold` (already seeded; editable on Inventory screen)
+
+### Error codes added
+
+- None (reused `VALIDATION_FAILED`, `NOT_FOUND`, `CONFLICT`, `PERIOD_LOCKED`)
+
+### `getBalances` shape (for next phase)
+
+```ts
+{
+  items: Array<{
+    productId, productName,
+    filledAtPlant, emptyAtPlant,
+    filledInVans, emptyInVans,
+    withCustomers, scrapped, totalOwned
+  }>,
+  totals: { /* same numeric fields, aggregated */ },
+  lowStock: {
+    threshold, filledAtPlant, isLow,
+    avgDailyConsumption14d, daysOfStockLeft
+  }
+}
+```
+
+Derived from a single grouped query over `stock_movements` (Σ in − Σ out per location/state).
+**No `stock_balances` summary table** — not needed at current volume; add later if slow.
+
+`totalOwned` = plant + vans + withCustomers (excludes scrapped).
+
+### How delivery updates write movements
+
+**Reversal-by-replace** (chosen over deltas): inside the same transaction as the delivery
+write, delete all `stock_movements` with `ref_table='deliveries'` and `ref_id=<id>`, then write
+fresh movements for the new recorded state (`filled: plant|van → customer`,
+`empty: customer → plant|van`). Void clears movements. Non-delivery events (purchase,
+production, trip load/unload) remain strictly append-only.
+
+### Trips are optional
+
+If no open trip matches employee+date, `trip_id` stays null and stock moves plant ↔ customer.
+Deliveries never require a trip.
+
+### Bottle purchase expense
+
+`source: 'purchase'`, `source_ref_table: 'stock_movements'`, category **Bottle purchase** —
+read-only on `/expenses`.
+
+### What the next phase must know
+
+- Schema version **12**. Stock truth is `stock_movements`; balances are derived.
+- Phase 8 asset/loss reports should read `stock.listMovements` / `getBalances` and trip
+  variances — do not invent a second bottle counter.
+- Expense vehicle attribution now has a real FK; `attributionOptions().vehicles` populates.
+- `/deliveries/bottles-out` (Phase 2) still exists; the richer recovery list is
+  `/inventory/bottles-out`.
+- **Next phase is Phase 8 (Reports / P&L).**
+
+### Escalations / questions for the human
+
+- Confirm default deposit rate used for bottles-out value/shortfall matches the client's
+  actual bottle deposit (product `default_deposit`).
+- Optional: demo seed for vehicles + sample open trip.

@@ -6,6 +6,7 @@ import { registerDeliveryHandlers } from './handlers/deliveries.handlers'
 import { registerDiagnosticsHandlers } from './handlers/diagnostics.handlers'
 import { registerEmployeeHandlers } from './handlers/employees.handlers'
 import { registerExpenseHandlers } from './handlers/expenses.handlers'
+import { registerInventoryHandlers } from './handlers/inventory.handlers'
 import { registerMasterDataHandlers } from './handlers/master-data.handlers'
 import { registerPaymentHandlers } from './handlers/payments.handlers'
 import { registerPdfHandlers } from './handlers/pdf.handlers'
@@ -28,4 +29,5 @@ export function registerAllHandlers(): void {
   registerPdfHandlers()
   registerExpenseHandlers()
   registerEmployeeHandlers()
+  registerInventoryHandlers()
 }

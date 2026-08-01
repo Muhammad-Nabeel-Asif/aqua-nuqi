@@ -6,9 +6,22 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import type { AppPaths } from '@main/lib/paths'
 import { nowIsoUtc } from '@shared/date'
 import { AppError } from '@shared/errors'
+import { backfillStockMovements } from './backfill-stock-movements'
 import { closeDatabase, getRawDb, openDatabase, type AppDatabase, type RawDatabase } from './client'
 import { appMeta, auditLog } from './schema'
 import { seedDefaults } from './seed'
+
+function runStockBackfill(raw: RawDatabase): void {
+  try {
+    const n = backfillStockMovements(raw)
+    if (n > 0) {
+      // logged inside backfillStockMovements
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw new AppError('MIGRATION_FAILED', `Stock movements backfill failed: ${message}`)
+  }
+}
 
 export type MigrationOutcome =
   | { kind: 'fresh'; schemaVersion: number }
@@ -112,13 +125,14 @@ export function runBootMigrations(opts: {
   const dbExists = fs.existsSync(paths.dbPath)
 
   if (!dbExists) {
-    const { db } = openDatabase(paths.dbPath)
+    const { db, raw } = openDatabase(paths.dbPath)
     migrate(db, { migrationsFolder })
     writeMeta(db, 'schema_version', String(bundledMax))
     writeMeta(db, 'app_version', appVersion)
     writeMeta(db, 'installed_at', nowIsoUtc())
     writeMeta(db, 'db_uuid', crypto.randomUUID())
     seedDefaults(db, paths.backupsDir)
+    runStockBackfill(raw)
     return { kind: 'fresh', schemaVersion: bundledMax }
   }
 
@@ -136,6 +150,7 @@ export function runBootMigrations(opts: {
 
   if (current !== null && current === bundledMax) {
     seedDefaults(db, paths.backupsDir)
+    runStockBackfill(raw)
     return { kind: 'up_to_date', schemaVersion: current }
   }
 
@@ -197,6 +212,7 @@ export function runBootMigrations(opts: {
     })
 
     seedDefaults(db, paths.backupsDir)
+    runStockBackfill(raw)
     return {
       kind: 'migrated',
       from: fromVersion,

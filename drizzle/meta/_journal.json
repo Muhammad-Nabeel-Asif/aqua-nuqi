@@ -78,6 +78,13 @@
       "when": 1785602000000,
       "tag": "0010_advance_settlements",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1785603000000,
+      "tag": "0011_inventory_trips",
+      "breakpoints": true
     }
   ]
 }

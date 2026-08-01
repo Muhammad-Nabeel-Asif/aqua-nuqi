@@ -113,6 +113,9 @@ export function createPayrollService(
   employeesSvc: EmployeeService,
   attendance: AttendanceService,
   expenses: ExpenseService,
+  trips?: {
+    cashVarianceForEmployeePeriod: (employeeId: number, periodKey: string) => number | null
+  },
 ) {
   function advanceOutstanding(row: typeof salaryAdvances.$inferSelect): number {
     if (row.status !== 'outstanding') return 0
@@ -1097,7 +1100,7 @@ export function createPayrollService(
       uniqueCustomers,
       deliveriesCount: dels.length,
       cashCollected,
-      cashVariance: null, // Phase 7 trips
+      cashVariance: trips?.cashVarianceForEmployeePeriod(employeeId, periodKey) ?? null,
       attendancePercent,
       daysPresent: summary.daysPresent,
       workingDays,

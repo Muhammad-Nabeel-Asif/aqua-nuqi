@@ -2,13 +2,15 @@ import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { customers } from './customers'
 import { employees } from './employees'
+import { trips } from './inventory'
 import { products } from './products'
 import { users } from './system'
 
 /**
  * Deliveries — one recorded row per (customer, date, product).
- * trip_id FK arrives in Phase 7. invoice_id FK is in the Phase 3 SQL migration.
+ * invoice_id FK is in the Phase 3 SQL migration.
  * employee_id FK is enforced in the Phase 6 SQL migration.
+ * trip_id FK is enforced in the Phase 7 SQL migration.
  */
 export const deliveries = sqliteTable(
   'deliveries',
@@ -29,7 +31,7 @@ export const deliveries = sqliteTable(
     isFree: integer('is_free').notNull().default(0),
     freeReason: text('free_reason'),
     employeeId: integer('employee_id').references(() => employees.id),
-    tripId: integer('trip_id'),
+    tripId: integer('trip_id').references(() => trips.id),
     cashCollected: integer('cash_collected').notNull().default(0),
     notes: text('notes'),
     status: text('status').notNull().default('recorded'),

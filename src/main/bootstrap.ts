@@ -42,6 +42,9 @@ import { createPeriodService } from './services/period.service'
 import { createRateService } from './services/rate.service'
 import { createReceivablesService } from './services/receivables.service'
 import { createSettingsService } from './services/settings.service'
+import { createStockService } from './services/stock.service'
+import { createTripService } from './services/trip.service'
+import { createVehicleService } from './services/vehicle.service'
 import { destroyPrintPool, printTemplate, renderTemplateToPdf } from './windows/print-window'
 
 function readAppVersion(): string {
@@ -138,17 +141,29 @@ export function bootstrapApp(): BootstrapResult {
     const rates = createRateService(db, audit, period)
     const balances = createBalanceService(db, raw)
     const ledger = createLedgerService(db, balances)
-    const customers = createCustomerService(db, audit, period, rates, balances, ledger)
+    const expenses = createExpenseService(db, raw, audit, period)
+    const stock = createStockService(db, raw, audit, period, rates, settings, expenses, balances)
+    const customers = createCustomerService(db, audit, period, rates, balances, ledger, stock)
     const customerImport = createCustomerImportService(db, customers, masterData)
-    const deliveries = createDeliveryService(db, audit, period, rates, balances, settings)
+    const vehicles = createVehicleService(db, audit)
+    const trips = createTripService(db, audit, period, rates, stock)
+    const deliveries = createDeliveryService(
+      db,
+      audit,
+      period,
+      rates,
+      balances,
+      settings,
+      stock,
+      trips,
+    )
     const adjustments = createAdjustmentService(db, audit, period, balances, ledger)
     const billing = createBillingService(db, audit, period, settings, balances, ledger)
     const payments = createPaymentService(db, audit, period, balances, ledger, billing)
     const receivables = createReceivablesService(db)
-    const expenses = createExpenseService(db, raw, audit, period)
     const employees = createEmployeeService(db, audit, period)
     const attendance = createAttendanceService(db, audit, period, settings)
-    const payroll = createPayrollService(db, audit, period, employees, attendance, expenses)
+    const payroll = createPayrollService(db, audit, period, employees, attendance, expenses, trips)
     const pdf = createPdfService(
       db,
       audit,
@@ -197,6 +212,9 @@ export function bootstrapApp(): BootstrapResult {
       payments,
       receivables,
       expenses,
+      stock,
+      vehicles,
+      trips,
       employees,
       attendance,
       payroll,

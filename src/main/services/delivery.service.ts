@@ -48,6 +48,8 @@ import type { BalanceService } from './balance.service'
 import type { PeriodService } from './period.service'
 import type { RateService } from './rate.service'
 import type { SettingsService } from './settings.service'
+import type { StockService } from './stock.service'
+import type { TripService } from './trip.service'
 
 type DbLike = AppDatabase
 type DeliveryRow = typeof deliveries.$inferSelect
@@ -100,6 +102,8 @@ export function createDeliveryService(
   rates: RateService,
   balances: BalanceService,
   settings?: Pick<SettingsService, 'get'>,
+  stock?: StockService,
+  trips?: TripService,
 ) {
   /** One query covering rates for many customers (avoids N× getRateFor). */
   function loadRateMap(
@@ -288,11 +292,23 @@ export function createDeliveryService(
     const employeeId =
       input.employeeId !== undefined ? input.employeeId : (existing?.employeeId ?? null)
 
+    // Auto-link open trip for employee+date when trips are used (optional feature).
+    const openTrip = trips?.findOpenTripForEmployeeDate(employeeId, input.date) ?? null
+    const tripId = existing?.tripId ?? openTrip?.id ?? null
+    const tripVehicleId = openTrip?.vehicleId ?? null
+
     // qty 0 + empties 0 ⇒ void; qty 0 + empties > 0 stays recorded (returns without delivery)
     const useStatus: 'recorded' | 'void' =
       quantity === 0 && emptiesCollected === 0 ? 'void' : 'recorded'
     const now = nowIsoUtc()
     const userId = input.userId ?? null
+
+    const syncStock = (tx: DbLike, row: DeliveryRow): void => {
+      stock?.syncDeliveryMovements(tx, row, {
+        vehicleId: tripVehicleId,
+        userId,
+      })
+    }
 
     const result = db.transaction((tx) => {
       if (existing) {
@@ -306,6 +322,7 @@ export function createDeliveryService(
             isFree: isFree ? 1 : 0,
             freeReason: isFree ? freeReason : null,
             employeeId,
+            tripId: existing.tripId ?? tripId,
             cashCollected,
             notes,
             status: useStatus,
@@ -332,6 +349,7 @@ export function createDeliveryService(
           },
           tx,
         )
+        syncStock(tx, after)
         syncBottlesAndLastDelivery(input.customerId, tx)
         return after
       }
@@ -370,6 +388,7 @@ export function createDeliveryService(
             isFree: isFree ? 1 : 0,
             freeReason: isFree ? freeReason : null,
             employeeId,
+            tripId: voided.tripId ?? tripId,
             cashCollected,
             notes,
             status: useStatus,
@@ -392,6 +411,7 @@ export function createDeliveryService(
           },
           tx,
         )
+        syncStock(tx, after)
         syncBottlesAndLastDelivery(input.customerId, tx)
         return after
       }
@@ -415,7 +435,7 @@ export function createDeliveryService(
           isFree: isFree ? 1 : 0,
           freeReason: isFree ? freeReason : null,
           employeeId,
-          tripId: null,
+          tripId,
           cashCollected,
           notes,
           status: useStatus,
@@ -441,6 +461,7 @@ export function createDeliveryService(
         },
         tx,
       )
+      syncStock(tx, inserted)
       syncBottlesAndLastDelivery(input.customerId, tx)
       return inserted
     })
@@ -518,6 +539,7 @@ export function createDeliveryService(
         },
         tx,
       )
+      stock?.syncDeliveryMovements(tx, after, { userId })
       syncBottlesAndLastDelivery(existing.customerId, tx)
     })
     return getById(id)
@@ -1148,6 +1170,7 @@ export function createDeliveryService(
         },
         tx,
       )
+      stock?.syncDeliveryMovements(tx, row, { userId })
       syncBottlesAndLastDelivery(walkInId, tx)
       return row
     })
@@ -1389,6 +1412,15 @@ export function createDeliveryService(
         },
         tx,
       )
+      stock?.writeAdjustmentScrapMovement(tx, {
+        adjustmentId: row.id,
+        customerId: input.customerId,
+        date: input.date,
+        quantity: input.quantity,
+        kind: input.kind,
+        productId,
+        userId: input.userId,
+      })
       syncBottlesAndLastDelivery(input.customerId, tx)
       return row.id
     })

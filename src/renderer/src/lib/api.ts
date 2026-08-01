@@ -935,6 +935,144 @@ export const api = {
         { asOf },
       ),
   },
+  inventory: {
+    getBalances: (input?: { asOf?: string; productId?: number }) =>
+      invoke<import('@shared/contracts').GetStockBalancesOutput>(
+        'inventory:getBalances',
+        input ?? {},
+      ),
+    listMovements: (input?: {
+      from?: string
+      to?: string
+      productId?: number
+      reason?: import('@shared/contracts').StockMovementDto['reason']
+      location?: string
+      vehicleId?: number
+      customerId?: number
+      limit?: number
+    }) =>
+      invoke<{ items: import('@shared/contracts').StockMovementDto[] }>(
+        'inventory:listMovements',
+        input ?? {},
+      ),
+    recordOpeningStock: (input: import('@shared/contracts').RecordOpeningStockInput) =>
+      invoke<{ item: import('@shared/contracts').StockMovementDto }>(
+        'inventory:recordOpeningStock',
+        input,
+      ),
+    purchaseBottles: (input: import('@shared/contracts').PurchaseBottlesInput) =>
+      invoke<{
+        movement: import('@shared/contracts').StockMovementDto
+        expenseId: number
+        expenseAmount: number
+      }>('inventory:purchaseBottles', input),
+    recordProduction: (input: import('@shared/contracts').RecordProductionInput) =>
+      invoke<{
+        emptyOut: import('@shared/contracts').StockMovementDto
+        filledIn: import('@shared/contracts').StockMovementDto
+      }>('inventory:recordProduction', input),
+    recordDamage: (input: import('@shared/contracts').RecordDamageInput) =>
+      invoke<{
+        movement: import('@shared/contracts').StockMovementDto
+        adjustmentId: number | null
+      }>('inventory:recordDamage', input),
+    recordAdjustment: (input: import('@shared/contracts').RecordAdjustmentInput) =>
+      invoke<{ item: import('@shared/contracts').StockMovementDto }>(
+        'inventory:recordAdjustment',
+        input,
+      ),
+    bottlesOut: (input?: {
+      search?: string
+      routeId?: number
+      areaId?: number
+      minBottles?: number
+      shortfallOnly?: boolean
+      noReturnDays?: number
+    }) =>
+      invoke<import('@shared/contracts').InventoryBottlesOutOutput>(
+        'inventory:bottlesOut',
+        input ?? {},
+      ),
+    recordBottleReturn: (input: import('@shared/contracts').RecordBottleReturnInput) =>
+      invoke<{ deliveryId: number; bottlesWithCustomer: number }>(
+        'inventory:recordBottleReturn',
+        input,
+      ),
+  },
+  vehicles: {
+    list: (includeInactive?: boolean) =>
+      invoke<{ items: import('@shared/contracts').VehicleDto[] }>('vehicles:list', {
+        includeInactive,
+      }),
+    get: (id: number, from?: string, to?: string) =>
+      invoke<{
+        item: import('@shared/contracts').VehicleDto
+        tripsCount: number
+        bottlesCarried: number
+        fuelAndMaintenanceTotal: number
+        costPerBottleCarried: number | null
+        expenses: Array<{
+          id: number
+          expenseDate: string
+          categoryName: string
+          amount: number
+          description: string | null
+        }>
+        trips: Array<{
+          id: number
+          tripDate: string
+          status: 'open' | 'closed' | 'void'
+          filledLoaded: number
+          bottlesDeliveredCalc: number
+          cashVariance: number
+          bottleVariance: number
+        }>
+      }>('vehicles:get', { id, from, to }),
+    create: (input: import('@shared/contracts').CreateVehicleInput) =>
+      invoke<{ item: import('@shared/contracts').VehicleDto }>('vehicles:create', input),
+    update: (input: import('@shared/contracts').UpdateVehicleInput) =>
+      invoke<{ item: import('@shared/contracts').VehicleDto }>('vehicles:update', input),
+  },
+  trips: {
+    list: (input?: {
+      from?: string
+      to?: string
+      employeeId?: number
+      vehicleId?: number
+      status?: 'open' | 'closed' | 'void'
+    }) => invoke<{ items: import('@shared/contracts').TripDto[] }>('trips:list', input ?? {}),
+    get: (id: number) =>
+      invoke<{
+        item: import('@shared/contracts').TripDto
+        reconciliation: {
+          filledExpected: number
+          filledActual: number | null
+          filledVariance: number | null
+          emptiesExpected: number
+          emptiesActual: number | null
+          emptiesVariance: number | null
+          cashExpected: number
+          cashActual: number | null
+          cashVariance: number | null
+        }
+      }>('trips:get', { id }),
+    start: (input: import('@shared/contracts').StartTripInput) =>
+      invoke<{ item: import('@shared/contracts').TripDto }>('trips:start', input),
+    close: (input: import('@shared/contracts').CloseTripInput) =>
+      invoke<{ item: import('@shared/contracts').TripDto }>('trips:close', input),
+    void: (id: number, reason: string) =>
+      invoke<{ item: import('@shared/contracts').TripDto }>('trips:void', { id, reason }),
+    employeeVarianceSummary: (from: string, to: string) =>
+      invoke<{
+        items: Array<{
+          employeeId: number
+          employeeName: string
+          tripsClosed: number
+          totalCashVariance: number
+          totalBottleVariance: number
+        }>
+      }>('trips:employeeVarianceSummary', { from, to }),
+  },
   ...(import.meta.env.DEV
     ? {
         dev: {
