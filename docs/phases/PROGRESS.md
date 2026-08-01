@@ -951,7 +951,7 @@ exportTable({
 
 ## Phase 5 — Expense Management
 
-**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.7.0`
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.7.0` · **stable:** [v0.7.40](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.7.40)
 
 ### Built
 
