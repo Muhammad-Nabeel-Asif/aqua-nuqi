@@ -1,12 +1,14 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDatabase, getDb, getRawDb, openDatabase } from '@main/db/client'
-import { customerBalances, deliveries, products } from '@main/db/schema'
+import { auditLog, customerBalances, customers, deliveries, products } from '@main/db/schema'
 import { seedDefaults } from '@main/db/seed'
+import { todayBusinessDate } from '@shared/date'
+import { matrixCardQtyUpsert } from '@shared/delivery-entry'
 import { toPaisa } from '@shared/money'
 import { createAuditService } from './audit.service'
 import { createAuthService } from './auth.service'
@@ -15,6 +17,7 @@ import { createCustomerService } from './customer.service'
 import { createDeliveryService } from './delivery.service'
 import { createPeriodService } from './period.service'
 import { createRateService } from './rate.service'
+import { createSettingsService } from './settings.service'
 
 describe('deliveryService', () => {
   let dir: string
@@ -37,11 +40,12 @@ describe('deliveryService', () => {
     const raw = getRawDb()
     const audit = createAuditService(db)
     const auth = createAuthService(db, audit)
+    const settings = createSettingsService(db, audit)
     const period = createPeriodService(db, audit)
     const rates = createRateService(db, audit, period)
     const balances = createBalanceService(db, raw)
-    const customers = createCustomerService(db, audit, period, rates, balances)
-    const deliveriesSvc = createDeliveryService(db, audit, period, rates, balances)
+    const customersSvc = createCustomerService(db, audit, period, rates, balances)
+    const deliveriesSvc = createDeliveryService(db, audit, period, rates, balances, settings)
     const owner = await auth.createUser({
       username: 'owner',
       displayName: 'Owner',
@@ -54,7 +58,7 @@ describe('deliveryService', () => {
       .where(eq(products.id, product.id))
       .run()
 
-    const customer = customers.create(
+    const customer = customersSvc.create(
       {
         name: 'Delivery Test',
         rate: Number(toPaisa(60)),
@@ -65,7 +69,19 @@ describe('deliveryService', () => {
       },
       owner.id,
     )
-    return { db, raw, rates, customers, deliveriesSvc, owner, product, period, balances, customer }
+    return {
+      db,
+      raw,
+      rates,
+      customers: customersSvc,
+      deliveriesSvc,
+      owner,
+      product,
+      period,
+      balances,
+      customer,
+      settings,
+    }
   }
 
   it('upserts qty with default empties and amount from rate (criteria 1)', async () => {
@@ -108,7 +124,7 @@ describe('deliveryService', () => {
     expect(rows[0]!.quantity).toBe(5)
   })
 
-  it('clearing qty voids the row without deleting (criteria 3)', async () => {
+  it('clearing qty voids the row without deleting and writes audit (criteria 3)', async () => {
     const { db, deliveriesSvc, customer, owner } = await setup()
     const a = deliveriesSvc.upsertDelivery({
       customerId: customer.id,
@@ -126,6 +142,12 @@ describe('deliveryService', () => {
     expect(voided.status).toBe('void')
     const row = db.select().from(deliveries).where(eq(deliveries.id, a.id)).get()!
     expect(row.status).toBe('void')
+    const audits = db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entityTable, 'deliveries'), eq(auditLog.entityId, a.id)))
+      .all()
+    expect(audits.some((x) => x.action === 'void')).toBe(true)
   })
 
   it('empties independent including qty 0 empties 5 (criteria 4)', async () => {
@@ -287,6 +309,160 @@ describe('deliveryService', () => {
     expect(d.customerCode ?? '').toMatch(/WALK/i)
   })
 
+  it('two walk-in sales on the same day both persist as separate rows', async () => {
+    const { db, deliveriesSvc, owner } = await setup()
+    const a = deliveriesSvc.walkInSale({
+      date: '2026-07-12',
+      quantity: 2,
+      rate: Number(toPaisa(60)),
+      cashCollected: Number(toPaisa(120)),
+      name: 'Buyer A',
+      userId: owner.id,
+    })
+    const b = deliveriesSvc.walkInSale({
+      date: '2026-07-12',
+      quantity: 5,
+      rate: Number(toPaisa(60)),
+      cashCollected: Number(toPaisa(300)),
+      name: 'Buyer B',
+      userId: owner.id,
+    })
+    expect(a.id).not.toBe(b.id)
+    expect(a.quantity).toBe(2)
+    expect(b.quantity).toBe(5)
+    const walkIn = db.select().from(customers).where(eq(customers.code, 'WALK-IN')).get()!
+    const rows = db
+      .select()
+      .from(deliveries)
+      .where(and(eq(deliveries.customerId, walkIn.id), eq(deliveries.status, 'recorded')))
+      .all()
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.quantity).sort()).toEqual([2, 5])
+  })
+
+  it('qty update without emptiesCollected keeps prior independent empties', async () => {
+    const { deliveriesSvc, customer, owner } = await setup()
+    deliveriesSvc.upsertDelivery({
+      customerId: customer.id,
+      date: '2026-07-10',
+      quantity: 3,
+      emptiesCollected: 1,
+      userId: owner.id,
+    })
+    const updated = deliveriesSvc.upsertDelivery({
+      customerId: customer.id,
+      date: '2026-07-10',
+      quantity: 5,
+      userId: owner.id,
+    })
+    expect(updated.quantity).toBe(5)
+    expect(updated.emptiesCollected).toBe(1)
+    expect(updated.amount).toBe(30000)
+  })
+
+  it('matrix/card clear path voids even when prior empties differed from qty', async () => {
+    const { db, deliveriesSvc, customer, owner } = await setup()
+    const created = deliveriesSvc.upsertDelivery({
+      customerId: customer.id,
+      date: '2026-07-10',
+      quantity: 3,
+      emptiesCollected: 1,
+      userId: owner.id,
+    })
+    // Same payload MonthMatrixPage / CustomerCardView send on clear
+    const cleared = deliveriesSvc.upsertDelivery({
+      customerId: customer.id,
+      date: '2026-07-10',
+      ...matrixCardQtyUpsert(null),
+      userId: owner.id,
+    })
+    expect(cleared.status).toBe('void')
+    const row = db.select().from(deliveries).where(eq(deliveries.id, created.id)).get()!
+    expect(row.status).toBe('void')
+    expect(row.quantity).toBe(0)
+    expect(row.emptiesCollected).toBe(0)
+  })
+
+  it('isFree stores amount 0', async () => {
+    const { deliveriesSvc, customer, owner } = await setup()
+    const d = deliveriesSvc.upsertDelivery({
+      customerId: customer.id,
+      date: '2026-07-10',
+      quantity: 3,
+      isFree: true,
+      freeReason: 'complimentary',
+      userId: owner.id,
+    })
+    expect(d.isFree).toBe(true)
+    expect(d.amount).toBe(0)
+    expect(d.rate).toBe(6000)
+  })
+
+  it('listMissedDeliveries reads deliveries.missedDaysThreshold from settings', async () => {
+    const { deliveriesSvc, customers, owner, product, settings } = await setup()
+    const asOf = '2026-07-20'
+    const c = customers.create(
+      {
+        name: 'Missed threshold',
+        rate: Number(toPaisa(60)),
+        productId: product.id,
+        status: 'active',
+      },
+      owner.id,
+    )
+    deliveriesSvc.upsertDelivery({
+      customerId: c.id,
+      date: '2026-07-10',
+      quantity: 1,
+      userId: owner.id,
+    })
+    settings.setMany({ 'deliveries.missedDaysThreshold': 5 })
+    const tight = deliveriesSvc.listMissedDeliveries({ asOf })
+    expect(tight.items.some((i) => i.customerId === c.id)).toBe(true)
+
+    settings.setMany({ 'deliveries.missedDaysThreshold': 30 })
+    const loose = deliveriesSvc.listMissedDeliveries({ asOf })
+    expect(loose.items.some((i) => i.customerId === c.id)).toBe(false)
+  })
+
+  it('bottles-out daysSinceLastReturn uses last day with empties > 0', async () => {
+    const { deliveriesSvc, customer, owner } = await setup()
+    deliveriesSvc.upsertDelivery({
+      customerId: customer.id,
+      date: '2026-07-01',
+      quantity: 5,
+      emptiesCollected: 0,
+      userId: owner.id,
+    })
+    deliveriesSvc.upsertDelivery({
+      customerId: customer.id,
+      date: '2026-07-10',
+      quantity: 0,
+      emptiesCollected: 3,
+      userId: owner.id,
+    })
+    deliveriesSvc.upsertDelivery({
+      customerId: customer.id,
+      date: '2026-07-20',
+      quantity: 2,
+      emptiesCollected: 0,
+      userId: owner.id,
+    })
+    const list = deliveriesSvc.listBottlesOut({})
+    const row = list.items.find((i) => i.customerId === customer.id)
+    expect(row).toBeTruthy()
+    expect(row!.lastDeliveryDate).toBe('2026-07-20')
+    const today = todayBusinessDate()
+    const expectedDays = Math.max(
+      0,
+      Math.round(
+        (new Date(`${today}T12:00:00`).getTime() - new Date('2026-07-10T12:00:00').getTime()) /
+          86_400_000,
+      ),
+    )
+    expect(row!.daysSinceLastReturn).toBe(expectedDays)
+  })
+
   it('getMonthGrid returns pivoted cells in one shot', async () => {
     const { deliveriesSvc, customers, owner, product } = await setup()
     for (let i = 0; i < 5; i++) {
@@ -315,7 +491,37 @@ describe('deliveryService', () => {
     expect(grid.grandTotalUnits).toBeGreaterThanOrEqual(15)
   })
 
-  it('timed keyboard-path: 100 consecutive upserts under 4 minutes (criteria 9)', async () => {
+  it('getMonthGrid for 500 customers stays under 1.5s (criteria 8 service budget)', async () => {
+    const { deliveriesSvc, customers, owner, product } = await setup()
+    for (let i = 0; i < 500; i++) {
+      const c = customers.create(
+        {
+          name: `Perf ${i}`,
+          rate: Number(toPaisa(60)),
+          productId: product.id,
+          status: 'active',
+        },
+        owner.id,
+      )
+      if (i % 3 === 0) {
+        deliveriesSvc.upsertDelivery({
+          customerId: c.id,
+          date: '2026-07-05',
+          quantity: 2,
+          userId: owner.id,
+        })
+      }
+    }
+    const t0 = performance.now()
+    const grid = deliveriesSvc.getMonthGrid({ period: '2026-07' })
+    const elapsedMs = performance.now() - t0
+    // eslint-disable-next-line no-console
+    console.log(`[MONTH_GRID_500] ${grid.rows.length} rows in ${elapsedMs.toFixed(1)}ms`)
+    expect(grid.rows.length).toBeGreaterThanOrEqual(500)
+    expect(elapsedMs).toBeLessThan(1500)
+  })
+
+  it('service upsert path for 100 customers is fast (not UI keyboard timing)', async () => {
     const { deliveriesSvc, customers, owner, product } = await setup()
     const ids: number[] = []
     for (let i = 0; i < 100; i++) {
@@ -331,8 +537,7 @@ describe('deliveryService', () => {
       ids.push(c.id)
     }
 
-    // Simulate keyboard entry: type digit + Enter per customer (autosave path).
-    // Human typing budget is 4 minutes; the service path must leave ample headroom.
+    // Service-only budget. Acceptance #9 still requires a timed daily-screen keyboard run.
     const t0 = performance.now()
     for (const id of ids) {
       deliveriesSvc.upsertDelivery({
@@ -343,14 +548,8 @@ describe('deliveryService', () => {
       })
     }
     const elapsedMs = performance.now() - t0
-    const elapsedMin = elapsedMs / 60_000
-    // Persist measured number for PROGRESS.md via console
     // eslint-disable-next-line no-console
-    console.log(
-      `[TIMED_ENTRY] 100 customers in ${(elapsedMs / 1000).toFixed(2)}s (${elapsedMin.toFixed(3)} min)`,
-    )
-    expect(elapsedMs).toBeLessThan(4 * 60 * 1000)
-    // Also assert a tight performance budget so UI stays under 4 min with human typing
+    console.log(`[SERVICE_UPSERT_100] ${(elapsedMs / 1000).toFixed(2)}s`)
     expect(elapsedMs).toBeLessThan(15_000)
   })
 })

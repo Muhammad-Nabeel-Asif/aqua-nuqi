@@ -135,11 +135,7 @@ export function DeliveryDetailDialog({ open, onClose, deliveryId, defaults }: Pr
               min={0}
               disabled={locked}
               value={quantity}
-              onChange={(e) => {
-                const q = Number(e.target.value) || 0
-                setQuantity(q)
-                setEmpties(q)
-              }}
+              onChange={(e) => setQuantity(Number(e.target.value) || 0)}
             />
           </Field>
           <Field label="Empties collected">
@@ -205,6 +201,15 @@ export function DeliveryDetailDialog({ open, onClose, deliveryId, defaults }: Pr
           />
         )}
 
+        <Field label="Employee">
+          <select
+            className="flex h-10 w-full rounded-md border px-2 text-sm opacity-60"
+            disabled
+            title="Employees arrive in Phase 6"
+          >
+            <option value="">TODO(phase-6): employee attribution</option>
+          </select>
+        </Field>
         <Field label="Cash collected (paisa)">
           <Input
             type="number"

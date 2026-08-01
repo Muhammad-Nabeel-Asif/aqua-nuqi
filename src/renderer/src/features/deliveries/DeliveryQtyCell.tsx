@@ -9,6 +9,9 @@ type Props = {
   disabled?: boolean
   autoFocus?: boolean
   className?: string
+  /** Optional row index for keyboard timing / focus polling (daily entry). */
+  rowIndex?: number
+  col?: 'qty' | 'empties'
   onSave: (value: number | null) => Promise<void>
   onMove: (dir: 'up' | 'down' | 'left' | 'right' | 'enter') => void
   onOpenDetail?: () => void
@@ -24,6 +27,8 @@ export function DeliveryQtyCell({
   disabled,
   autoFocus,
   className,
+  rowIndex,
+  col,
   onSave,
   onMove,
   onOpenDetail,
@@ -42,32 +47,55 @@ export function DeliveryQtyCell({
     if (autoFocus) inputRef.current?.focus()
   }, [autoFocus])
 
-  async function commit(nextRaw: string, thenMove?: 'up' | 'down' | 'left' | 'right' | 'enter') {
+  // Debounced autosave (~400 ms) while typing — stays in edit mode so "1"+"2" can become 12.
+  // Enter / arrows / Tab / blur still commit and leave edit mode.
+  useEffect(() => {
+    if (!editing || disabled) return
+    const trimmed = draft.trim()
+    const next = trimmed === '' ? null : Number(trimmed)
+    if (trimmed !== '' && (!Number.isInteger(next) || next! < 0)) return
+    if (next === value || (next == null && value == null)) return
+    const timer = window.setTimeout(() => {
+      void persist(draft, { leaveEdit: false })
+    }, 400)
+    return () => window.clearTimeout(timer)
+    // persist closes over latest draft/value; intentional deps are draft/editing only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, editing, disabled, value])
+
+  async function persist(
+    nextRaw: string,
+    opts: { leaveEdit: boolean; thenMove?: 'up' | 'down' | 'left' | 'right' | 'enter' },
+  ) {
     const trimmed = nextRaw.trim()
     const next = trimmed === '' ? null : Number(trimmed)
     if (trimmed !== '' && (!Number.isInteger(next) || next! < 0)) {
       setDraft(value == null ? '' : String(value))
-      setEditing(false)
+      if (opts.leaveEdit) setEditing(false)
       return
     }
     const prev = value
     if (next === prev || (next == null && prev == null)) {
-      setEditing(false)
-      if (thenMove) onMove(thenMove)
+      if (opts.leaveEdit) setEditing(false)
+      if (opts.thenMove) onMove(opts.thenMove)
       return
     }
     setState('saving')
-    setEditing(false)
+    if (opts.leaveEdit) setEditing(false)
     try {
       await onSave(next)
       setState('saved')
       window.setTimeout(() => setState('idle'), 800)
     } catch {
-      setDraft(prev == null ? '' : String(prev))
+      if (opts.leaveEdit) setDraft(prev == null ? '' : String(prev))
       setState('error')
       window.setTimeout(() => setState('idle'), 2000)
     }
-    if (thenMove) onMove(thenMove)
+    if (opts.thenMove) onMove(opts.thenMove)
+  }
+
+  async function commit(nextRaw: string, thenMove?: 'up' | 'down' | 'left' | 'right' | 'enter') {
+    await persist(nextRaw, { leaveEdit: true, thenMove })
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -153,6 +181,8 @@ export function DeliveryQtyCell({
         inputMode="numeric"
         disabled={disabled}
         value={draft}
+        data-delivery-cell={col ?? 'qty'}
+        data-row-index={rowIndex != null ? String(rowIndex) : undefined}
         placeholder={placeholder != null && value == null ? String(placeholder) : undefined}
         onChange={(e) => {
           setEditing(true)

@@ -457,7 +457,7 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 
 ## Phase 2 — Delivery Tracking
 
-**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.4.0`
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.4.0` · **stable:** [v0.4.25](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.4.25)
 
 ### Built
 
@@ -478,6 +478,7 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 
 - `drizzle/0003_chubby_silhouette.sql` — `deliveries`, `customer_adjustments`
   (`trip_id` / `employee_id` / `invoice_id` columns without FKs until Phases 3/6/7)
+- `drizzle/0004_walk_in_slot_key.sql` — `deliveries.slot_key` + unique index includes slot
 
 ### IPC channels added
 
@@ -527,12 +528,19 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 - Invoices table arrives in Phase 3; until then `invoice_id` is a plain nullable integer
   (tests set it manually to verify the guard).
 
-### Measured entry time (criteria 9)
+### Measured entry time (criteria 9) — PASS
 
-- **100 consecutive customer upserts (keyboard autosave path): 0.65 s** (unit test
-  `timed keyboard-path`, ~6.5 ms/row). Far under the 4-minute hard target.
-- At a conservative human pace of ~1 s per customer (digit + Enter, no mouse), 100 rows
-  complete in **~100 s (~1.7 min)**. Backend is not the bottleneck.
+- **Date:** 2026-08-01
+- **Screen:** `/deliveries/daily` (real Electron BrowserWindow + built renderer)
+- **Data:** `dev:seedDemo` equivalent via `seedDemoCustomers` — 200 customers / 10 routes;
+  day list had **178** active non-walk-in customers
+- **Filter:** none (all routes / all areas) — needed for ≥100 consecutive rows
+- **Method:** keyboard only after focus on row 0 qty cell — digit `2` → **Enter** × 100
+  via `webContents.sendInputEvent` (no mouse during the timed loop). Harness:
+  `npm run timed:daily-entry` (`scripts/timed-daily-entry-ui.ts`)
+- **Measured time:** **9.53 s (0.159 min)** for 100 consecutive customers — well under the
+  4-minute hard gate
+- Result artifact (local, gitignored): `docs/phases/.timed-daily-entry-result.json`
 
 ### Stock movements — deferred to Phase 7
 
@@ -542,11 +550,15 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
 ### Deviations from the spec
 
 - `customer_adjustments` created early (minimal) for FR-DL-11 damaged/lost bottle counts;
-  no ledger / invoice effects yet (Phase 3).
+  no ledger / invoice effects yet (Phase 3). Phase 3 must **ALTER**, not recreate.
 - Bottles-out lives at `/deliveries/bottles-out` for Phase 2; UI inventory route remains
   Phase 7 per screen inventory.
 - Generated migration initially re-added `customer_schedules.deleted_at` (missing 0002
   snapshot); hand-removed that ALTER from `0003`.
+- Employee selector on daily entry / detail is a disabled `TODO(phase-6)` stub until the
+  employees module lands; `employee_id` column already persists when supplied.
+- Walk-in sales use a per-sale `slot_key` (uuid) so multiple same-day cash sales coexist;
+  regular customers keep `slot_key = ''` under `uq_delivery_slot`.
 
 ### What the next phase must know
 
@@ -554,16 +566,38 @@ opening/ledger changes via `balanceService.upsertSummary` / `syncFromSources`. M
   detail dialog override (tagged in `notes` as `[rate_overridden: …]`).
 - `amount = qty * rate` for `per_bottle`; `0` when `isFree` or `monthly_package`.
 - Qty 0 + empties 0 ⇒ `status = 'void'`; qty 0 + empties > 0 stays `recorded` (returns only).
-- Partial unique index `uq_delivery_slot` on `(customer_id, delivery_date, product_id)
-WHERE status = 'recorded'`.
+- Partial unique index `uq_delivery_slot` on
+  `(customer_id, delivery_date, product_id, slot_key) WHERE status = 'recorded'`.
+  Standard deliveries use `slot_key = ''`; walk-ins use a unique uuid per sale.
 - `balanceService.computeLiveBottles` now includes deliveries + adjustments automatically;
   delivery writes call `upsertSummary` with `lastDeliveryDate` in the same transaction.
 - Walk-in system customer code `WALK-IN` (`customer_type = 'walk_in'`) — exclude from
-  invoicing / receivables in Phase 3.
+  invoicing / receivables in Phase 3. Multiple walk-in rows per day are expected.
+- Matrix/card qty edits omit `emptiesCollected` so the service preserves prior empties
+  (defaults to qty only on insert).
 - **Next phase is Phase 3 (Billing & payments).** When issuing an invoice, set
   `deliveries.invoice_id` so Phase 2 locks continue to work. Add FK to `invoices` then.
 
 ### Escalations / questions for the human
 
-- None blocking. Confirm early `customer_adjustments` table is acceptable for Phase 3 to extend
-  rather than recreate.
+- Confirm early `customer_adjustments` table is acceptable for Phase 3 to extend rather than
+  recreate.
+
+### Review fixes (2026-08-01)
+
+- Walk-in: migration `0004_walk_in_slot_key` + insert-per-sale (no same-day overwrite).
+- Matrix/card/detail: qty edits no longer reset independent empties; clear sends
+  `emptiesCollected: 0` via `matrixCardQtyUpsert` so the row voids (regression fix).
+- Daily entry: optimistic row/footer patch + rollback toast; ~400 ms debounced cell
+  autosave stays in edit mode (multi-digit qty); Enter/blur still leave edit.
+- `listMissedDeliveries` reads `deliveries.missedDaysThreshold` from settings.
+- `getDayList` / `getMonthGrid` batch covering rates (no N× `getRateFor`).
+- Bottles-out `daysSinceLastReturn` uses last day with `empties_collected > 0`.
+- Month matrix tints Pakistan holidays as well as weekends.
+- Disabled employee stubs on daily header + detail (`TODO(phase-6)`).
+- Tests: two walk-ins same day; empties preservation; matrix clear⇒void; isFree⇒0;
+  void audit; settings threshold; last-return days; grid@500 under 1.5s; holidays helper.
+- **Criteria #9 PASS:** real Daily Entry UI keyboard timing **9.53 s / 100 customers**
+  (2026-08-01; seeded; all routes; no mouse in timed loop). Status → **complete**.
+- Stable release for Phase 2 already shipped as **v0.4.25** (no new release invented for this
+  timing pass). Review-fix commits still need pushing if not yet on `main`.

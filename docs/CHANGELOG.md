@@ -7,8 +7,9 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 ### Added
 
 - **Phase 2 — Delivery tracking:** `deliveries` table with partial unique slot index; keyboard-first
-  Daily Entry, Month Matrix, and per-customer Monthly Card; autosave with optimistic updates;
-  walk-in cash sales via system `WALK-IN` customer; bottles-out list; missed-delivery indicator;
+  Daily Entry, Month Matrix, and per-customer Monthly Card; debounced (~400 ms) cell autosave with
+  optimistic row/footer updates and rollback toast; walk-in cash sales via system `WALK-IN`
+  customer (unique `slot_key` per sale); bottles-out list; missed-delivery indicator;
   rate snapshotted at insert; `PERIOD_LOCKED` / `DELIVERY_INVOICED` write guards; 4–5 months of
   seeded delivery history. **Stock movements deliberately deferred to Phase 7** (with backfill).
 - **Phase 1 — Customers & master data:** areas, routes, products management; customer CRUD with
@@ -23,6 +24,14 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ### Fixed
 
+- **Phase 2 criteria #9:** timed 100 consecutive qty→Enter strokes on `/deliveries/daily`
+  (seeded demo, keyboard only) in **9.53 s** — under the 4-minute hard gate; Phase 2 marked
+  complete.
+- **Phase 2 review:** walk-in same-day overwrite (per-sale `slot_key`); matrix/card qty edits
+  preserve independent empties; missed-days threshold from settings; batched rate lookups for
+  day list / month grid; bottles-out days-since-last-return uses empties; holiday column tint;
+  employee UI stubs for Phase 6; regression tests for walk-in / empties / isFree / void audit /
+  grid@500.
 - **Phase 1 review:** join-based customer list (NFR-02); full Master Data / customer /
   bulk-rate UI; openings/schedules no longer hard-deleted; `deposit_received` ledger;
   full audit before/after + export audit; monthly_package import columns; WhatsApp E.164;

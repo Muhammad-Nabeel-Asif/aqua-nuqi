@@ -8,7 +8,7 @@ import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
-import type { DayListRowDto } from '@shared/contracts'
+import type { DayListRowDto, GetDayListOutput } from '@shared/contracts'
 import { addBusinessDays, todayBusinessDate } from '@shared/date'
 import { AppError } from '@shared/errors'
 import { DeliveryDetailDialog } from './DeliveryDetailDialog'
@@ -75,6 +75,11 @@ export function DailyEntryPage() {
     setPendingCopy(new Map())
   }, [date, routeId, areaId])
 
+  const dayQueryKey = useMemo(
+    () => ['deliveries', 'day', date, routeId, areaId, search] as const,
+    [date, routeId, areaId, search],
+  )
+
   const upsert = useCallback(
     async (
       row: DayListRowDto,
@@ -107,6 +112,40 @@ export function DailyEntryPage() {
             ? 0
             : (empties ?? quantity)
 
+      const amount = row.billingMode === 'monthly_package' || row.isFree ? 0 : quantity * row.rate
+
+      const previous = qc.getQueryData<GetDayListOutput>(dayQueryKey)
+
+      // Optimistic row + footer patch; rollback on failure.
+      qc.setQueryData<GetDayListOutput>(dayQueryKey, (old) => {
+        if (!old) return old
+        const items = old.items.map((item) =>
+          item.customerId === row.customerId
+            ? {
+                ...item,
+                quantity,
+                emptiesCollected,
+                amount,
+                deliveryId: item.deliveryId ?? -1,
+              }
+            : item,
+        )
+        const served = items.filter(
+          (i) => i.quantity != null && (i.quantity > 0 || (i.emptiesCollected ?? 0) > 0),
+        )
+        return {
+          ...old,
+          items,
+          totals: {
+            customersServed: served.length,
+            totalBottles: served.reduce((s, i) => s + (i.quantity ?? 0), 0),
+            totalEmpties: served.reduce((s, i) => s + (i.emptiesCollected ?? 0), 0),
+            totalAmount: served.reduce((s, i) => s + (i.amount ?? 0), 0),
+            totalCash: served.reduce((s, i) => s + (i.cashCollected ?? 0), 0),
+          },
+        }
+      })
+
       try {
         await api.deliveries.upsert({
           customerId: row.customerId,
@@ -122,6 +161,8 @@ export function DailyEntryPage() {
         await qc.invalidateQueries({ queryKey: ['deliveries', 'day', date] })
         await qc.invalidateQueries({ queryKey: ['deliveries', 'missed'] })
       } catch (err) {
+        if (previous) qc.setQueryData(dayQueryKey, previous)
+        else await qc.invalidateQueries({ queryKey: dayQueryKey })
         const e = err instanceof AppError ? err : null
         toast({
           title: e?.message ?? 'Save failed',
@@ -131,7 +172,7 @@ export function DailyEntryPage() {
         throw err
       }
     },
-    [date, pendingCopy, qc],
+    [date, dayQueryKey, pendingCopy, qc],
   )
 
   const copyPrev = useMutation({
@@ -264,6 +305,16 @@ export function DailyEntryPage() {
             ))}
           </select>
         </div>
+        <div>
+          <label className="text-xs text-muted-foreground">Employee</label>
+          <select
+            className="flex h-10 w-44 rounded-md border px-2 text-sm opacity-60"
+            disabled
+            title="Employees arrive in Phase 6"
+          >
+            <option value="">TODO(phase-6): all employees</option>
+          </select>
+        </div>
         <div className="flex-1">
           <label className="text-xs text-muted-foreground">Search</label>
           <Input
@@ -374,6 +425,8 @@ export function DailyEntryPage() {
                     placeholder={copy ? null : row.suggestedQty}
                     disabled={row.locked}
                     autoFocus={focus.row === vRow.index && focus.col === 'qty'}
+                    rowIndex={vRow.index}
+                    col="qty"
                     onSave={async (v) => {
                       await upsert(row, { quantity: v })
                     }}
@@ -396,6 +449,8 @@ export function DailyEntryPage() {
                     value={displayEmpties}
                     disabled={row.locked}
                     autoFocus={focus.row === vRow.index && focus.col === 'empties'}
+                    rowIndex={vRow.index}
+                    col="empties"
                     onSave={async (v) => {
                       await upsert(row, {
                         emptiesCollected: v,

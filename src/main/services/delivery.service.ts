@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm'
 import type { AppDatabase } from '@main/db/client'
 import {
   areas,
@@ -47,11 +47,14 @@ import type { AuditService } from './audit.service'
 import type { BalanceService } from './balance.service'
 import type { PeriodService } from './period.service'
 import type { RateService } from './rate.service'
+import type { SettingsService } from './settings.service'
 
 type DbLike = AppDatabase
 type DeliveryRow = typeof deliveries.$inferSelect
 
 const WALK_IN_CODE = 'WALK-IN'
+/** Normal customer slot — one recorded row per (customer, date, product). */
+const STANDARD_SLOT_KEY = ''
 
 function computeAmount(opts: {
   quantity: number
@@ -96,7 +99,42 @@ export function createDeliveryService(
   period: PeriodService,
   rates: RateService,
   balances: BalanceService,
+  settings?: Pick<SettingsService, 'get'>,
 ) {
+  /** One query covering rates for many customers (avoids N× getRateFor). */
+  function loadRateMap(
+    customerIds: number[],
+    productId: number,
+    onDate: string,
+  ): Map<number, number> {
+    const map = new Map<number, number>()
+    if (customerIds.length === 0) return map
+    const product = db.select().from(products).where(eq(products.id, productId)).get()
+    const defaultRate = product?.defaultRate ?? 0
+    const openRates = db
+      .select()
+      .from(customerRates)
+      .where(
+        and(
+          eq(customerRates.productId, productId),
+          lte(customerRates.effectiveFrom, onDate),
+          or(isNull(customerRates.effectiveTo), gte(customerRates.effectiveTo, onDate)),
+        ),
+      )
+      .orderBy(desc(customerRates.effectiveFrom))
+      .all()
+    const wanted = new Set(customerIds)
+    for (const r of openRates) {
+      if (wanted.has(r.customerId) && !map.has(r.customerId)) {
+        map.set(r.customerId, r.rate)
+      }
+    }
+    for (const id of customerIds) {
+      if (!map.has(id)) map.set(id, defaultRate)
+    }
+    return map
+  }
+
   function toDto(
     row: DeliveryRow,
     extras?: { customerCode?: string; customerName?: string },
@@ -157,6 +195,7 @@ export function createDeliveryService(
           eq(deliveries.customerId, customerId),
           eq(deliveries.deliveryDate, date),
           eq(deliveries.productId, productId),
+          eq(deliveries.slotKey, STANDARD_SLOT_KEY),
           eq(deliveries.status, 'recorded'),
         ),
       )
@@ -297,7 +336,7 @@ export function createDeliveryService(
         return after
       }
 
-      // If a voided row exists for the same slot, revive it as an update
+      // If a voided row exists for the same standard slot, revive it as an update
       const voided = tx
         .select()
         .from(deliveries)
@@ -306,6 +345,7 @@ export function createDeliveryService(
             eq(deliveries.customerId, input.customerId),
             eq(deliveries.deliveryDate, input.date),
             eq(deliveries.productId, productId),
+            eq(deliveries.slotKey, STANDARD_SLOT_KEY),
             eq(deliveries.status, 'void'),
           ),
         )
@@ -381,6 +421,7 @@ export function createDeliveryService(
           status: useStatus,
           voidReason: null,
           invoiceId: null,
+          slotKey: STANDARD_SLOT_KEY,
           createdAt: now,
           updatedAt: now,
           createdBy: userId,
@@ -556,6 +597,11 @@ export function createDeliveryService(
       .where(isNull(customerSchedules.deletedAt))
       .all()
     const schedMap = new Map(scheduleRows.map((s) => [s.customerId, s]))
+    const rateMap = loadRateMap(
+      custRows.map((c) => c.id),
+      productId,
+      filters.date,
+    )
 
     const items: DayListRowDto[] = custRows.map((c) => {
       const d = byCustomer.get(c.id)
@@ -565,7 +611,7 @@ export function createDeliveryService(
       if (sched && scheduleMatchesDate(sched, filters.date, bal?.lastDeliveryDate ?? null)) {
         suggestedQty = sched.defaultQty
       }
-      const rate = rates.getRateFor(c.id, productId, filters.date)
+      const rate = rateMap.get(c.id) ?? 0
       return {
         customerId: c.id,
         code: c.code,
@@ -680,6 +726,11 @@ export function createDeliveryService(
 
     let grandTotalUnits = 0
     let grandTotalAmount = 0
+    const rateMap = loadRateMap(
+      custRows.map((c) => c.id),
+      productId,
+      start,
+    )
 
     const rows: MonthGridRowDto[] = custRows.map((c) => {
       const dels = byCust.get(c.id) ?? []
@@ -714,7 +765,7 @@ export function createDeliveryService(
         name: c.name,
         areaName: c.areaName ?? null,
         routeName: c.routeName ?? null,
-        rate: rates.getRateFor(c.id, productId, start),
+        rate: rateMap.get(c.id) ?? 0,
         cells,
         totalUnits,
         totalAmount,
@@ -1034,28 +1085,76 @@ export function createDeliveryService(
   }
 
   function walkInSale(input: WalkInSaleInput & { userId?: number | null }): DeliveryDto {
+    assertBusinessDate(input.date)
+    period.guardPeriodOpen(input.date)
+
     const walkInId = getOrCreateWalkIn(input.userId)
     const productId = rates.resolveDefaultProductId()
     const product = db.select().from(products).where(eq(products.id, productId)).get()!
     const rate = input.rate ?? product.defaultRate
+    const quantity = input.quantity
+    const amount = quantity * rate
+    const cashCollected = input.cashCollected ?? amount
     const noteParts = [
       'Walk-in sale',
       input.name ? `name=${input.name}` : null,
       input.phone ? `phone=${input.phone}` : null,
+      input.rate !== undefined ? '[rate_overridden: walk-in rate]' : null,
       input.notes,
     ].filter(Boolean)
+    const now = nowIsoUtc()
+    const userId = input.userId ?? null
+    // Unique slot per sale — never upsert/overwrite an earlier same-day walk-in.
+    const slotKey = newUuid()
 
-    return upsertDelivery({
-      customerId: walkInId,
-      productId,
-      date: input.date,
-      quantity: input.quantity,
-      emptiesCollected: 0, // walk-in packaged/cash — no empties by default
-      rate,
-      rateOverrideReason: input.rate !== undefined ? 'walk-in rate' : undefined,
-      cashCollected: input.cashCollected ?? rate * input.quantity,
-      notes: noteParts.join('; '),
-      userId: input.userId,
+    const inserted = db.transaction((tx) => {
+      const row = tx
+        .insert(deliveries)
+        .values({
+          uuid: newUuid(),
+          customerId: walkInId,
+          productId,
+          deliveryDate: input.date,
+          quantity,
+          emptiesCollected: 0,
+          rate,
+          amount,
+          isFree: 0,
+          freeReason: null,
+          employeeId: null,
+          tripId: null,
+          cashCollected,
+          notes: noteParts.join('; '),
+          status: 'recorded',
+          voidReason: null,
+          invoiceId: null,
+          slotKey,
+          createdAt: now,
+          updatedAt: now,
+          createdBy: userId,
+          updatedBy: userId,
+        })
+        .returning()
+        .get()
+
+      audit.record(
+        {
+          userId,
+          action: 'create',
+          entityTable: 'deliveries',
+          entityId: row.id,
+          summary: `Walk-in sale on ${input.date}: ${quantity} units @ ${rate}`,
+          after: row,
+        },
+        tx,
+      )
+      syncBottlesAndLastDelivery(walkInId, tx)
+      return row
+    })
+
+    return toDto(inserted, {
+      customerCode: WALK_IN_CODE,
+      customerName: 'Walk-in / Cash sale',
     })
   }
 
@@ -1105,13 +1204,27 @@ export function createDeliveryService(
       .orderBy(desc(customerBalances.bottlesWithCustomer))
       .all()
 
-    // days since last return ≈ days since last delivery where empties were collected
-    // Approximate with last_delivery_date for Phase 2
+    const lastReturnRows = db
+      .select({
+        customerId: deliveries.customerId,
+        lastReturnDate: sql<string>`max(${deliveries.deliveryDate})`,
+      })
+      .from(deliveries)
+      .where(and(eq(deliveries.status, 'recorded'), sql`${deliveries.emptiesCollected} > 0`))
+      .groupBy(deliveries.customerId)
+      .all()
+    const lastReturnMap = new Map(
+      lastReturnRows
+        .filter((r) => r.lastReturnDate)
+        .map((r) => [r.customerId, r.lastReturnDate as string]),
+    )
+
     return {
       items: rows.map((r) => {
         let daysSinceLastReturn: number | null = null
-        if (r.lastDeliveryDate) {
-          const a = new Date(`${r.lastDeliveryDate}T12:00:00`).getTime()
+        const lastReturn = lastReturnMap.get(r.customerId)
+        if (lastReturn) {
+          const a = new Date(`${lastReturn}T12:00:00`).getTime()
           const b = new Date(`${today}T12:00:00`).getTime()
           daysSinceLastReturn = Math.max(0, Math.round((b - a) / 86_400_000))
         }
@@ -1145,7 +1258,7 @@ export function createDeliveryService(
   }): MissedDeliveriesOutput {
     const asOf = input.asOf ?? todayBusinessDate()
     assertBusinessDate(asOf)
-    const threshold = input.thresholdDays ?? 10
+    const threshold = input.thresholdDays ?? settings?.get('deliveries.missedDaysThreshold') ?? 10
     const cutoff = addBusinessDays(asOf, -threshold)
 
     const conditions = [

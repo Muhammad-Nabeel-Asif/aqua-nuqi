@@ -68,6 +68,7 @@ module.exports = {
         'src/main/ipc/**/*.ts',
         'src/preload/**/*.ts',
         'src/main/lib/logger.ts',
+        'scripts/timed-daily-entry-ui.ts',
       ],
       rules: {
         'no-restricted-imports': 'off',

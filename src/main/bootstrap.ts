@@ -127,7 +127,7 @@ export function bootstrapApp(): BootstrapResult {
     const balances = createBalanceService(db, raw)
     const customers = createCustomerService(db, audit, period, rates, balances)
     const customerImport = createCustomerImportService(db, customers, masterData)
-    const deliveries = createDeliveryService(db, audit, period, rates, balances)
+    const deliveries = createDeliveryService(db, audit, period, rates, balances, settings)
 
     const setupRequired = dbMissing || !auth.hasAnyUser()
     const schemaVersion =

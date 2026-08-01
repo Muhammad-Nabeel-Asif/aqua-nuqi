@@ -9,14 +9,16 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
 import { currentPeriod, periodEnd, periodStart } from '@shared/date'
+import { matrixCardQtyUpsert } from '@shared/delivery-entry'
 import { AppError } from '@shared/errors'
+import { isPakistanHoliday } from '@shared/holidays'
 import { DeliveryDetailDialog } from './DeliveryDetailDialog'
 import { DeliveryQtyCell } from './DeliveryQtyCell'
 
-function isWeekend(period: string, day: number): boolean {
-  const d = new Date(`${period}-${String(day).padStart(2, '0')}T12:00:00`)
-  const wd = d.getDay()
-  return wd === 0 || wd === 6
+function isTintedDay(period: string, day: number): boolean {
+  const date = `${period}-${String(day).padStart(2, '0')}`
+  const wd = new Date(`${date}T12:00:00`).getDay()
+  return wd === 0 || wd === 6 || isPakistanHoliday(date)
 }
 
 export function MonthMatrixPage() {
@@ -75,8 +77,7 @@ export function MonthMatrixPage() {
         await api.deliveries.upsert({
           customerId,
           date,
-          quantity: quantity ?? 0,
-          emptiesCollected: quantity ?? 0,
+          ...matrixCardQtyUpsert(quantity),
         })
         await qc.invalidateQueries({ queryKey: ['deliveries', 'matrix', period] })
       } catch (err) {
@@ -217,7 +218,7 @@ export function MonthMatrixPage() {
                   <div
                     key={day}
                     className={`absolute top-0 flex h-8 items-center justify-center border-r ${
-                      isWeekend(period, day) ? 'bg-slate-100/80' : ''
+                      isTintedDay(period, day) ? 'bg-slate-100/80' : ''
                     }`}
                     style={{ left: vCol.start, width: vCol.size }}
                   >
@@ -266,7 +267,7 @@ export function MonthMatrixPage() {
                             : undefined
                         }
                         className={`absolute top-0 flex h-9 items-center justify-center border-r ${
-                          isWeekend(period, day) ? 'bg-slate-50' : ''
+                          isTintedDay(period, day) ? 'bg-slate-50' : ''
                         }`}
                         style={{ left: vCol.start, width: vCol.size }}
                       >

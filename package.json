@@ -18,6 +18,7 @@
     "db:migrate": "ELECTRON_RUN_AS_NODE=1 electron ./node_modules/tsx/dist/cli.mjs --tsconfig tsconfig.node.json scripts/migrate-cli.ts",
     "db:reset": "ELECTRON_RUN_AS_NODE=1 electron ./node_modules/tsx/dist/cli.mjs --tsconfig tsconfig.node.json scripts/reset-db.ts",
     "smoke:phase0": "electron-builder install-app-deps && ELECTRON_RUN_AS_NODE=1 electron ./node_modules/tsx/dist/cli.mjs --tsconfig tsconfig.node.json scripts/smoke-phase0.ts",
+    "timed:daily-entry": "npm run build && ./node_modules/.bin/electron scripts/timed-daily-entry-ui.mjs",
     "dist:win": "npm run build && electron-builder --win --publish never",
     "dist:linux": "npm run build && electron-builder --linux --publish never",
     "rebuild:electron": "electron-builder install-app-deps",

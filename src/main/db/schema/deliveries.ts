@@ -34,6 +34,11 @@ export const deliveries = sqliteTable(
     status: text('status').notNull().default('recorded'),
     voidReason: text('void_reason'),
     invoiceId: integer('invoice_id'),
+    /**
+     * Empty string for the normal one-row-per-(customer,date,product) slot.
+     * Walk-in cash sales use a unique uuid per sale so multiple same-day sales coexist.
+     */
+    slotKey: text('slot_key').notNull().default(''),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
     createdBy: integer('created_by').references(() => users.id),
@@ -45,7 +50,7 @@ export const deliveries = sqliteTable(
     freeCheck: check('deliveries_is_free_check', sql`${t.isFree} IN (0,1)`),
     statusCheck: check('deliveries_status_check', sql`${t.status} IN ('recorded','void')`),
     slotUnique: uniqueIndex('uq_delivery_slot')
-      .on(t.customerId, t.deliveryDate, t.productId)
+      .on(t.customerId, t.deliveryDate, t.productId, t.slotKey)
       .where(sql`${t.status} = 'recorded'`),
     dateIdx: index('idx_deliveries_date').on(t.deliveryDate),
     custDateIdx: index('idx_deliveries_cust_date').on(t.customerId, t.deliveryDate),

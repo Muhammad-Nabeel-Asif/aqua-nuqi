@@ -6,6 +6,7 @@ import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { api } from '@renderer/lib/api'
 import { addBusinessMonths, currentPeriod, periodFromDate } from '@shared/date'
+import { matrixCardQtyUpsert } from '@shared/delivery-entry'
 import { AppError } from '@shared/errors'
 import { DeliveryDetailDialog } from './DeliveryDetailDialog'
 import { DeliveryQtyCell } from './DeliveryQtyCell'
@@ -52,8 +53,7 @@ export function CustomerCardView({ customerId, period: periodProp, showHeader = 
       await api.deliveries.upsert({
         customerId,
         date,
-        quantity: quantity ?? 0,
-        emptiesCollected: quantity ?? 0,
+        ...matrixCardQtyUpsert(quantity),
       })
       await qc.invalidateQueries({ queryKey: ['deliveries', 'card', customerId, period] })
       await qc.invalidateQueries({ queryKey: ['customer', customerId] })
