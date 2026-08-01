@@ -131,9 +131,17 @@ export function SalarySlipTemplate({
         style={{ borderColor: business.accentColour }}
       >
         <span>Net paid</span>
-        <span className="tabular-nums">{m(item.netPayable)}</span>
+        <span className="tabular-nums">{m(item.paidAmount)}</span>
       </div>
       <div className="mt-1 text-slate-600">{amountInWords}</div>
+      {item.paidAmount < item.netPayable ? (
+        <div className="mt-1 text-amber-800">
+          Net payable {m(item.netPayable)}
+          {item.paidAmount === 0
+            ? ' — unpaid'
+            : ` — unpaid balance ${m(item.netPayable - item.paidAmount)}`}
+        </div>
+      ) : null}
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-slate-600">
         <div>Payment date: {item.paymentDate ? fmtDate(item.paymentDate) : '—'}</div>

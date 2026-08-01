@@ -56,7 +56,7 @@ export function createEmployeeService(db: AppDatabase, audit: AuditService, peri
         and(eq(salaryAdvances.employeeId, employeeId), eq(salaryAdvances.status, 'outstanding')),
       )
       .all()
-    return rows.reduce((s, r) => s + r.amount, 0)
+    return rows.reduce((s, r) => s + Math.max(0, r.amount - r.settledAmount), 0)
   }
 
   function currentSalary(
@@ -517,12 +517,21 @@ export function createEmployeeService(db: AppDatabase, audit: AuditService, peri
         status: payrollRuns.status,
         netPayable: payrollItems.netPayable,
         paidAmount: payrollItems.paidAmount,
+        supersededAt: payrollItems.supersededAt,
       })
       .from(payrollItems)
       .innerJoin(payrollRuns, eq(payrollItems.payrollRunId, payrollRuns.id))
       .where(eq(payrollItems.employeeId, employeeId))
       .all()
-    return items.filter((r) => r.status !== 'void').sort((a, b) => b.period.localeCompare(a.period))
+    return items
+      .filter((r) => r.status !== 'void' && r.supersededAt == null)
+      .map(({ period, status, netPayable, paidAmount }) => ({
+        period,
+        status,
+        netPayable,
+        paidAmount,
+      }))
+      .sort((a, b) => b.period.localeCompare(a.period))
   }
 
   return {

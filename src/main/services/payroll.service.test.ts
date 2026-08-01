@@ -5,7 +5,13 @@ import { eq } from 'drizzle-orm'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDatabase, getDb, getRawDb, openDatabase } from '@main/db/client'
-import { deliveries, expenses as expensesTable, products } from '@main/db/schema'
+import {
+  deliveries,
+  expenses as expensesTable,
+  payrollItems,
+  products,
+  salaryAdvances,
+} from '@main/db/schema'
 import { seedDefaults } from '@main/db/seed'
 import { newUuid } from '@main/lib/ids'
 import { createAttendanceService } from '@main/services/attendance.service'
@@ -19,6 +25,7 @@ import { createSettingsService } from '@main/services/settings.service'
 import { nowIsoUtc } from '@shared/date'
 import { AppError } from '@shared/errors'
 import { toPaisa } from '@shared/money'
+import { salarySlipPdfFileName } from '@shared/slug'
 
 describe('Phase 6 payroll acceptance', () => {
   let dir: string
@@ -407,5 +414,272 @@ describe('Phase 6 payroll acceptance', () => {
     expect(m.netPayable).toBe(0)
     expect(m.advancesDeducted).toBe(2_400_000)
     expect(m.advancesCarryForward).toBe(2_600_000)
+  })
+
+  it('review: unmarked attendance does not pay full monthly salary', async () => {
+    const { employeesSvc, payroll, owner } = await setup()
+    employeesSvc.create(
+      {
+        name: 'Blank Grid',
+        salaryType: 'monthly',
+        baseAmount: Number(toPaisa(26_000)),
+        salaryEffectiveFrom: '2026-07-01',
+        joiningDate: '2026-07-01',
+      },
+      owner.id,
+    )
+    // No attendance marks at all
+    const { items } = payroll.generate({ period: '2026-07' }, owner.id)
+    expect(items[0]!.daysAbsent).toBe(26)
+    expect(items[0]!.absenceDeduction).toBe(Number(toPaisa(26_000)))
+    expect(items[0]!.netPayable).toBe(0)
+  })
+
+  it('review: finalize leaves paidAmount=0; recordPayment / payAll update paid', async () => {
+    const { employeesSvc, attendance, payroll, owner } = await setup()
+    employeesSvc.create(
+      {
+        name: 'Partial Pay',
+        baseAmount: Number(toPaisa(20_000)),
+        salaryEffectiveFrom: '2026-07-01',
+        joiningDate: '2026-07-01',
+      },
+      owner.id,
+    )
+    attendance.markAllPresent({ period: '2026-07' }, owner.id)
+    const { run } = payroll.generate({ period: '2026-07' }, owner.id)
+    const fin = payroll.finalize({ id: run.id, paymentDate: '2026-07-31' }, owner.id)
+    const item = fin.items[0]!
+    expect(item.netPayable).toBe(Number(toPaisa(20_000)))
+    expect(item.paidAmount).toBe(0)
+    expect(item.paymentDate).toBeNull()
+    expect(item.expenseId).not.toBeNull()
+
+    const half = payroll.recordPayment(
+      {
+        itemId: item.id,
+        amount: Number(toPaisa(8_000)),
+        paymentDate: '2026-08-02',
+        paymentMethod: 'cash',
+      },
+      owner.id,
+    )
+    expect(half.paidAmount).toBe(Number(toPaisa(8_000)))
+    expect(half.paymentDate).toBe('2026-08-02')
+
+    const paid = payroll.payAll(
+      { runId: run.id, paymentDate: '2026-08-05', paymentMethod: 'bank_transfer' },
+      owner.id,
+    )
+    expect(paid[0]!.paidAmount).toBe(Number(toPaisa(20_000)))
+    expect(paid[0]!.paymentDate).toBe('2026-08-05')
+    expect(paid[0]!.paymentMethod).toBe('bank_transfer')
+  })
+
+  it('review: capped advance uses settled_amount; void restores expense + balance', async () => {
+    const { employeesSvc, attendance, payroll, expensesSvc, owner, db } = await setup()
+    const emp = employeesSvc.create(
+      {
+        name: 'Cap Void',
+        baseAmount: Number(toPaisa(20_000)),
+        salaryEffectiveFrom: '2026-07-01',
+        joiningDate: '2026-07-01',
+      },
+      owner.id,
+    )
+    attendance.markAllPresent({ period: '2026-07' }, owner.id)
+    const advance = payroll.createAdvance(
+      { employeeId: emp.id, advanceDate: '2026-07-02', amount: Number(toPaisa(35_000)) },
+      owner.id,
+    )
+    const advExpenseId = advance.expenseId!
+    const { run } = payroll.generate({ period: '2026-07' }, owner.id)
+    payroll.finalize({ id: run.id }, owner.id)
+
+    const rows = db.select().from(salaryAdvances).where(eq(salaryAdvances.employeeId, emp.id)).all()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.amount).toBe(Number(toPaisa(35_000)))
+    expect(rows[0]!.settledAmount).toBe(Number(toPaisa(20_000)))
+    expect(rows[0]!.status).toBe('outstanding')
+    expect(rows[0]!.expenseId).toBe(advExpenseId)
+    expect(
+      payroll.listAdvances({ employeeId: emp.id, status: 'outstanding' }).outstandingTotal,
+    ).toBe(Number(toPaisa(15_000)))
+
+    payroll.voidRun(run.id, 'cap void test', owner.id)
+    const after = db.select().from(salaryAdvances).where(eq(salaryAdvances.id, advance.id)).get()!
+    expect(after.settledAmount).toBe(0)
+    expect(after.status).toBe('outstanding')
+    expect(after.amount).toBe(Number(toPaisa(35_000)))
+    expect(expensesSvc.getById(advExpenseId).status).toBe('active')
+    expect(payroll.listAdvances({ employeeId: emp.id }).outstandingTotal).toBe(
+      Number(toPaisa(35_000)),
+    )
+  })
+
+  it('review: multi-month capped advance — void July leaves August slice only', async () => {
+    const { employeesSvc, attendance, payroll, owner, db } = await setup()
+    const emp = employeesSvc.create(
+      {
+        name: 'Two Month Cap',
+        baseAmount: Number(toPaisa(20_000)),
+        salaryEffectiveFrom: '2026-07-01',
+        joiningDate: '2026-07-01',
+      },
+      owner.id,
+    )
+    attendance.markAllPresent({ period: '2026-07' }, owner.id)
+    attendance.markAllPresent({ period: '2026-08' }, owner.id)
+    payroll.createAdvance(
+      { employeeId: emp.id, advanceDate: '2026-07-02', amount: Number(toPaisa(35_000)) },
+      owner.id,
+    )
+
+    const july = payroll.generate({ period: '2026-07' }, owner.id)
+    payroll.finalize({ id: july.run.id }, owner.id)
+    const aug = payroll.generate({ period: '2026-08' }, owner.id)
+    payroll.finalize({ id: aug.run.id }, owner.id)
+
+    const afterBoth = db
+      .select()
+      .from(salaryAdvances)
+      .where(eq(salaryAdvances.employeeId, emp.id))
+      .all()
+    expect(afterBoth).toHaveLength(1)
+    expect(afterBoth[0]!.settledAmount).toBe(Number(toPaisa(35_000)))
+    expect(afterBoth[0]!.status).toBe('settled')
+    expect(afterBoth[0]!.settledInPayrollItemId).toBe(aug.items[0]!.id)
+
+    payroll.voidRun(july.run.id, 'void earlier month', owner.id)
+
+    const afterVoid = db
+      .select()
+      .from(salaryAdvances)
+      .where(eq(salaryAdvances.employeeId, emp.id))
+      .get()!
+    expect(afterVoid.settledAmount).toBe(Number(toPaisa(15_000)))
+    expect(afterVoid.status).toBe('outstanding')
+    expect(afterVoid.settledInPayrollItemId).toBe(aug.items[0]!.id)
+    expect(
+      payroll.listAdvances({ employeeId: emp.id, status: 'outstanding' }).outstandingTotal,
+    ).toBe(Number(toPaisa(20_000)))
+
+    // Regenerating July after void must deduct the July slice again.
+    const regen = payroll.generate({ period: '2026-07' }, owner.id)
+    const regenItem = regen.items.find((i) => i.employeeId === emp.id)!
+    expect(regenItem.advancesDeducted).toBe(Number(toPaisa(20_000)))
+    payroll.finalize({ id: regen.run.id }, owner.id)
+    const restored = db
+      .select()
+      .from(salaryAdvances)
+      .where(eq(salaryAdvances.employeeId, emp.id))
+      .get()!
+    expect(restored.settledAmount).toBe(Number(toPaisa(35_000)))
+    expect(restored.status).toBe('settled')
+  })
+
+  it('review: regenerating from void supersedes items (no hard delete)', async () => {
+    const { employeesSvc, attendance, payroll, owner, db } = await setup()
+    employeesSvc.create(
+      {
+        name: 'Regen',
+        baseAmount: Number(toPaisa(12_000)),
+        salaryEffectiveFrom: '2026-07-01',
+        joiningDate: '2026-07-01',
+      },
+      owner.id,
+    )
+    attendance.markAllPresent({ period: '2026-07' }, owner.id)
+    const first = payroll.generate({ period: '2026-07' }, owner.id)
+    const oldItemId = first.items[0]!.id
+    payroll.finalize({ id: first.run.id }, owner.id)
+    payroll.voidRun(first.run.id, 'regen', owner.id)
+
+    const second = payroll.generate({ period: '2026-07' }, owner.id)
+    expect(second.items[0]!.id).not.toBe(oldItemId)
+    const oldRow = db.select().from(payrollItems).where(eq(payrollItems.id, oldItemId)).get()
+    expect(oldRow).toBeTruthy()
+    expect(oldRow!.supersededAt).not.toBeNull()
+    const newRow = db
+      .select()
+      .from(payrollItems)
+      .where(eq(payrollItems.id, second.items[0]!.id))
+      .get()
+    expect(newRow!.supersededAt).toBeNull()
+  })
+
+  it('review: absence deduction rounds once (non-divisible base)', () => {
+    // Rs 30,000 / 26 × 2 — two-step round = 230770; one-step = 230769
+    const m = computePayrollMath({
+      salaryType: 'monthly',
+      baseAmount: 3_000_000,
+      workingDays: 26,
+      daysPresent: 24,
+      daysAbsent: 2,
+      commissionPerBottle: 0,
+      bottlesDelivered: 0,
+      overtimeHours: 0,
+      overtimeHourlyRate: 0,
+      bonusAmount: 0,
+      outstandingAdvances: 0,
+      otherDeductions: 0,
+    })
+    expect(m.absenceDeduction).toBe(Math.round((3_000_000 * 2) / 26))
+    expect(m.absenceDeduction).toBe(230_769)
+  })
+
+  it('review: daily wage = rate × days present', async () => {
+    const { employeesSvc, attendance, payroll, owner } = await setup()
+    const emp = employeesSvc.create(
+      {
+        name: 'Daily',
+        salaryType: 'daily',
+        baseAmount: Number(toPaisa(1_000)),
+        salaryEffectiveFrom: '2026-07-01',
+        joiningDate: '2026-07-01',
+      },
+      owner.id,
+    )
+    attendance.markAllPresent({ period: '2026-07' }, owner.id)
+    // Mark 3 absences so present = 28 in July
+    attendance.setOne({ employeeId: emp.id, date: '2026-07-01', status: 'absent' }, owner.id)
+    attendance.setOne({ employeeId: emp.id, date: '2026-07-02', status: 'absent' }, owner.id)
+    attendance.setOne({ employeeId: emp.id, date: '2026-07-03', status: 'absent' }, owner.id)
+    const { items } = payroll.generate({ period: '2026-07' }, owner.id)
+    const item = items.find((i) => i.employeeId === emp.id)!
+    expect(item.daysPresent).toBe(28)
+    expect(item.baseAmount).toBe(Number(toPaisa(28_000)))
+    expect(item.netPayable).toBe(Number(toPaisa(28_000)))
+  })
+
+  it('review: waiveAdvance respects period lock', async () => {
+    const { employeesSvc, payroll, period, owner } = await setup()
+    const emp = employeesSvc.create(
+      {
+        name: 'Waive Lock',
+        baseAmount: Number(toPaisa(10_000)),
+        salaryEffectiveFrom: '2026-06-01',
+        joiningDate: '2026-06-01',
+      },
+      owner.id,
+    )
+    const adv = payroll.createAdvance(
+      { employeeId: emp.id, advanceDate: '2026-06-10', amount: Number(toPaisa(1_000)) },
+      owner.id,
+    )
+    period.close('2026-06', owner.id)
+    expect(() => payroll.waiveAdvance(adv.id, 'forgive', owner.id)).toThrow(AppError)
+    const waived = payroll.waiveAdvance(adv.id, 'forgive', owner.id, { forceClosedPeriod: true })
+    expect(waived.status).toBe('waived')
+  })
+
+  it('review: salary slip PDF filename convention', () => {
+    expect(
+      salarySlipPdfFileName({
+        period: '2026-07',
+        employeeCode: 'E-001',
+        employeeName: 'Ali Khan',
+      }),
+    ).toBe('Salary-2026-07-E-001-Ali-Khan.pdf')
   })
 })

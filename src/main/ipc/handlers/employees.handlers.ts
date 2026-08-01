@@ -13,6 +13,8 @@ import {
   createAdvanceOutput,
   createEmployeeInput,
   createEmployeeOutput,
+  employeePayrollHistoryInput,
+  employeePayrollHistoryOutput,
   employeePerformanceInput,
   employeePerformanceOutput,
   finalizePayrollInput,
@@ -162,17 +164,8 @@ export function registerEmployeeHandlers(): void {
 
   defineHandler({
     channel: 'employees:payrollHistory',
-    input: z.object({ employeeId: z.number().int().positive() }),
-    output: z.object({
-      items: z.array(
-        z.object({
-          period: z.string(),
-          status: z.string(),
-          netPayable: z.number().int(),
-          paidAmount: z.number().int(),
-        }),
-      ),
-    }),
+    input: employeePayrollHistoryInput,
+    output: employeePayrollHistoryOutput,
     roles: ['owner'],
     handler: (input) => ({ items: employees().listPayrollHistory(input.employeeId) }),
   })
@@ -261,7 +254,9 @@ export function registerEmployeeHandlers(): void {
     output: waiveAdvanceOutput,
     roles: ['owner'],
     handler: (input, ctx) => ({
-      item: payroll().waiveAdvance(input.id, input.reason, ctx.userId!),
+      item: payroll().waiveAdvance(input.id, input.reason, ctx.userId!, {
+        forceClosedPeriod: input.forceClosedPeriod,
+      }),
     }),
   })
 

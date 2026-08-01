@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@renderer/components/PageHeader'
 import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
@@ -28,9 +28,22 @@ const BADGES: Record<AttendanceStatus, { letter: string; className: string }> = 
 }
 const currentPeriod = todayBusinessDate().slice(0, 7)
 
+function nextStatus(current: AttendanceStatus | null): AttendanceStatus {
+  if (current == null) return 'present'
+  return ORDER[(ORDER.indexOf(current) + 1) % ORDER.length]!
+}
+
 export function AttendancePage() {
   const qc = useQueryClient()
+  const [searchParams] = useSearchParams()
+  const focusEmployeeId = Number(searchParams.get('employeeId') || '') || null
   const [period, setPeriod] = useState(currentPeriod)
+  const dragRef = useRef<{
+    employeeId: number
+    from: string
+    to: string
+    status: AttendanceStatus
+  } | null>(null)
   const monthQ = useQuery({
     queryKey: ['attendance', period],
     queryFn: () => api.attendance.getMonth(period),
@@ -46,6 +59,11 @@ export function AttendancePage() {
   )
   const closed = month?.periodClosed ?? false
   const today = todayBusinessDate()
+  const rows = useMemo(() => {
+    const all = month?.rows ?? []
+    if (focusEmployeeId == null) return all
+    return all.filter((r) => r.employeeId === focusEmployeeId)
+  }, [month?.rows, focusEmployeeId])
 
   async function invalidate() {
     await qc.invalidateQueries({ queryKey: ['attendance'] })
@@ -58,6 +76,25 @@ export function AttendancePage() {
     } catch (err) {
       toast({
         title: err instanceof AppError ? err.message : 'Attendance update failed',
+        variant: 'error',
+      })
+    }
+  }
+  async function applyRange(
+    employeeId: number,
+    from: string,
+    to: string,
+    status: AttendanceStatus,
+  ) {
+    if (closed) return
+    const start = from <= to ? from : to
+    const end = from <= to ? to : from
+    try {
+      await api.attendance.setRange({ employeeId, from: start, to: end, status })
+      await invalidate()
+    } catch (err) {
+      toast({
+        title: err instanceof AppError ? err.message : 'Range update failed',
         variant: 'error',
       })
     }
@@ -88,12 +125,16 @@ export function AttendancePage() {
       })
     }
   }
+  async function cycleToday(employeeId: number, current: AttendanceStatus | null) {
+    if (todayQ.data?.periodClosed) return
+    await setCell(employeeId, todayQ.data?.date ?? today, nextStatus(current))
+  }
 
   return (
     <div>
       <PageHeader
         title="Attendance"
-        subtitle="Click a cell to cycle P → A → H → L → U → O → P"
+        subtitle="Click a cell to cycle — → P → A → H → L → U → O. Drag to fill a range."
         actions={
           <Button variant="outline" asChild>
             <Link to="/employees">Employees</Link>
@@ -117,6 +158,14 @@ export function AttendancePage() {
         {closed ? (
           <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-900">
             Period locked — read only
+          </span>
+        ) : null}
+        {focusEmployeeId != null ? (
+          <span className="rounded bg-sky-100 px-2 py-1 text-xs text-sky-900">
+            Filtered to employee #{focusEmployeeId}{' '}
+            <Link className="underline" to="/employees/attendance">
+              Clear
+            </Link>
           </span>
         ) : null}
         <div className="ml-auto flex flex-wrap gap-2">
@@ -167,7 +216,7 @@ export function AttendancePage() {
                   </td>
                 </tr>
               ) : (
-                (month?.rows ?? []).map((row) => (
+                rows.map((row) => (
                   <tr key={row.employeeId} className="border-t hover:bg-sky-50/50">
                     <td className="sticky left-0 bg-white px-3 py-2 text-left text-sm">
                       <Link
@@ -179,18 +228,39 @@ export function AttendancePage() {
                       <span>{row.name}</span>
                     </td>
                     {row.cells.map((cell) => {
-                      const status = cell.status ?? 'present'
-                      const next = ORDER[(ORDER.indexOf(status) + 1) % ORDER.length]!
+                      const status = cell.status
+                      const badge = status ? BADGES[status] : null
                       return (
                         <td key={cell.date} className="p-0.5">
                           <button
                             type="button"
                             disabled={closed}
-                            title={`${cell.date}: ${cell.status ?? 'not set'}`}
-                            onClick={() => void setCell(row.employeeId, cell.date, next)}
-                            className={`h-7 w-7 rounded text-xs font-bold disabled:cursor-not-allowed disabled:opacity-70 ${BADGES[status].className}`}
+                            title={`${cell.date}: ${status ?? 'not set'}`}
+                            onMouseDown={(e) => {
+                              if (closed || e.button !== 0) return
+                              e.preventDefault()
+                              const next = nextStatus(status)
+                              dragRef.current = {
+                                employeeId: row.employeeId,
+                                from: cell.date,
+                                to: cell.date,
+                                status: next,
+                              }
+                            }}
+                            onMouseEnter={() => {
+                              const drag = dragRef.current
+                              if (!drag || drag.employeeId !== row.employeeId || closed) return
+                              drag.to = cell.date
+                            }}
+                            onMouseUp={() => {
+                              const drag = dragRef.current
+                              dragRef.current = null
+                              if (!drag || drag.employeeId !== row.employeeId || closed) return
+                              void applyRange(drag.employeeId, drag.from, drag.to, drag.status)
+                            }}
+                            className={`h-7 w-7 rounded text-xs font-bold disabled:cursor-not-allowed disabled:opacity-70 ${badge?.className ?? 'bg-slate-50 text-slate-400'}`}
                           >
-                            {cell.status ? BADGES[status].letter : '—'}
+                            {badge?.letter ?? '—'}
                           </button>
                         </td>
                       )
@@ -207,26 +277,28 @@ export function AttendancePage() {
         <aside className="rounded-lg border bg-white p-4">
           <h2 className="font-semibold">Today’s attendance</h2>
           <p className="mt-1 text-xs text-muted-foreground">{todayQ.data?.date ?? today}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Tap a row to cycle status</p>
           <div className="mt-3 space-y-2">
             {(todayQ.data?.items ?? []).map((item) => {
               const badge = item.status ? BADGES[item.status] : null
+              const locked = todayQ.data?.periodClosed ?? false
               return (
-                <div
+                <button
                   key={item.employeeId}
-                  className="flex items-center justify-between gap-2 border-b pb-2 text-sm"
+                  type="button"
+                  disabled={locked}
+                  onClick={() => void cycleToday(item.employeeId, item.status)}
+                  className="flex w-full items-center justify-between gap-2 border-b pb-2 text-left text-sm hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  <Link
-                    to={`/employees/${item.employeeId}`}
-                    className="min-w-0 truncate text-sky-800"
-                  >
+                  <span className="min-w-0 truncate text-sky-800">
                     {item.code} · {item.name}
-                  </Link>
+                  </span>
                   <span
                     className={`rounded px-2 py-0.5 text-xs font-bold ${badge?.className ?? 'bg-slate-100 text-slate-600'}`}
                   >
                     {badge?.letter ?? '—'}
                   </span>
-                </div>
+                </button>
               )
             })}
             {!todayQ.data?.items.length ? (
@@ -236,7 +308,8 @@ export function AttendancePage() {
         </aside>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        P present · A absent · H half day · L paid leave · U unpaid leave · O holiday
+        P present · A absent · H half day · L paid leave · U unpaid leave · O holiday · — not set
+        (counts as absent for payroll)
       </p>
     </div>
   )

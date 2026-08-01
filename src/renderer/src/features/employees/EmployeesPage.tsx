@@ -58,6 +58,9 @@ export function EmployeesPage() {
               <Link to="/employees/attendance">Attendance</Link>
             </Button>
             <Button variant="outline" asChild>
+              <Link to="/employees/advances">Advances</Link>
+            </Button>
+            <Button variant="outline" asChild>
               <Link to="/payroll">Payroll</Link>
             </Button>
             <Button onClick={() => setFormOpen(true)}>New employee</Button>

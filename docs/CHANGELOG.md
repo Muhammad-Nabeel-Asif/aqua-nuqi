@@ -16,6 +16,17 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
   (default `fixed_26`). Salary slip PDFs via the Phase 4 engine. Migration
   `0008_employees_payroll` (employees tables + deferred employee FKs).
 
+### Fixed
+
+- Phase 6 review: unmarked attendance counted as absent for payroll; finalize no longer marks
+  items fully paid (`recordPayment` / Pay all); capped advances use `settled_amount` (no row
+  split); regenerating a voided run soft-supersedes items; attendance Today panel + drag-fill;
+  global advances list and employee comparison table; absence rounding; waive respects period
+  lock. Migration `0009_payroll_review_fixes`.
+- Multi-month capped advance void: `salary_advance_settlements` ledger so voiding an earlier
+  payroll undoes only that month’s slice. Salary slip “Net paid” uses `paidAmount`. Migration
+  `0010_advance_settlements`.
+
 ## [0.7.0] — 2026-08-01
 
 ### Added

@@ -1,6 +1,13 @@
 import { and, eq, isNull, lte, sql } from 'drizzle-orm'
 import type { AppDatabase } from '@main/db/client'
-import { deliveries, employees, payrollItems, payrollRuns, salaryAdvances } from '@main/db/schema'
+import {
+  deliveries,
+  employees,
+  payrollItems,
+  payrollRuns,
+  salaryAdvanceSettlements,
+  salaryAdvances,
+} from '@main/db/schema'
 import { newUuid } from '@main/lib/ids'
 import type {
   EmployeePerformanceMonthDto,
@@ -67,11 +74,11 @@ export function computePayrollMath(input: {
     base = 0
   }
 
-  const perDay =
+  // Round once at the end — intermediate per-day rounding drifts by 1 paisa on non-divisible bases.
+  const absenceDeduction =
     !isDaily && !isCommissionOnly && input.workingDays > 0
-      ? Math.round(input.baseAmount / input.workingDays)
+      ? Math.round((input.baseAmount * input.daysAbsent) / input.workingDays)
       : 0
-  const absenceDeduction = !isDaily && !isCommissionOnly ? Math.round(perDay * input.daysAbsent) : 0
 
   const commissionAmount = Math.round(input.bottlesDelivered * input.commissionPerBottle)
   const overtimeAmount = Math.round(input.overtimeHours * input.overtimeHourlyRate)
@@ -107,6 +114,90 @@ export function createPayrollService(
   attendance: AttendanceService,
   expenses: ExpenseService,
 ) {
+  function advanceOutstanding(row: typeof salaryAdvances.$inferSelect): number {
+    if (row.status !== 'outstanding') return 0
+    return Math.max(0, row.amount - row.settledAmount)
+  }
+
+  function applyAdvanceSettlement(
+    tx: DbLike,
+    adv: typeof salaryAdvances.$inferSelect,
+    payrollItemId: number,
+    apply: number,
+    now: string,
+  ): void {
+    if (apply <= 0) return
+    tx.insert(salaryAdvanceSettlements)
+      .values({
+        uuid: newUuid(),
+        salaryAdvanceId: adv.id,
+        payrollItemId,
+        amount: apply,
+        createdAt: now,
+        voidedAt: null,
+      })
+      .run()
+    const newSettled = adv.settledAmount + apply
+    const fullySettled = newSettled >= adv.amount
+    tx.update(salaryAdvances)
+      .set({
+        settledAmount: newSettled,
+        status: fullySettled ? 'settled' : 'outstanding',
+        settledInPayrollItemId: payrollItemId,
+      })
+      .where(eq(salaryAdvances.id, adv.id))
+      .run()
+    // Keep in-memory row in sync for multi-slice FIFO in the same finalize pass.
+    adv.settledAmount = newSettled
+    adv.status = fullySettled ? 'settled' : 'outstanding'
+    adv.settledInPayrollItemId = payrollItemId
+  }
+
+  function reverseAdvanceSettlementsForItem(tx: DbLike, payrollItemId: number, now: string): void {
+    const slices = tx
+      .select()
+      .from(salaryAdvanceSettlements)
+      .where(
+        and(
+          eq(salaryAdvanceSettlements.payrollItemId, payrollItemId),
+          isNull(salaryAdvanceSettlements.voidedAt),
+        ),
+      )
+      .all()
+    const touchedAdvanceIds = new Set<number>()
+    for (const slice of slices) {
+      tx.update(salaryAdvanceSettlements)
+        .set({ voidedAt: now })
+        .where(eq(salaryAdvanceSettlements.id, slice.id))
+        .run()
+      touchedAdvanceIds.add(slice.salaryAdvanceId)
+    }
+    for (const advanceId of touchedAdvanceIds) {
+      const adv = tx.select().from(salaryAdvances).where(eq(salaryAdvances.id, advanceId)).get()
+      if (!adv) continue
+      const remainingSlices = tx
+        .select()
+        .from(salaryAdvanceSettlements)
+        .where(
+          and(
+            eq(salaryAdvanceSettlements.salaryAdvanceId, advanceId),
+            isNull(salaryAdvanceSettlements.voidedAt),
+          ),
+        )
+        .all()
+      const settled = remainingSlices.reduce((s, r) => s + r.amount, 0)
+      const latestItemId = remainingSlices.sort((a, b) => b.id - a.id)[0]?.payrollItemId ?? null
+      tx.update(salaryAdvances)
+        .set({
+          settledAmount: settled,
+          status: settled >= adv.amount && settled > 0 ? 'settled' : 'outstanding',
+          settledInPayrollItemId: latestItemId,
+        })
+        .where(eq(salaryAdvances.id, advanceId))
+        .run()
+    }
+  }
+
   function toAdvanceDto(
     row: typeof salaryAdvances.$inferSelect,
     emp?: { code: string; name: string },
@@ -119,6 +210,8 @@ export function createPayrollService(
       employeeName: emp?.name,
       advanceDate: row.advanceDate,
       amount: row.amount,
+      settledAmount: row.settledAmount,
+      outstandingAmount: advanceOutstanding(row),
       reason: row.reason,
       status: row.status as SalaryAdvanceDto['status'],
       settledInPayrollItemId: row.settledInPayrollItemId,
@@ -186,7 +279,8 @@ export function createPayrollService(
         ),
       )
       .all()
-    return { total: rows.reduce((s, r) => s + r.amount, 0), rows }
+      .filter((r) => advanceOutstanding(r) > 0)
+    return { total: rows.reduce((s, r) => s + advanceOutstanding(r), 0), rows }
   }
 
   function toItemDto(
@@ -299,9 +393,7 @@ export function createPayrollService(
       }
       return toAdvanceDto(r, emp)
     })
-    const outstandingTotal = rows
-      .filter((r) => r.status === 'outstanding')
-      .reduce((s, r) => s + r.amount, 0)
+    const outstandingTotal = rows.reduce((s, r) => s + advanceOutstanding(r), 0)
     return { items, outstandingTotal }
   }
 
@@ -333,6 +425,7 @@ export function createPayrollService(
           employeeId: input.employeeId,
           advanceDate: input.advanceDate,
           amount: input.amount,
+          settledAmount: 0,
           reason: input.reason?.trim() || null,
           settledInPayrollItemId: null,
           status: 'outstanding',
@@ -423,13 +516,19 @@ export function createPayrollService(
     return toAdvanceDto(updated, emp)
   }
 
-  function waiveAdvance(id: number, reason: string, userId: number): SalaryAdvanceDto {
+  function waiveAdvance(
+    id: number,
+    reason: string,
+    userId: number,
+    opts: { forceClosedPeriod?: boolean } = {},
+  ): SalaryAdvanceDto {
     if (!reason.trim()) throw new AppError('VALIDATION_FAILED', 'Reason is required')
     const row = db.select().from(salaryAdvances).where(eq(salaryAdvances.id, id)).get()
     if (!row) throw new AppError('NOT_FOUND', 'Advance not found')
     if (row.status !== 'outstanding') {
       throw new AppError('CONFLICT', 'Only outstanding advances can be waived')
     }
+    if (!opts.forceClosedPeriod) period.guardPeriodOpen(row.advanceDate)
     db.transaction((tx) => {
       tx.update(salaryAdvances).set({ status: 'waived' }).where(eq(salaryAdvances.id, id)).run()
       audit.record(
@@ -453,18 +552,19 @@ export function createPayrollService(
 
   // ── Payroll runs ────────────────────────────────────────────────────
 
+  function activeItemsForRun(runId: number, tx: DbLike = db) {
+    return tx
+      .select()
+      .from(payrollItems)
+      .where(and(eq(payrollItems.payrollRunId, runId), isNull(payrollItems.supersededAt)))
+      .all()
+  }
+
   function listRuns(): { items: PayrollRunDto[] } {
     const runs = db.select().from(payrollRuns).all()
     runs.sort((a, b) => b.period.localeCompare(a.period))
     return {
-      items: runs.map((r) => {
-        const count = db
-          .select()
-          .from(payrollItems)
-          .where(eq(payrollItems.payrollRunId, r.id))
-          .all().length
-        return toRunDto(r, count)
-      }),
+      items: runs.map((r) => toRunDto(r, activeItemsForRun(r.id).length)),
     }
   }
 
@@ -479,7 +579,7 @@ export function createPayrollService(
   function getRun(id: number): { run: PayrollRunDto; items: PayrollItemDto[] } {
     const run = db.select().from(payrollRuns).where(eq(payrollRuns.id, id)).get()
     if (!run) throw new AppError('NOT_FOUND', `Payroll run ${id} not found`)
-    const items = db.select().from(payrollItems).where(eq(payrollItems.payrollRunId, id)).all()
+    const items = activeItemsForRun(id)
     const mapped = items.map((row) => loadItemDto(row.id))
     return { run: toRunDto(run, mapped.length), items: mapped }
   }
@@ -511,14 +611,14 @@ export function createPayrollService(
     const now = nowIsoUtc()
     const runId = db.transaction((tx) => {
       if (existing?.status === 'void') {
-        // Soft reuse: delete old voided items then update run to draft
+        // Soft reuse: supersede old items (keep rows for audit) then reopen run as draft
         const oldItems = tx
           .select()
           .from(payrollItems)
-          .where(eq(payrollItems.payrollRunId, existing.id))
+          .where(and(eq(payrollItems.payrollRunId, existing.id), isNull(payrollItems.supersededAt)))
           .all()
         for (const it of oldItems) {
-          tx.delete(payrollItems).where(eq(payrollItems.id, it.id)).run()
+          tx.update(payrollItems).set({ supersededAt: now }).where(eq(payrollItems.id, it.id)).run()
         }
         tx.update(payrollRuns)
           .set({
@@ -608,6 +708,7 @@ export function createPayrollService(
             paymentMethod: null,
             expenseId: null,
             notes: `basis:${basis}`,
+            supersededAt: null,
           })
           .run()
         totalNet += math.netPayable
@@ -706,7 +807,7 @@ export function createPayrollService(
         .where(eq(payrollItems.id, input.id))
         .run()
 
-      const all = tx.select().from(payrollItems).where(eq(payrollItems.payrollRunId, run.id)).all()
+      const all = activeItemsForRun(run.id, tx)
       const totalNet = all.reduce(
         (s, r) => s + (r.id === input.id ? math.netPayable : r.netPayable),
         0,
@@ -759,54 +860,26 @@ export function createPayrollService(
     let salariesExpenseTotal = 0
 
     db.transaction((tx) => {
-      const items = tx
-        .select()
-        .from(payrollItems)
-        .where(eq(payrollItems.payrollRunId, run.id))
-        .all()
+      const items = activeItemsForRun(run.id, tx)
 
       for (const item of items) {
         const emp = employeesSvc.requireEmployee(item.employeeId)
         const { rows: advRows } = outstandingAdvancesAsOf(item.employeeId, run.period, tx)
-        // FIFO settle up to advancesDeducted; split the last advance if needed so the
-        // uncapped remainder stays outstanding for next month.
+        // FIFO settle up to advancesDeducted; ledger rows enable per-item void across months.
         let remaining = item.advancesDeducted
         for (const adv of advRows.sort(
           (a, b) => a.advanceDate.localeCompare(b.advanceDate) || a.id - b.id,
         )) {
           if (remaining <= 0) break
-          if (adv.amount <= remaining) {
-            tx.update(salaryAdvances)
-              .set({ status: 'settled', settledInPayrollItemId: item.id })
-              .where(eq(salaryAdvances.id, adv.id))
-              .run()
-            remaining -= adv.amount
-          } else {
-            const settledPortion = remaining
-            const leftover = adv.amount - settledPortion
-            tx.update(salaryAdvances)
-              .set({ amount: leftover })
-              .where(eq(salaryAdvances.id, adv.id))
-              .run()
-            tx.insert(salaryAdvances)
-              .values({
-                uuid: newUuid(),
-                employeeId: adv.employeeId,
-                advanceDate: adv.advanceDate,
-                amount: settledPortion,
-                reason: adv.reason,
-                settledInPayrollItemId: item.id,
-                status: 'settled',
-                expenseId: null, // original expense stays on the leftover/outstanding row
-                createdAt: now,
-                createdBy: userId,
-              })
-              .run()
-            remaining = 0
-          }
+          const open = advanceOutstanding(adv)
+          if (open <= 0) continue
+          const apply = Math.min(remaining, open)
+          applyAdvanceSettlement(tx, adv, item.id, apply, now)
+          remaining -= apply
         }
 
-        // Salaries expense = net cash paid at payroll time (may be 0 if fully advanced).
+        // Salaries expense = net payable (cash due at payroll time). paidAmount stays 0 until
+        // recordPayment / payAll — finalize does not pretend cash already left.
         let expenseId: number | null = null
         if (item.netPayable > 0) {
           const exp = expenses.createExpense(
@@ -833,9 +906,9 @@ export function createPayrollService(
         tx.update(payrollItems)
           .set({
             expenseId,
-            paidAmount: item.netPayable,
-            paymentDate,
-            paymentMethod: method,
+            paidAmount: 0,
+            paymentDate: null,
+            paymentMethod: null,
           })
           .where(eq(payrollItems.id, item.id))
           .run()
@@ -879,24 +952,14 @@ export function createPayrollService(
 
     const now = nowIsoUtc()
     db.transaction((tx) => {
-      const items = tx.select().from(payrollItems).where(eq(payrollItems.payrollRunId, id)).all()
+      const items = activeItemsForRun(id, tx)
 
       for (const item of items) {
         if (item.expenseId != null) {
           expenses.voidSystemExpense(item.expenseId, reason, userId, tx, opts)
         }
-        // Un-settle advances linked to this item
-        const settled = tx
-          .select()
-          .from(salaryAdvances)
-          .where(eq(salaryAdvances.settledInPayrollItemId, item.id))
-          .all()
-        for (const adv of settled) {
-          tx.update(salaryAdvances)
-            .set({ status: 'outstanding', settledInPayrollItemId: null })
-            .where(eq(salaryAdvances.id, adv.id))
-            .run()
-        }
+        // Undo only this item's ledger slices (idempotent; later months keep their slices).
+        reverseAdvanceSettlementsForItem(tx, item.id, now)
         tx.update(payrollItems)
           .set({
             expenseId: null,

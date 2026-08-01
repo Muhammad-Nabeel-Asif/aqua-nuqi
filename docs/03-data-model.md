@@ -538,11 +538,23 @@ CREATE TABLE salary_advances (
   employee_id INTEGER NOT NULL REFERENCES employees(id),
   advance_date TEXT NOT NULL,
   amount INTEGER NOT NULL CHECK (amount > 0),
+  settled_amount INTEGER NOT NULL DEFAULT 0,  -- cumulative paisa settled via payroll; outstanding = amount - settled_amount
   reason TEXT,
-  settled_in_payroll_item_id INTEGER REFERENCES payroll_items(id),
+  settled_in_payroll_item_id INTEGER REFERENCES payroll_items(id),  -- latest active settlement (denorm)
   status TEXT NOT NULL DEFAULT 'outstanding' CHECK (status IN ('outstanding','settled','waived','void')),
   expense_id INTEGER REFERENCES expenses(id),
   created_at TEXT NOT NULL, created_by INTEGER REFERENCES users(id)
+);
+
+-- Per payroll-item slices; void undoes rows for that item only (multi-month caps).
+CREATE TABLE salary_advance_settlements (
+  id INTEGER PRIMARY KEY,
+  uuid TEXT NOT NULL UNIQUE,
+  salary_advance_id INTEGER NOT NULL REFERENCES salary_advances(id),
+  payroll_item_id INTEGER NOT NULL REFERENCES payroll_items(id),
+  amount INTEGER NOT NULL CHECK (amount > 0),
+  created_at TEXT NOT NULL,
+  voided_at TEXT
 );
 
 CREATE TABLE payroll_runs (
@@ -582,7 +594,8 @@ CREATE TABLE payroll_items (
   payment_method TEXT,
   expense_id INTEGER REFERENCES expenses(id),
   notes TEXT,
-  UNIQUE (payroll_run_id, employee_id)
+  superseded_at TEXT,                      -- set when voided run is regenerated (no hard-delete)
+  UNIQUE (payroll_run_id, employee_id) WHERE superseded_at IS NULL
 );
 ```
 

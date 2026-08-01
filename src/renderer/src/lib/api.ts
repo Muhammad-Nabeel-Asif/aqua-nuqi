@@ -763,10 +763,11 @@ export const api = {
         reason,
         forceClosedPeriod,
       }),
-    waive: (id: number, reason: string) =>
+    waive: (id: number, reason: string, forceClosedPeriod?: boolean) =>
       invoke<{ item: import('@shared/contracts').SalaryAdvanceDto }>('advances:waive', {
         id,
         reason,
+        forceClosedPeriod,
       }),
   },
   payroll: {

@@ -265,6 +265,8 @@ export const salaryAdvanceDto = z.object({
   employeeName: z.string().optional(),
   advanceDate: businessDate,
   amount: z.number().int(),
+  settledAmount: z.number().int(),
+  outstandingAmount: z.number().int(),
   reason: z.string().nullable(),
   status: z.enum(['outstanding', 'settled', 'waived', 'void']),
   settledInPayrollItemId: z.number().int().nullable(),
@@ -304,8 +306,24 @@ export const voidAdvanceOutput = z.object({ item: salaryAdvanceDto })
 export const waiveAdvanceInput = z.object({
   id: z.number().int().positive(),
   reason: z.string().min(1).max(500),
+  forceClosedPeriod: z.boolean().optional(),
 })
 export const waiveAdvanceOutput = z.object({ item: salaryAdvanceDto })
+
+export const employeePayrollHistoryInput = z.object({
+  employeeId: z.number().int().positive(),
+})
+export const employeePayrollHistoryOutput = z.object({
+  items: z.array(
+    z.object({
+      period: z.string(),
+      status: z.string(),
+      netPayable: z.number().int(),
+      paidAmount: z.number().int(),
+    }),
+  ),
+})
+export type EmployeePayrollHistoryOutput = z.infer<typeof employeePayrollHistoryOutput>
 
 // ── Payroll ─────────────────────────────────────────────────────────────
 

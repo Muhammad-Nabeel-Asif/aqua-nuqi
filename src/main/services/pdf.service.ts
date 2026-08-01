@@ -17,7 +17,7 @@ import { AppError } from '@shared/errors'
 import { formatMoney, type Paisa } from '@shared/money'
 import { numberToWords, type NumberingSystem } from '@shared/number-to-words'
 import { toWhatsAppE164 } from '@shared/phone'
-import { invoicePdfFileName, slugifyName } from '@shared/slug'
+import { invoicePdfFileName, salarySlipPdfFileName, slugifyName } from '@shared/slug'
 import type { AuditService } from './audit.service'
 import type { BillingService } from './billing.service'
 import type { CustomerService } from './customer.service'
@@ -917,10 +917,14 @@ export function createPdfService(
         joiningDate: emp?.joiningDate ?? null,
       },
       item,
-      amountInWords: words(item.netPayable),
+      amountInWords: words(item.paidAmount),
       generatedAt: nowIsoUtc(),
     }
-    const fileName = `Salary-${run.period}-${item.employeeCode}-${slugifyName(item.employeeName)}.pdf`
+    const fileName = salarySlipPdfFileName({
+      period: run.period,
+      employeeCode: item.employeeCode,
+      employeeName: item.employeeName,
+    })
     const dest = path.join(miscDir(path.join('SalarySlips', run.period)), fileName)
     await writePdf('salary-slip', payload, dest, 'A4')
     audit.record({

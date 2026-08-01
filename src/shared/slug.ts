@@ -19,3 +19,13 @@ export function invoicePdfFileName(opts: {
   const slug = slugifyName(opts.customerName)
   return `${no}-${code}-${slug}.pdf`
 }
+
+/** Salary slip PDF basename: Salary-YYYY-MM-CODE-name.pdf */
+export function salarySlipPdfFileName(opts: {
+  period: string
+  employeeCode: string
+  employeeName: string
+}): string {
+  const code = opts.employeeCode.replace(/[^\w.-]+/g, '-')
+  return `Salary-${opts.period}-${code}-${slugifyName(opts.employeeName)}.pdf`
+}

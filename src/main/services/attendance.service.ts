@@ -404,6 +404,16 @@ export function createAttendanceService(
       overtimeHours += r.overtimeHours
       if (st === 'holiday') holidayDates.add(r.attendanceDate)
     }
+
+    // Unmarked working-day equivalents count as absent so blank grids cannot pay full salary.
+    // covered = present + absent (half-days contribute 1 total); holidays are outside working days
+    // for the `working_days` basis and do not inflate coverage for fixed_26 / calendar either.
+    const workingDays = resolveWorkingDays(periodKey)
+    const covered = daysPresent + daysAbsent
+    if (covered < workingDays) {
+      daysAbsent += workingDays - covered
+    }
+
     return { daysPresent, daysAbsent, overtimeHours, holidayDates }
   }
 

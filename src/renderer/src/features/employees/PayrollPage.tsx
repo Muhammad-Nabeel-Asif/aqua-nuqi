@@ -1,23 +1,38 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
 import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
-import type { PayrollItemDto } from '@shared/contracts'
+import type { ExpensePaymentMethod, PayrollItemDto } from '@shared/contracts'
 import { todayBusinessDate } from '@shared/date'
 import { AppError } from '@shared/errors'
 import { paisaToDecimalString, toPaisa } from '@shared/money'
+
+const METHODS: ExpensePaymentMethod[] = [
+  'cash',
+  'bank_transfer',
+  'jazzcash',
+  'easypaisa',
+  'cheque',
+  'other',
+]
 
 export function PayrollPage() {
   const qc = useQueryClient()
   const [period, setPeriod] = useState(todayBusinessDate().slice(0, 7))
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [paymentDate, setPaymentDate] = useState(todayBusinessDate())
-  const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [paymentMethod, setPaymentMethod] = useState<ExpensePaymentMethod>('cash')
+  const [comparePeriod, setComparePeriod] = useState(todayBusinessDate().slice(0, 7))
   const runsQ = useQuery({ queryKey: ['payroll', 'runs'], queryFn: () => api.payroll.list() })
+  const compareQ = useQuery({
+    queryKey: ['employees', 'compare', comparePeriod],
+    queryFn: () => api.employees.comparePerformance(comparePeriod),
+  })
   useEffect(() => {
     if (selectedId == null && runsQ.data?.items[0]) setSelectedId(runsQ.data.items[0].id)
   }, [runsQ.data, selectedId])
@@ -51,12 +66,11 @@ export function PayrollPage() {
       const result = await api.payroll.finalize({
         id: run.id,
         paymentDate,
-        paymentMethod: paymentMethod as
-          'cash' | 'bank_transfer' | 'jazzcash' | 'easypaisa' | 'cheque' | 'credit' | 'other',
+        paymentMethod,
       })
       toast({
         title: 'Payroll finalized',
-        description: `Salary expense: ${result.salariesExpenseTotal / 100}`,
+        description: `Salary expense: ${result.salariesExpenseTotal / 100}. Record payments when cash is paid.`,
         variant: 'success',
       })
       await refresh()
@@ -88,8 +102,7 @@ export function PayrollPage() {
       const result = await api.payroll.payAll({
         runId: run.id,
         paymentDate,
-        paymentMethod: paymentMethod as
-          'cash' | 'bank_transfer' | 'jazzcash' | 'easypaisa' | 'cheque' | 'credit' | 'other',
+        paymentMethod,
       })
       toast({ title: `Recorded ${result.items.length} payments`, variant: 'success' })
       await refresh()
@@ -118,7 +131,15 @@ export function PayrollPage() {
   }
   return (
     <div>
-      <PageHeader title="Payroll" subtitle="Generate, review, finalize and pay monthly salaries." />
+      <PageHeader
+        title="Payroll"
+        subtitle="Generate, review, finalize and pay monthly salaries."
+        actions={
+          <Button variant="outline" asChild>
+            <Link to="/employees/advances">Advances</Link>
+          </Button>
+        }
+      />
       <div className="grid gap-4 xl:grid-cols-[260px_1fr]">
         <aside className="rounded-lg border bg-white p-3">
           <h2 className="font-semibold">Generate payroll</h2>
@@ -186,13 +207,13 @@ export function PayrollPage() {
                   <select
                     className="mt-1 flex h-10 rounded-md border bg-white px-2 text-sm"
                     value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    onChange={(e) => setPaymentMethod(e.target.value as ExpensePaymentMethod)}
                   >
-                    {['cash', 'bank_transfer', 'jazzcash', 'easypaisa', 'cheque', 'other'].map(
-                      (x) => (
-                        <option key={x}>{x.replaceAll('_', ' ')}</option>
-                      ),
-                    )}
+                    {METHODS.map((x) => (
+                      <option key={x} value={x}>
+                        {x.replaceAll('_', ' ')}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 {run.status === 'draft' ? (
@@ -213,10 +234,69 @@ export function PayrollPage() {
               <PayrollTable
                 items={runQ.data?.items ?? []}
                 editable={run.status === 'draft'}
+                payable={run.status === 'finalized'}
+                paymentDate={paymentDate}
+                paymentMethod={paymentMethod}
                 onSaved={refresh}
               />
             </>
           )}
+          <div className="mt-6 rounded-lg border bg-white p-4">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">Employee comparison</h2>
+                <p className="text-xs text-muted-foreground">
+                  Bottles, customers and attendance for a chosen month
+                </p>
+              </div>
+              <Input
+                className="w-40"
+                type="month"
+                value={comparePeriod}
+                onChange={(e) => setComparePeriod(e.target.value)}
+              />
+            </div>
+            <div className="overflow-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b text-xs text-muted-foreground">
+                  <tr>
+                    {['Employee', 'Bottles', 'Customers', 'Deliveries', 'Cash', 'Attendance'].map(
+                      (h) => (
+                        <th key={h} className="px-2 py-2 font-medium">
+                          {h}
+                        </th>
+                      ),
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(compareQ.data?.items ?? []).map((row) => (
+                    <tr key={row.employeeId} className="border-b last:border-0">
+                      <td className="px-2 py-2">
+                        <Link className="text-sky-800" to={`/employees/${row.employeeId}`}>
+                          {row.code} · {row.name}
+                        </Link>
+                      </td>
+                      <td className="px-2 py-2">{row.bottlesDelivered}</td>
+                      <td className="px-2 py-2">{row.uniqueCustomers}</td>
+                      <td className="px-2 py-2">{row.deliveriesCount}</td>
+                      <td className="px-2 py-2">
+                        <Money value={row.cashCollected} />
+                      </td>
+                      <td className="px-2 py-2">{row.attendancePercent}%</td>
+                    </tr>
+                  ))}
+                  {!compareQ.data?.items.length ? (
+                    <tr>
+                      <td className="px-2 py-4 text-muted-foreground" colSpan={6}>
+                        No active employees to compare.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
       </div>
     </div>
@@ -226,10 +306,16 @@ export function PayrollPage() {
 function PayrollTable({
   items,
   editable,
+  payable,
+  paymentDate,
+  paymentMethod,
   onSaved,
 }: {
   items: PayrollItemDto[]
   editable: boolean
+  payable: boolean
+  paymentDate: string
+  paymentMethod: ExpensePaymentMethod
   onSaved: () => Promise<void>
 }) {
   const totals = items.reduce(
@@ -285,7 +371,15 @@ function PayrollTable({
         </thead>
         <tbody>
           {items.map((item) => (
-            <PayrollRow key={item.id} item={item} editable={editable} onSaved={onSaved} />
+            <PayrollRow
+              key={item.id}
+              item={item}
+              editable={editable}
+              payable={payable}
+              paymentDate={paymentDate}
+              paymentMethod={paymentMethod}
+              onSaved={onSaved}
+            />
           ))}
         </tbody>
         <tfoot className="border-t bg-slate-50 font-semibold">
@@ -331,10 +425,16 @@ function PayrollTable({
 function PayrollRow({
   item,
   editable,
+  payable,
+  paymentDate,
+  paymentMethod,
   onSaved,
 }: {
   item: PayrollItemDto
   editable: boolean
+  payable: boolean
+  paymentDate: string
+  paymentMethod: ExpensePaymentMethod
   onSaved: () => Promise<void>
 }) {
   const [bonus, setBonus] = useState(paisaToDecimalString(item.bonusAmount))
@@ -365,6 +465,34 @@ function PayrollRow({
       setSaving(false)
     }
   }
+  async function pay() {
+    const remaining = item.netPayable - item.paidAmount
+    if (remaining <= 0) return
+    const raw = window.prompt(
+      `Pay amount for ${item.employeeCode} (remaining ${paisaToDecimalString(remaining)} Rs)`,
+      paisaToDecimalString(remaining),
+    )
+    if (raw == null) return
+    try {
+      setSaving(true)
+      await api.payroll.recordPayment({
+        itemId: item.id,
+        amount: Number(toPaisa(raw || '0')),
+        paymentDate,
+        paymentMethod,
+      })
+      toast({ title: 'Payment recorded', variant: 'success' })
+      await onSaved()
+    } catch (err) {
+      toast({
+        title: err instanceof AppError ? err.message : 'Could not record payment',
+        variant: 'error',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+  const unpaid = payable && item.netPayable - item.paidAmount > 0
   return (
     <tr className="border-t">
       <td className="max-w-48 px-2 py-2 text-left">
@@ -436,6 +564,11 @@ function PayrollRow({
         {editable ? (
           <Button size="sm" variant="outline" disabled={saving} onClick={() => void save()}>
             {saving ? '…' : 'Save'}
+          </Button>
+        ) : null}
+        {unpaid ? (
+          <Button size="sm" variant="outline" disabled={saving} onClick={() => void pay()}>
+            {saving ? '…' : 'Pay'}
           </Button>
         ) : null}
       </td>

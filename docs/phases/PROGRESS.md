@@ -1100,17 +1100,22 @@ Addressed Phase 5 review findings without expanding scope:
   `attendance`, `payroll_runs`, `payroll_items`, `salary_advances`; deferred FKs on
   `routes.default_employee_id`, `deliveries.employee_id`, `payments.received_by_employee_id`,
   `expenses.employee_id`.
+- Migration `drizzle/0009_payroll_review_fixes.sql` — `salary_advances.settled_amount`,
+  `payroll_items.superseded_at` + partial unique index (schema version **10**).
 - Services: `employee.service` (CRUD + dated salaries), `attendance.service`,
   `payroll.service` (advances + generate/review/finalise/void/pay + performance).
 - `expense.service`: `createExpense(..., outerTx?)` and `voidSystemExpense` for payroll.
-- Screens: `/employees`, `/employees/:id`, `/employees/attendance`, `/payroll`; delivery
-  detail employee attribution; Settings → Localisation working-days basis.
+- Screens: `/employees`, `/employees/:id`, `/employees/attendance`, `/employees/advances`,
+  `/payroll` (incl. compare-performance table); delivery detail employee attribution;
+  Settings → Localisation working-days basis.
 - Salary slip PDF template + `pdf:generateSalarySlip` / `pdf:batchGenerateSalarySlips`.
-- Unit tests covering AC1, AC3–AC8, AC10 and §6.5 double-counting.
+- Unit tests covering AC1, AC3–AC8, AC10, §6.5 double-counting, and Phase 6 review probes.
 
 ### Migrations added
 
-- `drizzle/0008_employees_payroll.sql` — tables above + FK rebuilds (schema version **9**)
+- `drizzle/0008_employees_payroll.sql` — tables above + FK rebuilds
+- `drizzle/0009_payroll_review_fixes.sql` — `settled_amount`, `superseded_at`
+- `drizzle/0010_advance_settlements.sql` — `salary_advance_settlements` (schema version **11**)
 
 ### IPC channels added
 
@@ -1158,16 +1163,47 @@ Addressed Phase 5 review findings without expanding scope:
 
 - Daily Entry employee filter left as disabled TODO (day-list API has no `employeeId` filter);
   attribution works on delivery detail dialog.
-- Partial advance settlement splits the last advance row (settled portion + leftover
-  outstanding) so FIFO can match a capped deduction without a new expense on the split.
 - No EOBI / statutory deductions (client has not asked — open question below).
+
+### Review fixes (2026-08-01)
+
+Independent Phase 6 review findings addressed:
+
+1. **Unmarked attendance** — `summarizeForPayroll` treats unmarked working-day equivalents
+   (up to the configured working-days basis) as absent, so a blank grid no longer pays full
+   monthly salary.
+2. **Finalize vs pay** — finalize posts the Salaries expense and leaves `paidAmount = 0`;
+   `recordPayment` / Pay all / per-row Pay update paid date/method. FR-EM-06 payment flow works.
+3. **Capped advances** — no row split; `settled_amount` on one advance row; void reverses
+   settled_amount and keeps the original Employee Advance expense intact.
+   **Follow-up:** multi-month caps use `salary_advance_settlements` ledger so voiding an
+   earlier month undoes only that item’s slice (migration `0010_advance_settlements`,
+   schema version **11**).
+4. **Regenerate from void** — old `payroll_items` are soft-superseded (`superseded_at`), never
+   hard-deleted.
+5. **Attendance UI** — empty cell cycles null→present; Today panel is tappable; drag-fill calls
+   `setRange`; detail Attendance tab shows a month strip + deep-link.
+6. **Absence rounding** — `Math.round((base × daysAbsent) / workingDays)` (one final round).
+7. **waiveAdvance** — guards open period (`forceClosedPeriod` optional).
+8. **UI gaps** — global `/employees/advances` list; employee comparison table on `/payroll`.
+9. **Contracts** — `employees:payrollHistory` schemas moved to `shared/contracts/employees.ts`.
+10. **Regression tests** — unmarked attendance, partial pay, void-after-cap, soft-supersede,
+    rounding, daily wage, waive period lock, salary-slip filename.
+11. **Multi-month advance void** — settlement ledger; void July after Aug full settle leaves
+    `settled_amount = Aug slice`, outstanding = July slice; regenerate July re-deducts.
+12. **Salary slip** — “Net paid” uses `paidAmount` (shows unpaid when below net payable).
+
+**Waive keeps Employee Advance expense** (cash already left; waive only skips payroll
+deduction) — intentional.
 
 ### What the next phase must know
 
 - Employees table exists; `routes.default_employee_id` and `deliveries.employee_id` have FKs.
 - Create salary costs only via `expenses.createExpense` with `source: 'payroll'` (never raw
   inserts). Use `voidSystemExpense` when reversing payroll-sourced rows.
-- Schema version is **9** after this phase.
+- Outstanding advance balance = `amount - settled_amount` while status is `outstanding`.
+- Per-item settlement slices live in `salary_advance_settlements` (void by `payroll_item_id`).
+- Schema version is **11** after multi-month advance void fix.
 - **Next phase is Phase 7 (Inventory / trips)** — can link `vehicles` and trip cash variance
   into employee performance (`cashVariance` is currently `null`).
 

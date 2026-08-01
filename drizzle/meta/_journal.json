@@ -64,6 +64,20 @@
       "when": 1785600000000,
       "tag": "0008_employees_payroll",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1785601000000,
+      "tag": "0009_payroll_review_fixes",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1785602000000,
+      "tag": "0010_advance_settlements",
+      "breakpoints": true
     }
   ]
 }

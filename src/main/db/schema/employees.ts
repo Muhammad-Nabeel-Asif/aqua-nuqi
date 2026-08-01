@@ -128,8 +128,11 @@ export const payrollItems = sqliteTable(
     /** FK to expenses enforced in SQL migration (avoids circular schema import). */
     expenseId: integer('expense_id'),
     notes: text('notes'),
+    /** Set when a voided run is regenerated — old items kept for audit (no hard delete). */
+    supersededAt: text('superseded_at'),
   },
   (t) => ({
+    // Partial unique: only one active item per employee per run (see migration 0009).
     uniqueEmp: uniqueIndex('uq_payroll_item_run_employee').on(t.payrollRunId, t.employeeId),
   }),
 )
@@ -144,7 +147,10 @@ export const salaryAdvances = sqliteTable(
       .references(() => employees.id),
     advanceDate: text('advance_date').notNull(),
     amount: integer('amount').notNull(),
+    /** Paisa settled via payroll (cumulative); outstanding = amount - settled_amount. */
+    settledAmount: integer('settled_amount').notNull().default(0),
     reason: text('reason'),
+    /** Latest active settlement item (denormalised); undo uses salary_advance_settlements. */
     settledInPayrollItemId: integer('settled_in_payroll_item_id').references(() => payrollItems.id),
     status: text('status').notNull().default('outstanding'),
     /** FK to expenses enforced in SQL migration (avoids circular schema import). */
@@ -158,5 +164,28 @@ export const salaryAdvances = sqliteTable(
       'salary_advances_status_check',
       sql`${t.status} IN ('outstanding','settled','waived','void')`,
     ),
+  }),
+)
+
+/** One row per (advance, payroll item) settlement slice — enables multi-month void. */
+export const salaryAdvanceSettlements = sqliteTable(
+  'salary_advance_settlements',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    uuid: text('uuid').notNull().unique(),
+    salaryAdvanceId: integer('salary_advance_id')
+      .notNull()
+      .references(() => salaryAdvances.id),
+    payrollItemId: integer('payroll_item_id')
+      .notNull()
+      .references(() => payrollItems.id),
+    amount: integer('amount').notNull(),
+    createdAt: text('created_at').notNull(),
+    voidedAt: text('voided_at'),
+  },
+  (t) => ({
+    amountCheck: check('salary_advance_settlements_amount_check', sql`${t.amount} > 0`),
+    itemIdx: index('idx_adv_settlements_item').on(t.payrollItemId),
+    advanceIdx: index('idx_adv_settlements_advance').on(t.salaryAdvanceId),
   }),
 )

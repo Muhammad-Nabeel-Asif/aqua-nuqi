@@ -12,6 +12,7 @@ import { BottlesOutPage } from './features/deliveries/BottlesOutPage'
 import { CustomerCardPage } from './features/deliveries/CustomerCardPage'
 import { DailyEntryPage } from './features/deliveries/DailyEntryPage'
 import { MonthMatrixPage } from './features/deliveries/MonthMatrixPage'
+import { AdvancesPage } from './features/employees/AdvancesPage'
 import { AttendancePage } from './features/employees/AttendancePage'
 import { EmployeeDetailPage } from './features/employees/EmployeeDetailPage'
 import { EmployeesPage } from './features/employees/EmployeesPage'
@@ -113,6 +114,14 @@ export const router = createHashRouter([
         element: (
           <RequireOwner>
             <AttendancePage />
+          </RequireOwner>
+        ),
+      },
+      {
+        path: 'employees/advances',
+        element: (
+          <RequireOwner>
+            <AdvancesPage />
           </RequireOwner>
         ),
       },

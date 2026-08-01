@@ -139,14 +139,7 @@ export function EmployeeDetailPage() {
           </div>
         </TabsContent>
         <TabsContent value="attendance">
-          <Panel title="Attendance">
-            <p className="text-sm text-muted-foreground">
-              Review and update this employee’s month grid from Attendance.
-            </p>
-            <Button className="mt-3" variant="outline" asChild>
-              <Link to="/employees/attendance">Open attendance</Link>
-            </Button>
-          </Panel>
+          <EmployeeAttendanceStrip employeeId={id} />
         </TabsContent>
         <TabsContent value="advances">
           <Panel
@@ -234,6 +227,67 @@ export function EmployeeDetailPage() {
         />
       ) : null}
     </div>
+  )
+}
+
+function EmployeeAttendanceStrip({ employeeId }: { employeeId: number }) {
+  const period = todayBusinessDate().slice(0, 7)
+  const monthQ = useQuery({
+    queryKey: ['attendance', period, employeeId],
+    queryFn: () => api.attendance.getMonth(period),
+  })
+  const row = monthQ.data?.rows.find((r) => r.employeeId === employeeId)
+  const letters: Record<string, string> = {
+    present: 'P',
+    absent: 'A',
+    half_day: 'H',
+    paid_leave: 'L',
+    unpaid_leave: 'U',
+    holiday: 'O',
+  }
+  return (
+    <Panel
+      title={`Attendance — ${period}`}
+      action={
+        <Button size="sm" variant="outline" asChild>
+          <Link to={`/employees/attendance?employeeId=${employeeId}`}>Open full grid</Link>
+        </Button>
+      }
+    >
+      {monthQ.isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : !row ? (
+        <p className="text-sm text-muted-foreground">No attendance row for this employee.</p>
+      ) : (
+        <>
+          <div className="mb-3 flex flex-wrap gap-4 text-sm">
+            <span>
+              Present <strong>{row.present}</strong>
+            </span>
+            <span>
+              Absent <strong>{row.absent}</strong>
+            </span>
+            <span>
+              Half-days <strong>{row.halfDays}</strong>
+            </span>
+            <span>
+              Leave <strong>{row.paidLeave + row.unpaidLeave}</strong>
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {row.cells.map((cell) => (
+              <span
+                key={cell.date}
+                title={`${cell.date}: ${cell.status ?? 'not set'}`}
+                className="inline-flex h-7 w-7 items-center justify-center rounded bg-slate-100 text-xs font-bold text-slate-700"
+              >
+                {cell.status ? letters[cell.status] : '—'}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+    </Panel>
   )
 }
 
