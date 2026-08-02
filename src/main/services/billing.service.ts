@@ -873,6 +873,22 @@ export function createBillingService(
       )
     }
 
+    const linkedDeliveryIds = db
+      .select({ id: deliveries.id })
+      .from(deliveries)
+      .where(eq(deliveries.invoiceId, invoiceId))
+      .all()
+      .map((d) => d.id)
+    const depositLines = db
+      .select({
+        lineNo: invoiceLines.lineNo,
+        description: invoiceLines.description,
+        amount: invoiceLines.amount,
+      })
+      .from(invoiceLines)
+      .where(and(eq(invoiceLines.invoiceId, invoiceId), eq(invoiceLines.lineType, 'deposit')))
+      .all()
+
     db.transaction((tx) => {
       if (row.invoiceTotal !== 0) {
         ledger.reverseEntriesFor(tx, 'invoices', invoiceId, reason, userId)
@@ -899,8 +915,29 @@ export function createBillingService(
           entityTable: 'invoices',
           entityId: invoiceId,
           summary: `Voided invoice ${row.invoiceNo}: ${reason}`,
-          before: { status: row.status },
-          after: { status: 'void', reason },
+          before: {
+            status: row.status,
+            invoiceTotal: row.invoiceTotal,
+            totalPayable: row.totalPayable,
+            deliveriesQty: row.deliveriesQty,
+            deliveriesTotal: row.deliveriesTotal,
+            paidTotal: row.paidTotal,
+            closingBalance: row.closingBalance,
+            depositLines,
+            deliveryIds: linkedDeliveryIds,
+          },
+          after: {
+            status: 'void',
+            reason,
+            invoiceTotal: row.invoiceTotal,
+            totalPayable: row.totalPayable,
+            deliveriesQty: row.deliveriesQty,
+            deliveriesTotal: row.deliveriesTotal,
+            paidTotal: 0,
+            closingBalance: 0,
+            depositLines,
+            deliveryIds: [],
+          },
         },
         tx,
       )

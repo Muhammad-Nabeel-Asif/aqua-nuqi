@@ -34,6 +34,7 @@ export function SetupWizard() {
   const [ownerPassword, setOwnerPassword] = useState('')
   const [ownerPassword2, setOwnerPassword2] = useState('')
   const [backupFile, setBackupFile] = useState('')
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null)
 
   async function pickBackupFolder() {
     const res = await api.dialog.pickFolder({ title: 'Choose backup folder' })
@@ -53,8 +54,8 @@ export function SetupWizard() {
 
   async function finishNew() {
     setError(null)
-    if (ownerPassword.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (ownerPassword.length < 8) {
+      setError('Password must be at least 8 characters')
       return
     }
     if (ownerPassword !== ownerPassword2) {
@@ -81,7 +82,13 @@ export function SetupWizard() {
         locked: false,
         setupRequired: false,
       })
-      navigate('/')
+      try {
+        const r = await api.auth.generateRecoveryCode()
+        setRecoveryCode(r.recoveryCode)
+      } catch {
+        // Setup succeeded; recovery can still be generated later in Settings.
+        navigate('/')
+      }
     } catch (err) {
       setError(err instanceof AppError ? err.message : 'Setup failed')
     } finally {
@@ -110,6 +117,38 @@ export function SetupWizard() {
     } finally {
       setBusy(false)
     }
+  }
+
+  if (recoveryCode) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-6">
+        <Card className="w-full max-w-lg border-amber-200 shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-sky-950">Save your recovery code</CardTitle>
+            <CardDescription>
+              This code is shown once. Without it, the only way to recover a lost owner password is
+              a backup.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="rounded bg-amber-50 p-3 text-center font-mono text-lg tracking-wide">
+              {recoveryCode}
+            </p>
+            <Button
+              className="w-full"
+              onClick={() => {
+                void navigator.clipboard.writeText(recoveryCode)
+              }}
+            >
+              Copy code
+            </Button>
+            <Button className="w-full" variant="outline" onClick={() => navigate('/')}>
+              I have saved it — continue
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   if (path === 'choose') {
@@ -222,7 +261,7 @@ export function SetupWizard() {
               <Field label="Username" value={ownerUsername} onChange={setOwnerUsername} />
               <Field label="Display name" value={ownerDisplayName} onChange={setOwnerDisplayName} />
               <div className="space-y-1.5">
-                <Label>Password</Label>
+                <Label>Password (min 8 characters)</Label>
                 <Input
                   type="password"
                   value={ownerPassword}

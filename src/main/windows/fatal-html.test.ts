@@ -18,5 +18,18 @@ describe('buildFatalHtml', () => {
     expect(html).toContain(DOWNLOAD_LATEST_URL)
     expect(html).toContain('aqua-nuqi-fatal://open-data')
     expect(html).toContain('Your data is safe and has not been changed')
+    expect(html).toContain('Copy details')
+    expect(html).toContain('APP_OLDER_THAN_DATA')
+  })
+
+  it('includes Copy details on migration failure', () => {
+    const { html } = buildFatalHtml({
+      type: 'migration_failed',
+      message: 'boom',
+      backupPath: '/tmp/pre_migration.zip',
+    })
+    expect(html).toContain('Copy details')
+    expect(html).toContain('MIGRATION_FAILED')
+    expect(html).toContain('boom')
   })
 })

@@ -550,6 +550,7 @@ export function createDeliveryService(
     date: string
     routeId?: number
     areaId?: number
+    employeeId?: number
     search?: string
     status?: 'active' | 'paused' | 'inactive'
     productId?: number
@@ -561,6 +562,9 @@ export function createDeliveryService(
     const conditions = [isNull(customers.deletedAt), sql`${customers.customerType} != 'walk_in'`]
     if (filters.routeId) conditions.push(eq(customers.routeId, filters.routeId))
     if (filters.areaId) conditions.push(eq(customers.areaId, filters.areaId))
+    if (filters.employeeId) {
+      conditions.push(eq(routes.defaultEmployeeId, filters.employeeId))
+    }
     if (filters.status) conditions.push(eq(customers.status, filters.status))
     else conditions.push(eq(customers.status, 'active'))
     if (filters.search?.trim()) {
@@ -648,6 +652,7 @@ export function createDeliveryService(
         billingMode: c.billingMode as 'per_bottle' | 'monthly_package',
         suggestedQty,
         deliveryId: d?.id ?? null,
+        employeeId: d?.employeeId ?? null,
         quantity: d?.quantity ?? null,
         emptiesCollected: d?.emptiesCollected ?? null,
         amount: d?.amount ?? null,

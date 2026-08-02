@@ -144,6 +144,17 @@ function rmrf(target: string): void {
   fs.rmSync(target, { recursive: true, force: true })
 }
 
+/** In-memory only — never persisted. Used for scheduled / exit backups when encryption is on. */
+let sessionEncryptionPassword: string | null = null
+
+export function setSessionEncryptionPassword(password: string | null): void {
+  sessionEncryptionPassword = password && password.length > 0 ? password : null
+}
+
+export function getSessionEncryptionPassword(): string | null {
+  return sessionEncryptionPassword
+}
+
 export function createBackupService(deps: {
   db: AppDatabase
   raw: RawDatabase
@@ -202,6 +213,8 @@ export function createBackupService(deps: {
 
     let secondaryCopied = false
     let secondaryWarning: string | null = null
+    /** Once the final zip is renamed into place, never delete it on later failures. */
+    let published = false
 
     try {
       emit(opts?.onProgress, {
@@ -236,11 +249,17 @@ export function createBackupService(deps: {
       }
 
       const password =
-        opts?.password !== undefined
+        opts?.password !== undefined && opts.password !== null
           ? opts.password
           : deps.isEncryptionEnabled()
-            ? (deps.getEncryptionPassword?.() ?? null)
+            ? (deps.getEncryptionPassword?.() ?? getSessionEncryptionPassword())
             : null
+      if (deps.isEncryptionEnabled() && !password) {
+        throw new AppError(
+          'VALIDATION_FAILED',
+          'Backup encryption is enabled but no password is available for this session. Enter the encryption password under Settings → Backup (kept in memory only), or disable encryption.',
+        )
+      }
       const encrypted = Boolean(password)
 
       const manifest: BackupManifest = {
@@ -274,6 +293,7 @@ export function createBackupService(deps: {
       // Atomic publish
       safeUnlink(finalZipPath)
       fs.renameSync(archivePath, finalZipPath)
+      published = true
       const sizeBytes = fs.statSync(finalZipPath).size
       const checksum = sha256File(finalZipPath)
 
@@ -299,29 +319,49 @@ export function createBackupService(deps: {
         }
       }
 
-      deps.db
-        .insert(backupLog)
-        .values({
-          createdAt: nowIsoUtc(),
-          kind,
-          filePath: finalZipPath,
-          sizeBytes,
-          checksum,
-          status: 'success',
-          message: secondaryWarning
-            ? `Secondary copy failed: ${secondaryWarning}`
-            : secondaryCopied
-              ? 'Copied to secondary destination'
-              : null,
-        })
-        .run()
+      // Post-publish bookkeeping — never delete the zip if these fail.
+      const postPublishNotes: string[] = []
+      if (secondaryWarning) postPublishNotes.push(`Secondary copy failed: ${secondaryWarning}`)
+      else if (secondaryCopied) postPublishNotes.push('Copied to secondary destination')
 
-      if (!opts?.skipPrune) {
-        emit(opts?.onProgress, { phase: 'prune', percent: 95, message: 'Applying retention…' })
-        pruneRetention()
+      try {
+        deps.db
+          .insert(backupLog)
+          .values({
+            createdAt: nowIsoUtc(),
+            kind,
+            filePath: finalZipPath,
+            sizeBytes,
+            checksum,
+            status: 'success',
+            message: postPublishNotes.length > 0 ? postPublishNotes.join('; ') : null,
+          })
+          .run()
+      } catch (err) {
+        postPublishNotes.push(
+          `backup_log insert failed: ${err instanceof Error ? err.message : String(err)}`,
+        )
       }
 
-      emit(opts?.onProgress, { phase: 'done', percent: 100, message: 'Backup complete' })
+      if (!opts?.skipPrune) {
+        try {
+          emit(opts?.onProgress, { phase: 'prune', percent: 95, message: 'Applying retention…' })
+          pruneRetention()
+        } catch (err) {
+          postPublishNotes.push(
+            `retention prune failed: ${err instanceof Error ? err.message : String(err)}`,
+          )
+        }
+      }
+
+      emit(opts?.onProgress, {
+        phase: 'done',
+        percent: 100,
+        message:
+          postPublishNotes.length > 0
+            ? `Backup complete (${postPublishNotes.join('; ')})`
+            : 'Backup complete',
+      })
 
       return {
         filePath: finalZipPath,
@@ -334,7 +374,9 @@ export function createBackupService(deps: {
       }
     } catch (err) {
       safeUnlink(tmpZipPath)
-      safeUnlink(finalZipPath)
+      if (!published) {
+        safeUnlink(finalZipPath)
+      }
       const message = err instanceof Error ? err.message : String(err)
       try {
         deps.db

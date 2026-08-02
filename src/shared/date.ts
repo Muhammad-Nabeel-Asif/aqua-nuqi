@@ -50,6 +50,19 @@ export function assertPeriod(period: string): void {
   }
 }
 
+/**
+ * Choose display kind for UI timestamps. ISO datetimes (backup_log.createdAt,
+ * audit_log.occurredAt) must not go through business-date formatting.
+ */
+export function resolveDisplayDateKind(
+  value: string,
+  kind: 'date' | 'datetime' = 'date',
+): 'date' | 'datetime' {
+  if (kind === 'datetime') return 'datetime'
+  if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return 'datetime'
+  return 'date'
+}
+
 export function formatDisplayDate(date: string, pattern = 'dd-MM-yyyy'): string {
   assertBusinessDate(date)
   return format(parse(date, 'yyyy-MM-dd', new Date()), pattern)

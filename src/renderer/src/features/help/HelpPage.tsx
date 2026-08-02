@@ -69,8 +69,17 @@ export function HelpPage() {
           <div>
             <p className="font-medium">I forgot the owner password</p>
             <p>
-              Use the recovery code shown once at setup (if you saved it), or restore from a backup
-              taken when you still knew the password.
+              On the login screen choose &quot;Forgot owner password&quot; and enter the recovery
+              code (shown once at setup, or regenerated under Settings → Users &amp; security).
+              Without a recovery code, restore from a backup taken when you still knew the password.
+            </p>
+          </div>
+          <div>
+            <p className="font-medium">How do I practise without touching live data?</p>
+            <p>
+              Use a separate portable install or restore a backup into a copy of the data folder.
+              Demo seed data is for development builds only — do not clear production data to
+              practise.
             </p>
           </div>
         </div>

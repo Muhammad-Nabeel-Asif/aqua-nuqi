@@ -21,11 +21,12 @@ import {
   resolveAppPaths,
   type AppPaths,
 } from './lib/paths'
+import { consumePendingRestoreAudit } from './lib/pending-restore'
 import { createAdjustmentService } from './services/adjustment.service'
 import { createAttendanceService } from './services/attendance.service'
 import { createAuditService } from './services/audit.service'
 import { createAuthService } from './services/auth.service'
-import { createBackupService } from './services/backup.service'
+import { createBackupService, getSessionEncryptionPassword } from './services/backup.service'
 import { createBalanceService } from './services/balance.service'
 import { createBillingService } from './services/billing.service'
 import { createCustomerImportService } from './services/customer-import.service'
@@ -145,6 +146,7 @@ export function bootstrapApp(): BootstrapResult {
       getKeepDaily: () => Number(settings.get('backup.keepDaily') || 14),
       getKeepWeekly: () => Number(settings.get('backup.keepWeekly') || 8),
       isEncryptionEnabled: () => Boolean(settings.get('backup.encryptionEnabled')),
+      getEncryptionPassword: () => getSessionEncryptionPassword(),
     })
     const masterData = createMasterDataService(db, audit)
     const rates = createRateService(db, audit, period)
@@ -249,6 +251,9 @@ export function bootstrapApp(): BootstrapResult {
       bootFatal: null,
     })
     setRouterAuth(auth)
+
+    // Crash between restore replace and audit.record leaves this file behind.
+    consumePendingRestoreAudit(paths.userData, audit)
 
     return { ok: true, paths, setupRequired }
   } catch (err) {

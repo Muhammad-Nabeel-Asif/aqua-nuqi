@@ -39,7 +39,8 @@ export const auditListOutput = z.object({
 export type AuditListInput = z.infer<typeof auditListInput>
 
 export const auditExportInput = z.object({
-  format: z.enum(['excel', 'pdf']),
+  /** Excel only — structured before/after diffs are clearer in a sheet than PDF. */
+  format: z.enum(['excel']),
   from: z.string().optional(),
   to: z.string().optional(),
   userId: z.number().int().optional(),

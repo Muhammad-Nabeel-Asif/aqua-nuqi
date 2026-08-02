@@ -25,7 +25,9 @@ import { useSessionStore } from '@renderer/stores/session'
 import { useUiStore } from '@renderer/stores/ui'
 import { CommandPalette } from './CommandPalette'
 import { LockOverlay } from './LockOverlay'
+import { OnboardingTour } from './OnboardingTour'
 import { Button } from './ui/button'
+import { UpdateBanner } from './UpdateBanner'
 
 type NavItem = {
   to: string
@@ -174,7 +176,8 @@ export function AppShell() {
     const freshnessHours = backupQuery.data?.freshnessHours ?? 24
     if (!last) return { label: 'No backup yet', tone: 'danger' as const }
     const ageH = (Date.now() - new Date(last).getTime()) / 3_600_000
-    if (ageH < freshnessHours)
+    // Match backup:status isStale (ageMs > threshold) — equal threshold is still fresh.
+    if (ageH <= freshnessHours)
       return { label: `Backed up ${Math.max(1, Math.round(ageH))}h ago`, tone: 'ok' as const }
     const days = Math.round(ageH / 24)
     return {
@@ -225,6 +228,7 @@ export function AppShell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
+        <UpdateBanner />
         <header className="flex h-14 items-center gap-3 border-b border-sky-100 bg-white/70 px-4 backdrop-blur">
           <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="Toggle sidebar">
             <Menu className="h-4 w-4" />
@@ -277,6 +281,7 @@ export function AppShell() {
         ]}
       />
       {locked ? <LockOverlay /> : null}
+      <OnboardingTour />
       {/* keep idle tracker referenced to avoid unused lint in future */}
       <span className="hidden">{idleMs}</span>
     </div>

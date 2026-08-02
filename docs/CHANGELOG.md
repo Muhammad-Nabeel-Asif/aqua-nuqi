@@ -28,6 +28,15 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 - Version bumped to **1.0.0** (first production-stable release).
 - First-run restore accepts `.zip` archives as well as legacy `.db` files.
 
+### Fixed
+
+- Phase 9 review: Backup/Audit screens no longer crash on ISO timestamps (`DateText`
+  `kind="datetime"` + `resolveDisplayDateKind`); failed restore clears `pending-restore.json`
+  so boot cannot record a false restore audit; published backup zips are never deleted after
+  atomic rename. Billing edits `tax.rate`; audit retention setting drives `applyRetention`;
+  failed-login throttle persists across restarts; stock-vs-bottles integrity is not marked
+  Fixable; invoice void audit includes totals, deposit lines, and delivery ids.
+
 ## [0.10.0] — 2026-08-01
 
 ### Added

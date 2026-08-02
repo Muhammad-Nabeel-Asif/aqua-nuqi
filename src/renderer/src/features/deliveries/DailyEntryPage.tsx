@@ -22,6 +22,7 @@ export function DailyEntryPage() {
   const [date, setDate] = useState(todayBusinessDate())
   const [routeId, setRouteId] = useState('')
   const [areaId, setAreaId] = useState('')
+  const [employeeId, setEmployeeId] = useState('')
   const [search, setSearch] = useState('')
   const [showCash, setShowCash] = useState(false)
   const [focus, setFocus] = useState<{ row: number; col: FocusCol }>({ row: 0, col: 'qty' })
@@ -41,6 +42,10 @@ export function DailyEntryPage() {
 
   const areas = useQuery({ queryKey: ['areas'], queryFn: () => api.areas.list() })
   const routes = useQuery({ queryKey: ['routes'], queryFn: () => api.routes.list() })
+  const employees = useQuery({
+    queryKey: ['employees', 'active'],
+    queryFn: () => api.employees.listActive(),
+  })
   const missed = useQuery({
     queryKey: ['deliveries', 'missed', date, routeId],
     queryFn: () =>
@@ -51,12 +56,13 @@ export function DailyEntryPage() {
   })
 
   const listQuery = useQuery({
-    queryKey: ['deliveries', 'day', date, routeId, areaId, search],
+    queryKey: ['deliveries', 'day', date, routeId, areaId, employeeId, search],
     queryFn: () =>
       api.deliveries.getDayList({
         date,
         routeId: routeId ? Number(routeId) : undefined,
         areaId: areaId ? Number(areaId) : undefined,
+        employeeId: employeeId ? Number(employeeId) : undefined,
         search: search || undefined,
       }),
   })
@@ -73,11 +79,11 @@ export function DailyEntryPage() {
 
   useEffect(() => {
     setPendingCopy(new Map())
-  }, [date, routeId, areaId])
+  }, [date, routeId, areaId, employeeId])
 
   const dayQueryKey = useMemo(
-    () => ['deliveries', 'day', date, routeId, areaId, search] as const,
-    [date, routeId, areaId, search],
+    () => ['deliveries', 'day', date, routeId, areaId, employeeId, search] as const,
+    [date, routeId, areaId, employeeId, search],
   )
 
   const upsert = useCallback(
@@ -348,11 +354,16 @@ export function DailyEntryPage() {
         <div>
           <label className="text-xs text-muted-foreground">Employee</label>
           <select
-            className="flex h-10 w-44 rounded-md border px-2 text-sm opacity-60"
-            disabled
-            title="Employees arrive in Phase 6"
+            className="flex h-10 w-44 rounded-md border px-2 text-sm"
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
           >
-            <option value="">TODO(phase-6): all employees</option>
+            <option value="">All employees</option>
+            {(employees.data?.items ?? []).map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {emp.name}
+              </option>
+            ))}
           </select>
         </div>
         <div className="flex-1">

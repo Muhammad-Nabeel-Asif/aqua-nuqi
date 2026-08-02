@@ -160,9 +160,29 @@ export function SettingsPage() {
     try {
       const res = await api.diagnostics.export(folder.path)
       toast({ title: 'Diagnostics exported', description: res.zipPath, variant: 'success' })
+      await api.shell.openPath(folder.path)
     } catch (err) {
       toast({
         title: 'Export failed',
+        description: err instanceof AppError ? err.message : 'Error',
+        variant: 'error',
+      })
+    }
+  }
+
+  async function reportProblem() {
+    const folder = await api.dialog.pickFolder({ title: 'Save problem report to…' })
+    if (!folder.path) return
+    try {
+      const res = await api.diagnostics.reportProblem(folder.path)
+      toast({
+        title: 'Problem report ready',
+        description: res.zipPath,
+        variant: 'success',
+      })
+    } catch (err) {
+      toast({
+        title: 'Report failed',
         description: err instanceof AppError ? err.message : 'Error',
         variant: 'error',
       })
@@ -223,28 +243,6 @@ export function SettingsPage() {
           <p className="text-sm text-slate-600">
             Default billing day of month and tax settings. Tax is off by default.
           </p>
-          <Button
-            variant="outline"
-            onClick={async () => {
-              const v = settingsQuery.data?.values
-              const day = Number(v?.['billing.defaultBillingDay'] ?? 1)
-              const taxOn = Boolean(v?.['tax.enabled'])
-              const taxRate = Number(v?.['tax.rate'] ?? 0)
-              await api.settings.setMany({
-                values: {
-                  'billing.defaultBillingDay': day,
-                  'tax.enabled': taxOn,
-                  'tax.rate': taxRate,
-                },
-              })
-              toast({
-                title: 'Billing defaults unchanged — edit via fields below after reload',
-                variant: 'success',
-              })
-            }}
-          >
-            Refresh billing settings
-          </Button>
           <Field
             label="Default billing day (1–28)"
             value={String(settingsQuery.data?.values['billing.defaultBillingDay'] ?? 1)}
@@ -266,6 +264,19 @@ export function SettingsPage() {
             />
             Enable tax / GST on invoices
           </label>
+          <Field
+            label="Tax / GST rate (percent, e.g. 17 for 17%)"
+            value={String(settingsQuery.data?.values['tax.rate'] ?? 0)}
+            onChange={async (v) => {
+              const rate = Number(v)
+              if (!Number.isFinite(rate) || rate < 0) {
+                toast({ title: 'Enter a non-negative tax rate', variant: 'error' })
+                return
+              }
+              await api.settings.setMany({ values: { 'tax.rate': rate } })
+              await qc.invalidateQueries({ queryKey: ['settings'] })
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="master">
@@ -412,7 +423,8 @@ export function SettingsPage() {
                   } else if (status.updateAvailable) {
                     toast({
                       title: `Update ${status.availableVersion} available`,
-                      description: 'It will install when you quit, after a backup.',
+                      description:
+                        'It downloads in the background. Use Restart & install when ready — a backup runs first.',
                       variant: 'success',
                     })
                   } else {
@@ -470,7 +482,46 @@ export function SettingsPage() {
                       >
                         Clear PIN
                       </Button>
+                    ) : user?.id === u.id ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          const pin = window.prompt('New 4–6 digit PIN')
+                          const pwd = window.prompt('Your password to confirm')
+                          if (!pin || !pwd) return
+                          await api.auth.setPin({ pin, password: pwd })
+                          await qc.invalidateQueries({ queryKey: ['users'] })
+                          toast({ title: 'PIN set', variant: 'success' })
+                        }}
+                      >
+                        Set PIN
+                      </Button>
                     ) : null}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        const name = window.prompt('Display name', u.displayName)
+                        if (!name) return
+                        await api.auth.updateUser({ userId: u.id, displayName: name })
+                        await qc.invalidateQueries({ queryKey: ['users'] })
+                        toast({ title: 'User updated', variant: 'success' })
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        await api.auth.forceLogout({ userId: u.id })
+                        toast({ title: 'Force logout recorded', variant: 'success' })
+                        await qc.invalidateQueries({ queryKey: ['users'] })
+                      }}
+                    >
+                      Force logout
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -540,6 +591,9 @@ export function SettingsPage() {
             </dl>
             <Button className="mt-4" variant="secondary" onClick={() => void exportDiagnostics()}>
               Export diagnostics
+            </Button>
+            <Button className="ml-2 mt-4" variant="outline" onClick={() => void reportProblem()}>
+              Report a problem
             </Button>
             {user?.role === 'owner' ? (
               <Button

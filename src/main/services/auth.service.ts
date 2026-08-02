@@ -34,6 +34,8 @@ const argonOpts = {
 }
 
 const RECOVERY_META_KEY = 'recovery_code_hash'
+/** Persisted map of username → { count, lockedUntil } so throttle survives app restart. */
+const LOGIN_FAILURES_META_KEY = 'login_failures'
 
 type FailureState = { count: number; lockedUntil: number }
 
@@ -58,9 +60,34 @@ function assertPasswordPolicy(password: string): void {
   }
 }
 
+function loadLoginFailures(db: AppDatabase): Map<string, FailureState> {
+  const row = db.select().from(appMeta).where(eq(appMeta.key, LOGIN_FAILURES_META_KEY)).get()
+  if (!row) return new Map()
+  try {
+    const parsed = JSON.parse(row.value) as Record<string, FailureState>
+    const map = new Map<string, FailureState>()
+    for (const [key, state] of Object.entries(parsed)) {
+      if (
+        state &&
+        typeof state.count === 'number' &&
+        typeof state.lockedUntil === 'number' &&
+        state.count > 0
+      ) {
+        map.set(key, { count: state.count, lockedUntil: state.lockedUntil })
+      }
+    }
+    return map
+  } catch {
+    return new Map()
+  }
+}
+
 export function createAuthService(db: AppDatabase, audit: AuditService) {
   const session: SessionState = { user: null, locked: false }
-  const failures = new Map<string, FailureState>()
+  const failures = loadLoginFailures(db)
+  /** Per-user session epoch — forceLogout bumps it so stale sessions fail requireUser. */
+  const sessionEpoch = new Map<number, number>()
+  let activeEpoch = 0
 
   async function hashSecret(value: string): Promise<string> {
     return hash(value, argonOpts)
@@ -74,13 +101,40 @@ export function createAuthService(db: AppDatabase, audit: AuditService) {
     }
   }
 
+  function persistFailures(): void {
+    const obj: Record<string, FailureState> = {}
+    for (const [key, state] of failures.entries()) {
+      obj[key] = state
+    }
+    const value = JSON.stringify(obj)
+    const existing = db.select().from(appMeta).where(eq(appMeta.key, LOGIN_FAILURES_META_KEY)).get()
+    if (existing) {
+      db.update(appMeta).set({ value }).where(eq(appMeta.key, LOGIN_FAILURES_META_KEY)).run()
+    } else {
+      db.insert(appMeta).values({ key: LOGIN_FAILURES_META_KEY, value }).run()
+    }
+  }
+
   function getSession(): SessionState {
+    if (session.user) {
+      const expected = sessionEpoch.get(session.user.id) ?? 0
+      if (activeEpoch !== expected) {
+        session.user = null
+        session.locked = false
+      }
+    }
     return { user: session.user, locked: session.locked }
   }
 
   function requireUser(): UserDto {
     if (!session.user || session.locked) {
       throw new AppError('UNAUTHORIZED', 'Not authenticated')
+    }
+    const expected = sessionEpoch.get(session.user.id) ?? 0
+    if (activeEpoch !== expected) {
+      session.user = null
+      session.locked = false
+      throw new AppError('UNAUTHORIZED', 'Session was ended remotely')
     }
     return session.user
   }
@@ -119,6 +173,7 @@ export function createAuthService(db: AppDatabase, audit: AuditService) {
       lockedUntil = Date.now() + delayMs
     }
     failures.set(key, { count, lockedUntil })
+    persistFailures()
     audit.record({
       userId,
       action: 'login',
@@ -131,6 +186,7 @@ export function createAuthService(db: AppDatabase, audit: AuditService) {
 
   function clearFailures(username: string): void {
     failures.delete(username.toLowerCase())
+    persistFailures()
   }
 
   async function createUser(input: {
@@ -215,6 +271,7 @@ export function createAuthService(db: AppDatabase, audit: AuditService) {
       )
       return loggedIn
     })
+    activeEpoch = sessionEpoch.get(dto.id) ?? 0
     session.user = dto
     session.locked = false
     return dto
@@ -433,14 +490,17 @@ export function createAuthService(db: AppDatabase, audit: AuditService) {
   }
 
   function forceLogout(userId: number): void {
+    const row = db.select().from(users).where(eq(users.id, userId)).get()
+    const next = (sessionEpoch.get(userId) ?? 0) + 1
+    sessionEpoch.set(userId, next)
+    audit.record({
+      userId: session.user?.id ?? userId,
+      action: 'logout',
+      entityTable: 'users',
+      entityId: userId,
+      summary: `Forced logout for ${row?.username ?? `user #${userId}`}`,
+    })
     if (session.user?.id === userId) {
-      audit.record({
-        userId: session.user.id,
-        action: 'logout',
-        entityTable: 'users',
-        entityId: userId,
-        summary: `Forced logout for ${session.user.username}`,
-      })
       session.user = null
       session.locked = false
     }
@@ -521,6 +581,9 @@ export function createAuthService(db: AppDatabase, audit: AuditService) {
   function setSessionUser(user: UserDto | null): void {
     session.user = user
     session.locked = false
+    if (user) {
+      activeEpoch = sessionEpoch.get(user.id) ?? 0
+    }
   }
 
   return {

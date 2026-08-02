@@ -110,5 +110,12 @@ export const backupStatusOutput = z.object({
   nextDailyDue: z.boolean(),
   nextWeeklyDue: z.boolean(),
   encryptionEnabled: z.boolean(),
+  /** True when an encryption password is held in memory for scheduled/exit backups. */
+  hasSessionEncryptionPassword: z.boolean(),
   isPortable: z.boolean(),
 })
+
+export const backupSetEncryptionPasswordInput = z.object({
+  password: z.string().nullable(),
+})
+export const backupSetEncryptionPasswordOutput = okOutput

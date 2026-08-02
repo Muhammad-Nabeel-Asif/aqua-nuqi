@@ -177,6 +177,17 @@ export function createIntegrityService(deps: {
         .get(id) as { balance: number; bottles_with_customer: number } | undefined
       if (!summary) {
         mismatches++
+        if (mismatches <= 10) {
+          issues.push({
+            id: `balance-missing-${id}`,
+            severity: 'error',
+            category: 'balances',
+            message: `customer_balances row missing for customer #${id}`,
+            details: `live balance=${liveBal} bottles=${liveBot}; summary row absent`,
+            fixable: true,
+            fixAction: 'recalculate_balances',
+          })
+        }
         continue
       }
       if (summary.balance !== liveBal || summary.bottles_with_customer !== liveBot) {
@@ -236,9 +247,9 @@ export function createIntegrityService(deps: {
         severity: 'warning',
         category: 'stock',
         message: 'Stock movements total with customers does not match customer_balances bottles',
-        details: `stock=${stockRow.with_customers}, customer_balances=${balRow.bottles}. Recalculate balances if customer side is wrong; investigate stock movements if stock side is wrong.`,
-        fixable: true,
-        fixAction: 'recalculate_balances',
+        details: `stock=${stockRow.with_customers}, customer_balances=${balRow.bottles}. Not auto-fixable: recalculate_balances only heals the customer side; if stock movements are wrong, investigate movements manually.`,
+        fixable: false,
+        fixAction: 'none',
       })
     }
   }

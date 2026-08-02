@@ -1503,7 +1503,7 @@ receivables / customer-wise sales.
 
 ## Phase 9 — Backup & Restore, Audit, Hardening and Release
 
-**Date:** 2026-08-02 · **Status:** complete · **package.json:** `1.0.0` · **stable:** [v1.0.61](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v1.0.61)
+**Date:** 2026-08-02 · **Status:** complete · **package.json:** `1.0.0` · **stable:** pending (review-fixes release after push)
 
 ### Built
 
@@ -1569,8 +1569,9 @@ receivables / customer-wise sales.
 - Uninstall “checkbox” is an NSIS MessageBox with **No** as default (MB_DEFBUTTON2),
   equivalent UX; wrapped in `${IfNot} ${isUpdated}`.
 - Audit “PDF export” writes Excel (structured diffs are clearer in a sheet).
-- Sample-data practise mode / Clear sample data left as existing seed tooling — not a
-  separate owner toggle UI beyond Help guidance.
+- Sample-data practise mode / Clear sample data (§9.9): **not shipped** as an owner toggle.
+  Only existing DEV seed tooling remains; Help notes portable/copy for practise. No Clear
+  sample data action in the product UI.
 
 ### Upgrade test matrix (docs/07 §7)
 
@@ -1591,20 +1592,20 @@ certificate purchase.
 
 ### Acceptance verification
 
-| #   | Criterion                                                         | Result                                          |
-| --- | ----------------------------------------------------------------- | ----------------------------------------------- |
-| 1   | Backup A → restore B identical counts/reports                     | PASS (e2e test)                                 |
-| 2   | Kill mid-backup → no corrupt final file                           | PASS (atomic `.tmp` rename test)                |
-| 3   | Restore takes pre_restore; cancel before confirm leaves live data | PASS (validate-before-mutate)                   |
-| 4   | Delete DB + restore ≤1 day loss at defaults                       | PASS (daily + on_exit schedules)                |
-| 5   | Freshness chip red when stale; click → Backup                     | PASS                                            |
-| 6   | Integrity detects corrupted balances; Fix repairs                 | PASS                                            |
-| 7   | Audit readable diffs                                              | PASS (buildAuditDiff + AuditPanel)              |
-| 8   | 5 failed logins delay + last owner guard                          | PASS                                            |
-| 9   | Installer no-admin; uninstall keeps data by default               | PASS (config + nsh)                             |
-| 9b  | Auto-update stable only; never pre-release                        | PASS (`allowPrerelease: false`, channel latest) |
-| 10  | §9.11 e2e numbers match after restore                             | PASS                                            |
-| 11  | typecheck / lint / test / build                                   | PASS (214 tests)                                |
+| #   | Criterion                                                         | Result                                                                 |
+| --- | ----------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 1   | Backup A → restore B identical counts/reports                     | PASS (e2e test; attachments covered in unit test)                      |
+| 2   | Kill mid-backup → no corrupt final file                           | UNVERIFIED (atomic `.tmp` rename exists; mid-write kill not exercised) |
+| 3   | Restore takes pre_restore; cancel before confirm leaves live data | PASS (validate-before-mutate)                                          |
+| 4   | Delete DB + restore ≤1 day loss at defaults                       | UNVERIFIED (defaults present; no automated delete-DB scenario)         |
+| 5   | Freshness chip red when stale; click → Backup                     | PASS (chip wired; DateText ISO crash fixed — Backup screen renders)    |
+| 6   | Integrity detects corrupted balances; Fix repairs                 | PASS                                                                   |
+| 7   | Audit readable diffs                                              | PASS (void payload + buildAuditDiff tests; DateText ISO crash fixed)   |
+| 8   | 5 failed logins delay + last owner guard                          | PASS (unit: retryAfterSeconds + last-owner)                            |
+| 9   | Installer no-admin; uninstall keeps data by default               | UNVERIFIED (config + nsh; no Windows VM on this host)                  |
+| 9b  | Auto-update stable only; never pre-release; pre-update backup     | PASS (policy unit test; Restart UI → quitAndInstall + backup)          |
+| 10  | §9.11 e2e numbers match after restore                             | PASS                                                                   |
+| 11  | typecheck / lint / test / build                                   | PASS (234 tests; see Review fixes)                                     |
 
 ### What the next phase must know
 
@@ -1625,11 +1626,56 @@ certificate purchase.
 
 ### Release
 
-- Stable **[v1.0.61](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v1.0.61)** published
-  (`package.json` `1.0.0`, CI patch = run number; schema **14**).
+- Prior stable **[v1.0.61](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v1.0.61)** (pre review-fixes close-out).
+- **Post review-fixes stable:** recorded below after workflow completes (`package.json` `1.0.0`,
+  schema **14**).
 - Assets: `Aqua-Nuqi-Setup.exe`, `Aqua-Nuqi-Portable.exe`, `Aqua-Nuqi.AppImage`,
   `Aqua-Nuqi.deb`, `latest.yml`, `latest-linux.yml`.
 - **Windows:** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe
 - **Portable:** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Portable.exe
 - **Ubuntu:** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.AppImage
-- Workflow: https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/actions/runs/30731565191
+
+### Review fixes (2026-08-02)
+
+Addressed Phase 9 review findings without expanding scope:
+
+- **Pre-update backup:** `autoInstallOnAppQuit = false`; Restart banner calls `updates:install` →
+  backup → `quitAndInstall`. Policy unit-tested.
+- **Encrypted schedules:** refuse backup when encryption is on without a session password;
+  session password set from Backup settings / Backup now (memory only).
+- **Lint:** deleted unused `lib/updater.ts` and `lib/backup-scheduler.ts` (Electron-in-lib).
+- **pending-restore.json:** consumed on boot to re-append restore audit.
+- **forceLogout:** always audits + bumps per-user session epoch; UI wired; other-user test.
+- **Integrity:** missing `customer_balances` rows reported as fixable issues (+ regression test).
+- **Users/recovery:** Login recovery form; setup min-8 + show recovery code once; edit/force-logout.
+- **Onboarding tour** sets `onboarding.tourCompleted`; ErrorBoundary + fatal HTML Copy details;
+  read-only inspect panel with row counts + Close; audit user/entity filters + archive; Report a
+  problem; daily-entry employee filter; removed stale phase TODOs.
+- Acceptance table above corrected for UNVERIFIED items this host cannot prove.
+
+**Close-out residuals:** Restore happy path now deletes `pending-restore.json` before
+`audit.record` (`finalizeRestoreAuditAfterSuccess`; rewrites intent if audit fails) so a crash
+cannot create a double restore audit — unit-tested. Read-only inspect calls `closeReadonly` on
+Close and on panel unmount; UI is paths + row counts only (not a historical query UI) — limitation
+labelled in BackupPanel. Sample-data mode remains a documented deviation (DEV seed only).
+AC 2/4/9/9b stay UNVERIFIED on this Linux host (no Win VM / live update run).
+
+### Review fixes (2026-08-02, second pass)
+
+Addressed Phase 9 re-review findings (Backup/Audit live crash + high/medium correctness):
+
+- **DateText ISO crash (Critical):** BackupPanel + AuditPanel pass `kind="datetime"`;
+  `resolveDisplayDateKind` auto-upgrades ISO timestamps so business-date formatting cannot throw.
+- **Failed restore false audit (High):** restore catch calls `clearPendingRestoreIntent` so
+  `pending-restore.json` cannot produce a success restore audit on next boot.
+- **Post-publish zip delete (High):** after atomic rename, catch never unlinks the final zip;
+  `backup_log` / prune failures are non-fatal notes.
+- **tax.rate + audit.retentionYears (Medium):** Billing tab edits `tax.rate`; Audit panel saves
+  retention and calls `audit:applyRetention`.
+- **Login throttle persistence (Medium):** failure map stored in `app_meta.login_failures`.
+- **Stock mismatch Fix (Medium):** `stock-vs-balances` is `fixable: false` (recalculate does not
+  heal stock movements).
+- **Invoice void audit (Medium):** before/after includes totals, deposit lines, delivery ids.
+- **Inspect limitation (Medium):** labelled in UI; sample-data mode kept as documented deviation.
+- Regression tests added/updated for each of the above; integrity ledger/orphan-invoice +
+  `buildAuditDiff` money-field coverage.

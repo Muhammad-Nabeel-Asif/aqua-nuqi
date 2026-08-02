@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DateText } from '@renderer/components/DateText'
 import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
@@ -57,6 +57,14 @@ export function BackupPanel() {
   const [restoreConfirm, setRestoreConfirm] = useState('')
   const [restorePassword, setRestorePassword] = useState('')
   const [inspectInfo, setInspectInfo] = useState<string | null>(null)
+  const [readonlyStaging, setReadonlyStaging] = useState<{
+    stagingDir: string
+    dbPath: string
+    rowCounts: Record<string, number>
+    appVersion: string
+    schemaVersion: number
+  } | null>(null)
+  const readonlyStagingDirRef = useRef<string | null>(null)
 
   useEffect(() => {
     const v = settingsQuery.data?.values
@@ -79,6 +87,18 @@ export function BackupPanel() {
     })
   }, [])
 
+  // Close read-only extract on unmount / navigate away (best-effort).
+  useEffect(() => {
+    return () => {
+      const stagingDir = readonlyStagingDirRef.current
+      if (!stagingDir) return
+      readonlyStagingDirRef.current = null
+      void api.backup.closeReadonly(stagingDir).catch(() => {
+        // ignore cleanup failures
+      })
+    }
+  }, [])
+
   async function saveSettings() {
     try {
       if (encryptionEnabled) {
@@ -91,6 +111,12 @@ export function BackupPanel() {
         if (password && password !== password2) {
           throw new AppError('VALIDATION_FAILED', 'Passwords do not match')
         }
+      }
+      if (encryptionEnabled && password) {
+        await api.backup.setEncryptionPassword(password)
+      }
+      if (!encryptionEnabled) {
+        await api.backup.setEncryptionPassword(null)
       }
       await api.settings.setMany({
         values: {
@@ -107,7 +133,14 @@ export function BackupPanel() {
       })
       await qc.invalidateQueries({ queryKey: ['settings'] })
       await qc.invalidateQueries({ queryKey: ['backup'] })
-      toast({ title: 'Backup settings saved', variant: 'success' })
+      toast({
+        title: 'Backup settings saved',
+        description:
+          encryptionEnabled && !password && !statusQuery.data?.hasSessionEncryptionPassword
+            ? 'Encryption is on — enter the password (and Backup now or Save again) so scheduled backups can encrypt.'
+            : undefined,
+        variant: 'success',
+      })
     } catch (err) {
       toast({
         title: 'Save failed',
@@ -131,6 +164,9 @@ export function BackupPanel() {
             'Confirm that a lost password means unrecoverable backups',
           )
         }
+      }
+      if (encryptionEnabled && password) {
+        await api.backup.setEncryptionPassword(password)
       }
       const result = await api.backup.create('manual', encryptionEnabled ? password : undefined)
       toast({
@@ -211,15 +247,21 @@ export function BackupPanel() {
 
   async function openReadonly() {
     try {
+      if (readonlyStaging) {
+        await api.backup.closeReadonly(readonlyStaging.stagingDir)
+        readonlyStagingDirRef.current = null
+        setReadonlyStaging(null)
+      }
       const result = await api.backup.openReadonly(restorePath, restorePassword || undefined)
-      setInspectInfo(
-        `Read-only extract ready at ${result.dbPath}. Live data was not changed. Close when done.`,
-      )
-      toast({
-        title: 'Backup opened read-only',
-        description: result.stagingDir,
-        variant: 'success',
+      readonlyStagingDirRef.current = result.stagingDir
+      setReadonlyStaging({
+        stagingDir: result.stagingDir,
+        dbPath: result.dbPath,
+        rowCounts: result.manifest.rowCounts,
+        appVersion: result.manifest.appVersion,
+        schemaVersion: result.manifest.schemaVersion,
       })
+      setInspectInfo(null)
     } catch (err) {
       toast({
         title: 'Open failed',
@@ -227,6 +269,18 @@ export function BackupPanel() {
         variant: 'error',
       })
     }
+  }
+
+  async function closeReadonlyView() {
+    if (!readonlyStaging) return
+    const stagingDir = readonlyStaging.stagingDir
+    try {
+      await api.backup.closeReadonly(stagingDir)
+    } catch {
+      // best-effort cleanup
+    }
+    readonlyStagingDirRef.current = null
+    setReadonlyStaging(null)
   }
 
   const status = statusQuery.data
@@ -240,7 +294,7 @@ export function BackupPanel() {
         <div className="text-lg font-semibold">
           {status?.lastSuccessAt ? (
             <>
-              Last backup: <DateText value={status.lastSuccessAt} />
+              Last backup: <DateText value={status.lastSuccessAt} kind="datetime" />
             </>
           ) : (
             'No successful backup yet'
@@ -366,6 +420,13 @@ export function BackupPanel() {
               />
               I understand a lost password means unrecoverable backups
             </label>
+            <p className="text-xs text-amber-900">
+              Scheduled and exit backups use this password for the current app session only (not
+              saved to disk).
+              {statusQuery.data?.hasSessionEncryptionPassword
+                ? ' Session password is set.'
+                : ' Enter the password and Save or Backup now before relying on schedules.'}
+            </p>
           </>
         ) : null}
       </div>
@@ -398,7 +459,7 @@ export function BackupPanel() {
               {(listQuery.data?.items ?? []).map((item) => (
                 <tr key={item.id} className="border-t">
                   <td className="p-2">
-                    <DateText value={item.createdAt} />
+                    <DateText value={item.createdAt} kind="datetime" />
                   </td>
                   <td className="p-2">{item.kind}</td>
                   <td className="p-2 tabular-nums">
@@ -469,12 +530,39 @@ export function BackupPanel() {
           placeholder="Type RESTORE"
         />
         {inspectInfo ? <p className="text-sm text-slate-700">{inspectInfo}</p> : null}
+        {readonlyStaging ? (
+          <div className="space-y-2 rounded border border-sky-200 bg-sky-50 p-3 text-sm">
+            <p className="font-medium text-sky-950">
+              Read-only extract (paths + row counts; live data untouched)
+            </p>
+            <p className="text-xs text-sky-900">
+              This opens the backup database file for inspection tools — it is not an in-app
+              historical query screen (e.g. “what was this balance in March”). Prefer a copy of the
+              portable app against this extract, or restore only when you intend to replace live
+              data.
+            </p>
+            <p>
+              App {readonlyStaging.appVersion} · schema {readonlyStaging.schemaVersion}
+            </p>
+            <p className="font-mono text-xs break-all">DB: {readonlyStaging.dbPath}</p>
+            <ul className="grid max-h-40 grid-cols-2 gap-x-3 overflow-auto text-xs">
+              {Object.entries(readonlyStaging.rowCounts).map(([table, count]) => (
+                <li key={table}>
+                  {table}: {count}
+                </li>
+              ))}
+            </ul>
+            <Button variant="outline" size="sm" onClick={() => void closeReadonlyView()}>
+              Close inspection
+            </Button>
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => void inspectSelected()} disabled={!restorePath}>
             Validate / preview
           </Button>
           <Button variant="outline" onClick={() => void openReadonly()} disabled={!restorePath}>
-            Open read-only
+            Open read-only extract
           </Button>
           <Button
             variant="destructive"

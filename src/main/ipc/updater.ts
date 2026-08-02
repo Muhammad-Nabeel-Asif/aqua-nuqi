@@ -6,6 +6,7 @@ import { BrowserWindow, app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { log } from '../lib/logger'
 import { isPortableBuild } from '../lib/portable'
+import { UPDATER_INSTALL_POLICY } from './updater-policy'
 
 export type UpdaterStatus = {
   currentVersion: string
@@ -19,6 +20,8 @@ export type UpdaterStatus = {
   lastError: string | null
   portable: boolean
 }
+
+export { UPDATER_INSTALL_POLICY }
 
 type BackupBeforeUpdate = () => void
 
@@ -69,11 +72,13 @@ export function configureUpdater(opts: {
   wired = true
 
   // Stable channel only — never offer pre-release /dev builds to the client.
-  autoUpdater.channel = 'latest'
-  autoUpdater.allowPrerelease = false
+  autoUpdater.channel = UPDATER_INSTALL_POLICY.channel
+  autoUpdater.allowPrerelease = UPDATER_INSTALL_POLICY.allowPrerelease
   autoUpdater.allowDowngrade = false
   autoUpdater.autoDownload = automatic
-  autoUpdater.autoInstallOnAppQuit = true
+  // Never auto-install on quit — that path skips backupBeforeUpdate.
+  // Install only via quitAndInstall() after the Restart UI runs a backup.
+  autoUpdater.autoInstallOnAppQuit = UPDATER_INSTALL_POLICY.autoInstallOnAppQuit
 
   autoUpdater.on('checking-for-update', () => {
     checking = true

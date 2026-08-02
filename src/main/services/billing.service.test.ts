@@ -274,6 +274,23 @@ describe('billing Phase 3 acceptance', () => {
     expect(voided.status).toBe('void')
     expect(voided.lines).toHaveLength(lineCountBeforeVoid)
 
+    const auditEntries = createAuditService(db)
+      .list({ action: 'void', entityTable: 'invoices', limit: 20 })
+      .items.filter((e) => e.entityId === issued.id)
+    expect(auditEntries.length).toBeGreaterThan(0)
+    const voidAudit = auditEntries[0]
+    expect(voidAudit.diff.some((d) => d.field === 'status')).toBe(true)
+    expect(voidAudit.diff.some((d) => d.field === 'deliveryIds')).toBe(true)
+    const auditBefore = JSON.parse(voidAudit.beforeJson!) as Record<string, unknown>
+    const auditAfter = JSON.parse(voidAudit.afterJson!) as Record<string, unknown>
+    expect(auditBefore.invoiceTotal).toBe(issued.invoiceTotal)
+    expect(auditBefore.totalPayable).toBe(issued.totalPayable)
+    expect(Array.isArray(auditBefore.deliveryIds)).toBe(true)
+    expect((auditBefore.deliveryIds as number[]).length).toBeGreaterThan(0)
+    expect(auditBefore.depositLines).toBeDefined()
+    expect(auditAfter.status).toBe('void')
+    expect(auditAfter.deliveryIds).toEqual([])
+
     const rows = db.select().from(ledgerEntries).where(eq(ledgerEntries.customerId, c.id)).all()
     expect(rows.some((r) => r.entryType === 'invoice')).toBe(true)
     expect(rows.some((r) => r.entryType === 'void_reversal')).toBe(true)

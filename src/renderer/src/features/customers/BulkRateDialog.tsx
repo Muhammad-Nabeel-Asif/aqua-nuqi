@@ -38,7 +38,6 @@ export function BulkRateDialog({ onClose, onSaved }: { onClose: () => void; onSa
 
   async function apply(forceClosedPeriod = false) {
     try {
-      // TODO(phase-3): warn when effective date falls inside an already-invoiced period
       await api.rates.bulkChange({
         customerIds: preview.map((x) => x.id),
         rate: toPaisa(rate),

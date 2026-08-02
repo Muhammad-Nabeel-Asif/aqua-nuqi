@@ -342,7 +342,6 @@ function RateDialog({
               void (async () => {
                 async function apply(forceClosedPeriod = false) {
                   try {
-                    // TODO(phase-3): warn when effective date falls inside an already-invoiced period
                     await api.rates.change({
                       customerId,
                       rate: toPaisa(rate),

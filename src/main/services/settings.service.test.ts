@@ -40,4 +40,16 @@ describe('settingsService', () => {
     const result = settings.setMany({ 'business.name': 'Aqua Plant' }, { allowOwnerOnly: true })
     expect(result['business.name']).toBe('Aqua Plant')
   })
+
+  it('persists tax.rate and audit.retentionYears for Settings UI / applyRetention', () => {
+    const db = getDb()
+    const settings = createSettingsService(db, createAuditService(db))
+    settings.setMany(
+      { 'tax.enabled': true, 'tax.rate': 17, 'audit.retentionYears': 3 },
+      { allowOwnerOnly: true },
+    )
+    expect(settings.get('tax.rate')).toBe(17)
+    expect(settings.get('tax.enabled')).toBe(true)
+    expect(settings.get('audit.retentionYears')).toBe(3)
+  })
 })

@@ -12,7 +12,7 @@ import {
 import { readPathConfig, writePathConfig } from '@main/lib/paths'
 import { createAuditService } from '@main/services/audit.service'
 import { createAuthService } from '@main/services/auth.service'
-import { createBackupService } from '@main/services/backup.service'
+import { createBackupService, getSessionEncryptionPassword } from '@main/services/backup.service'
 import { createPeriodService } from '@main/services/period.service'
 import { createSettingsService } from '@main/services/settings.service'
 import {
@@ -162,6 +162,7 @@ export function registerSetupHandlers(): void {
         getKeepDaily: () => Number(settings.get('backup.keepDaily') || 14),
         getKeepWeekly: () => Number(settings.get('backup.keepWeekly') || 8),
         isEncryptionEnabled: () => Boolean(settings.get('backup.encryptionEnabled')),
+        getEncryptionPassword: () => getSessionEncryptionPassword(),
       })
 
       audit.record({

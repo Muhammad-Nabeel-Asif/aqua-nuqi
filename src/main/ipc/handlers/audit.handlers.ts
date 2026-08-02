@@ -39,29 +39,6 @@ export function registerAuditHandlers(): void {
     roles: ['owner'],
     handler: (input, ipcCtx) => {
       const ctx = getAppContext()
-      if (input.format === 'pdf') {
-        // Reuse Excel for structured export; PDF of long audit logs is less useful.
-        // Generate Excel and note format in audit.
-        const filePath = ctx.audit.exportExcel(
-          {
-            from: input.from,
-            to: input.to,
-            userId: input.userId,
-            action: input.action as AuditAction | undefined,
-            entityTable: input.entityTable,
-            search: input.search,
-          },
-          input.destinationFolder,
-        )
-        // Rename extension hint in summary only — file remains xlsx for fidelity.
-        ctx.audit.record({
-          userId: ipcCtx.userId,
-          action: 'export',
-          summary: `Exported audit log (${input.format})`,
-          after: { filePath },
-        })
-        return { filePath }
-      }
       const filePath = ctx.audit.exportExcel(
         {
           from: input.from,

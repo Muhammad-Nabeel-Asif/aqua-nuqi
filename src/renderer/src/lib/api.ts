@@ -150,8 +150,11 @@ export const api = {
         nextDailyDue: boolean
         nextWeeklyDue: boolean
         encryptionEnabled: boolean
+        hasSessionEncryptionPassword: boolean
         isPortable: boolean
       }>('backup:status', {}),
+    setEncryptionPassword: (password: string | null) =>
+      invoke<{ ok: true }>('backup:setEncryptionPassword', { password }),
     verify: (filePath: string, password?: string) =>
       invoke<{
         ok: boolean
@@ -244,7 +247,7 @@ export const api = {
         total: number
       }>('audit:list', input),
     export: (input: {
-      format: 'excel' | 'pdf'
+      format: 'excel'
       destinationFolder: string
       from?: string
       to?: string
@@ -253,6 +256,13 @@ export const api = {
       entityTable?: string
       search?: string
     }) => invoke<{ filePath: string }>('audit:export', input),
+    archive: (input: { olderThanYears: number; destinationFolder: string }) =>
+      invoke<{ archivedCount: number; archivePath: string }>('audit:archive', input),
+    applyRetention: () =>
+      invoke<{ ok: true; archivedCount: number; archivePath: string | null }>(
+        'audit:applyRetention',
+        {},
+      ),
   },
   integrity: {
     check: () =>

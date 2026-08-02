@@ -10,10 +10,18 @@ import {
   resolveMigrationsFolder,
   runBootMigrations,
 } from '@main/db/migrate'
+import {
+  clearPendingRestoreIntent,
+  finalizeRestoreAuditAfterSuccess,
+} from '@main/lib/pending-restore'
 import { isPortableBuild } from '@main/lib/portable'
 import { createAuditService } from '@main/services/audit.service'
 import { createAuthService } from '@main/services/auth.service'
-import { createBackupService } from '@main/services/backup.service'
+import {
+  createBackupService,
+  getSessionEncryptionPassword,
+  setSessionEncryptionPassword,
+} from '@main/services/backup.service'
 import { createBalanceService } from '@main/services/balance.service'
 import { createIntegrityService } from '@main/services/integrity.service'
 import { createPeriodService } from '@main/services/period.service'
@@ -31,6 +39,8 @@ import {
   backupOpenReadonlyOutput,
   backupRestoreInput,
   backupRestoreOutput,
+  backupSetEncryptionPasswordInput,
+  backupSetEncryptionPasswordOutput,
   backupStatusInput,
   backupStatusOutput,
   backupVerifyInput,
@@ -64,6 +74,7 @@ function rebuildCoreServices(): void {
     getKeepDaily: () => Number(settings.get('backup.keepDaily') || 14),
     getKeepWeekly: () => Number(settings.get('backup.keepWeekly') || 8),
     isEncryptionEnabled: () => Boolean(settings.get('backup.encryptionEnabled')),
+    getEncryptionPassword: () => getSessionEncryptionPassword(),
   })
   const balances = createBalanceService(db, raw)
   const integrity = createIntegrityService({
@@ -98,10 +109,17 @@ export function registerBackupHandlers(): void {
     roles: ['owner'],
     handler: (input) => {
       const ctx = getAppContext()
-      if (ctx.settings.get('backup.encryptionEnabled') && !input.password) {
+      if (input.password) {
+        setSessionEncryptionPassword(input.password)
+      }
+      if (
+        ctx.settings.get('backup.encryptionEnabled') &&
+        !input.password &&
+        !getSessionEncryptionPassword()
+      ) {
         throw new AppError(
           'VALIDATION_FAILED',
-          'Encryption is enabled — provide a password for this backup',
+          'Encryption is enabled — provide a password for this backup (kept for this session for scheduled backups)',
         )
       }
       const result = ctx.backup.createBackup(input.kind, {
@@ -154,8 +172,20 @@ export function registerBackupHandlers(): void {
         nextDailyDue: list.nextDailyDue,
         nextWeeklyDue: list.nextWeeklyDue,
         encryptionEnabled: Boolean(ctx.settings.get('backup.encryptionEnabled')),
+        hasSessionEncryptionPassword: Boolean(getSessionEncryptionPassword()),
         isPortable: isPortableBuild(),
       }
+    },
+  })
+
+  defineHandler({
+    channel: 'backup:setEncryptionPassword',
+    input: backupSetEncryptionPasswordInput,
+    output: backupSetEncryptionPasswordOutput,
+    roles: ['owner'],
+    handler: (input) => {
+      setSessionEncryptionPassword(input.password)
+      return { ok: true as const }
     },
   })
 
@@ -220,18 +250,15 @@ export function registerBackupHandlers(): void {
         onProgress: emitProgress,
       })
 
-      // Persist restore intent so we can re-append audit after restart
+      // Persist restore intent so boot can finish the audit if we crash mid-restore
       const intentPath = path.join(ctx.paths.userData, 'pending-restore.json')
-      fs.writeFileSync(
-        intentPath,
-        JSON.stringify({
-          from: input.filePath,
-          preRestorePath: preRestore.filePath,
-          at: new Date().toISOString(),
-          userId: ctx.auth.getSession().user?.id ?? null,
-        }),
-        'utf8',
-      )
+      const restoreIntent = {
+        from: input.filePath,
+        preRestorePath: preRestore.filePath,
+        at: new Date().toISOString(),
+        userId: ctx.auth.getSession().user?.id ?? null,
+      }
+      fs.writeFileSync(intentPath, JSON.stringify(restoreIntent), 'utf8')
 
       let staging: string | null = null
       try {
@@ -271,17 +298,12 @@ export function registerBackupHandlers(): void {
 
         rebuildCoreServices()
         const live = getAppContext()
-        live.audit.record({
-          userId: input && live.auth.getSession().user?.id,
-          action: 'restore',
-          summary: `Restored from ${input.filePath} (pre_restore: ${preRestore.filePath})`,
-          after: { filePath: input.filePath, preRestorePath: preRestore.filePath },
+        // Delete intent before audit so a crash between the two cannot double-audit on boot.
+        finalizeRestoreAuditAfterSuccess({
+          intentPath,
+          intent: restoreIntent,
+          record: (entry) => live.audit.record(entry),
         })
-        try {
-          fs.unlinkSync(intentPath)
-        } catch {
-          // ignore
-        }
 
         // Restart so all services rebind cleanly
         setTimeout(() => {
@@ -295,6 +317,8 @@ export function registerBackupHandlers(): void {
           preRestorePath: preRestore.filePath,
         }
       } catch (err) {
+        // Failed restore must not leave an intent that boot would treat as success.
+        clearPendingRestoreIntent(intentPath)
         // If we already closed the DB, try to reopen from pre-restore
         try {
           closeDatabase()
@@ -391,6 +415,7 @@ export function registerBackupHandlers(): void {
         nextDailyDue: list.nextDailyDue,
         nextWeeklyDue: list.nextWeeklyDue,
         encryptionEnabled: Boolean(ctx.settings.get('backup.encryptionEnabled')),
+        hasSessionEncryptionPassword: Boolean(getSessionEncryptionPassword()),
         isPortable: isPortableBuild(),
       }
     },

@@ -76,4 +76,87 @@ describe('authService', () => {
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
   })
+
+  it('throttles with retryAfterSeconds after five failed logins', async () => {
+    const db = getDb()
+    const auth = createAuthService(db, createAuditService(db))
+    await auth.createUser({
+      username: 'owner',
+      displayName: 'Owner',
+      password: 'secret12',
+      role: 'owner',
+    })
+    for (let i = 0; i < 5; i++) {
+      await expect(auth.login('owner', 'wrong')).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    }
+    try {
+      await auth.login('owner', 'wrong')
+      expect.unreachable('expected throttle')
+    } catch (err) {
+      expect(err).toBeInstanceOf(AppError)
+      expect((err as AppError).message).toMatch(/try again in \d+ second/i)
+      expect((err as AppError).details).toMatchObject({
+        retryAfterSeconds: expect.any(Number),
+      })
+    }
+  })
+
+  it('persists failed-login throttle across auth service recreation (app restart)', async () => {
+    const db = getDb()
+    const audit = createAuditService(db)
+    const auth = createAuthService(db, audit)
+    await auth.createUser({
+      username: 'owner',
+      displayName: 'Owner',
+      password: 'secret12',
+      role: 'owner',
+    })
+    for (let i = 0; i < 5; i++) {
+      await expect(auth.login('owner', 'wrong')).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    }
+
+    // Simulate process restart: new AuthService reads app_meta.login_failures
+    const authAfterRestart = createAuthService(db, audit)
+    try {
+      await authAfterRestart.login('owner', 'wrong')
+      expect.unreachable('expected throttle after restart')
+    } catch (err) {
+      expect(err).toBeInstanceOf(AppError)
+      expect((err as AppError).message).toMatch(/try again in \d+ second/i)
+      expect((err as AppError).details).toMatchObject({
+        retryAfterSeconds: expect.any(Number),
+      })
+    }
+  })
+
+  it('forceLogout clears the current user and does not clear a different logged-in owner', async () => {
+    const db = getDb()
+    const audit = createAuditService(db)
+    const auth = createAuthService(db, audit)
+    const owner = await auth.createUser({
+      username: 'owner',
+      displayName: 'Owner',
+      password: 'secret12',
+      role: 'owner',
+    })
+    const op = await auth.createUser({
+      username: 'driver',
+      displayName: 'Driver',
+      password: 'secret12',
+      role: 'operator',
+    })
+
+    await auth.login('driver', 'secret12')
+    auth.forceLogout(op.id)
+    expect(auth.getSession().user).toBeNull()
+    expect(() => auth.requireUser()).toThrow(/not authenticated|ended remotely/i)
+
+    await auth.login('owner', 'secret12')
+    auth.forceLogout(op.id)
+    expect(auth.getSession().user?.id).toBe(owner.id)
+    expect(auth.requireUser().id).toBe(owner.id)
+
+    const entries = audit.list({ search: 'Forced logout', limit: 20 })
+    expect(entries.items.some((e) => e.summary.includes('driver'))).toBe(true)
+  })
 })

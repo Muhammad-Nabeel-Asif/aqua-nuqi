@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDatabase, getDb, getRawDb, openDatabase } from '@main/db/client'
 import { seedDefaults } from '@main/db/seed'
 import { createZipFromFiles, isEncryptedArchive, readZipEntries } from '@main/lib/zip'
-import { createBackupService } from './backup.service'
+import { AppError } from '@shared/errors'
+import { createBackupService, setSessionEncryptionPassword } from './backup.service'
 
 describe('backupService (Phase 9)', () => {
   let dir: string
@@ -32,6 +33,7 @@ describe('backupService (Phase 9)', () => {
   })
 
   afterEach(() => {
+    setSessionEncryptionPassword(null)
     closeDatabase()
     fs.rmSync(dir, { recursive: true, force: true })
   })
@@ -94,6 +96,65 @@ describe('backupService (Phase 9)', () => {
     const inspected = bak.inspectBackup(result.filePath, 'correct-horse')
     expect(inspected.validChecksum).toBe(true)
     expect(inspected.manifest.encrypted).toBe(true)
+  })
+
+  it('refuses scheduled backups when encryption is on without a session password', () => {
+    const bak = createBackupService({
+      db: getDb(),
+      raw: getRawDb(),
+      getBackupFolder: () => backupsDir,
+      getSecondaryFolder: () => '',
+      getUserData: () => userData,
+      getDbPath: () => dbPath,
+      getAppVersion: () => '1.0.0',
+      getKeepDaily: () => 2,
+      getKeepWeekly: () => 2,
+      isEncryptionEnabled: () => true,
+    })
+    expect(() => bak.createBackup('daily')).toThrow(AppError)
+    expect(() => bak.createBackup('daily')).toThrow(/no password is available/i)
+  })
+
+  it('encrypts scheduled backups when a session password is set', () => {
+    setSessionEncryptionPassword('session-secret')
+    const bak = createBackupService({
+      db: getDb(),
+      raw: getRawDb(),
+      getBackupFolder: () => backupsDir,
+      getSecondaryFolder: () => '',
+      getUserData: () => userData,
+      getDbPath: () => dbPath,
+      getAppVersion: () => '1.0.0',
+      getKeepDaily: () => 2,
+      getKeepWeekly: () => 2,
+      isEncryptionEnabled: () => true,
+    })
+    const result = bak.createBackup('daily')
+    expect(result.manifest.encrypted).toBe(true)
+    expect(isEncryptedArchive(result.filePath)).toBe(true)
+  })
+
+  it('keeps the final zip when post-publish retention prune fails', () => {
+    const bak = createBackupService({
+      db: getDb(),
+      raw: getRawDb(),
+      getBackupFolder: () => backupsDir,
+      getSecondaryFolder: () => '',
+      getUserData: () => userData,
+      getDbPath: () => dbPath,
+      getAppVersion: () => '1.0.0',
+      getKeepDaily: () => {
+        throw new Error('prune boom')
+      },
+      getKeepWeekly: () => 2,
+      isEncryptionEnabled: () => false,
+    })
+    const result = bak.createBackup('manual')
+    expect(fs.existsSync(result.filePath)).toBe(true)
+    expect(result.filePath.endsWith('.zip')).toBe(true)
+    expect(fs.existsSync(`${result.filePath}.tmp`)).toBe(false)
+    // Archive remains valid even though prune threw
+    expect(bak.verifyBackup(result.filePath).ok).toBe(true)
   })
 
   it('never prunes pre_restore or the most recent successful backup', () => {
