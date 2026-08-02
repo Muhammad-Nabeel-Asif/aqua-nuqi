@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { BrandLockup } from '@renderer/brand'
 import { Button } from '@renderer/components/ui/button'
 import {
   Card,
@@ -75,10 +76,13 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 p-6">
+      <BrandLockup size="2xl" />
       <Card className="w-full max-w-md border-sky-100 shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl text-sky-950">{t('app.name')}</CardTitle>
+          <CardTitle className="text-2xl text-sky-950">
+            {recoveryMode ? 'Account recovery' : t('login.title')}
+          </CardTitle>
           <CardDescription>
             {recoveryMode
               ? 'Reset the owner password with your recovery code'

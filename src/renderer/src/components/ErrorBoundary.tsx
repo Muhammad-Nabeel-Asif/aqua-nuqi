@@ -1,4 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { AppLogo } from '@renderer/brand'
+import { BRAND_NAME } from '@shared/brand'
 import { Button } from './ui/button'
 
 type Props = { children: ReactNode }
@@ -24,7 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
   private detailsText(): string {
     const err = this.state.error
     return [
-      'Aqua Nuqi renderer error',
+      `${BRAND_NAME} renderer error`,
       'Code: RENDERER_ERROR',
       err?.name,
       err?.message,
@@ -40,6 +42,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex min-h-screen items-center justify-center p-6">
           <div className="max-w-md rounded-lg border bg-white p-6 shadow-sm">
+            <AppLogo size="sm" className="mb-4" />
             <h1 className="text-lg font-semibold text-destructive">Something went wrong</h1>
             <p className="mt-2 text-sm text-muted-foreground">{this.state.error.message}</p>
             <p className="mt-1 font-mono text-xs text-slate-500">RENDERER_ERROR</p>

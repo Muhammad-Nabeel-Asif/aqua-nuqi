@@ -4,6 +4,8 @@ import { app, BrowserWindow, clipboard, dialog, shell } from 'electron'
 import { z } from 'zod'
 import { getAppContext } from '@main/app-context'
 import { defineHandler } from '@main/ipc/router'
+import { brandPrintLogoDataUrl } from '@main/lib/brand-assets'
+import type { PdfPlatform } from '@main/services/pdf.service'
 import { getPrintJob, signalDocumentReady } from '@main/windows/print-window'
 import {
   batchGeneratePdfsInput,
@@ -353,20 +355,13 @@ export function registerPdfHandlers(): void {
   })
 }
 
-/** Wire platform adapters that need Electron APIs (called from bootstrap). */
-export function createPdfPlatformFromElectron(): {
-  getDocumentsRoot: () => string
-  openExternal: (url: string) => Promise<void>
-  showItemInFolder: (filePath: string) => void
-  writeClipboard: (text: string) => void
-  openPath: (filePath: string) => Promise<string>
-  saveDialog: (opts: {
-    defaultPath: string
-    filters?: { name: string; extensions: string[] }[]
-  }) => Promise<string | null>
-  readLogoAsDataUrl: (logoPath: string) => string | null
-  emitProgress: (event: import('@shared/contracts/pdf').BatchProgressEvent) => void
-} {
+/**
+ * Wire platform adapters that need Electron APIs (called from bootstrap).
+ *
+ * Typed as `PdfPlatform` rather than an inline shape so adding a capability to
+ * the service cannot silently leave this adapter behind.
+ */
+export function createPdfPlatformFromElectron(): PdfPlatform {
   return {
     getDocumentsRoot: () => path.join(app.getPath('documents'), 'AquaNuqi'),
     openExternal: (url) => shell.openExternal(url),
@@ -405,6 +400,7 @@ export function createPdfPlatformFromElectron(): {
         return null
       }
     },
+    readBrandLogoAsDataUrl: () => brandPrintLogoDataUrl([app.getAppPath(), process.resourcesPath]),
     emitProgress: (event) => {
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) win.webContents.send('pdf:batchProgress', event)

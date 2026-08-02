@@ -6,7 +6,6 @@ import {
   FileText,
   LayoutDashboard,
   Menu,
-  Package,
   Receipt,
   Search,
   Settings,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { AppLogo } from '@renderer/brand'
 import { api } from '@renderer/lib/api'
 import { t } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
@@ -200,11 +200,14 @@ export function AppShell() {
           collapsed ? 'w-[68px]' : 'w-56',
         )}
       >
-        <div className="flex h-14 items-center gap-2 border-b px-3">
-          <Package className="h-5 w-5 text-primary" />
-          {!collapsed ? (
-            <span className="text-sm font-bold tracking-tight text-sky-900">{t('app.name')}</span>
-          ) : null}
+        <div className="flex h-14 items-center justify-center border-b px-3">
+          {/* The rail is only ~44px of usable width, where the bare splash reads
+              as a smudge — the square badge stays recognisable. */}
+          {collapsed ? (
+            <AppLogo variant="badge" size="md" title={t('app.name')} className="rounded-lg" />
+          ) : (
+            <AppLogo size="md" title={t('app.name')} className="mr-auto" />
+          )}
         </div>
         <nav className="flex-1 space-y-0.5 p-2">
           {items.map((item) => (

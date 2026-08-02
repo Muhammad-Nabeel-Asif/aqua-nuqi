@@ -19,18 +19,30 @@ export function BusinessHeader({
   /** Denser header for typical one-page invoices. */
   compact?: boolean
 }) {
-  const logoBox = compact ? 'h-10 w-10' : 'h-14 w-14'
+  // Height-only for the logo: the lockup is a wide wordmark, so a square box
+  // would letterbox it into an unreadably small mark.
+  const logoHeight = compact ? 'h-10' : 'h-14'
+  const fallbackBox = compact ? 'h-10 w-10' : 'h-14 w-14'
   return (
     <header
       className={`flex items-start justify-between gap-3 border-b-2 ${compact ? 'mb-1.5 pb-1.5' : 'mb-3 pb-3'}`}
       style={{ borderColor: business.accentColour }}
     >
       <div className="flex items-start gap-2">
+        {/*
+          `logoDataUrl` is normally populated: the PDF service falls back to the
+          bundled Aqua Nuqi lockup when the business has not uploaded its own.
+          The initial below only appears if that asset is missing too.
+        */}
         {business.logoDataUrl ? (
-          <img src={business.logoDataUrl} alt="" className={`${logoBox} object-contain`} />
+          <img
+            src={business.logoDataUrl}
+            alt=""
+            className={`${logoHeight} w-auto max-w-[46mm] shrink-0 object-contain`}
+          />
         ) : (
           <div
-            className={`flex ${logoBox} items-center justify-center font-bold text-white ${compact ? 'text-base' : 'text-lg'}`}
+            className={`flex ${fallbackBox} shrink-0 items-center justify-center font-bold text-white ${compact ? 'text-base' : 'text-lg'}`}
             style={{ background: business.accentColour }}
           >
             {business.name.slice(0, 1) || 'A'}

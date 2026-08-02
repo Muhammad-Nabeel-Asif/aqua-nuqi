@@ -13,13 +13,35 @@ export function toElectronPageSize(
   return { width: pageSize.widthMicrons, height: pageSize.heightMicrons }
 }
 
+function escapeFooterHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
 /**
- * Electron/Chromium footer template for “Page X of Y”.
- * Body CSS `counter(page)` does not advance under printToPDF.
+ * Electron/Chromium footer for “Page X of Y”, with the business name on the
+ * left so every page of a multi-page document is attributable on its own.
+ * Body CSS `counter(page)` does not advance under printToPDF, hence the
+ * Chromium-provided `pageNumber` / `totalPages` spans.
  */
-export const PDF_PAGE_FOOTER_TEMPLATE =
-  '<div style="font-size:9px;width:100%;text-align:center;color:#64748b;padding:0 12mm;">' +
-  'Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>'
+export function buildPdfPageFooterTemplate(businessName?: string): string {
+  const name = businessName?.trim()
+  return (
+    '<div style="font-size:9px;width:100%;color:#64748b;padding:0 12mm;' +
+    'display:flex;justify-content:space-between;align-items:center;">' +
+    `<span style="max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${
+      name ? escapeFooterHtml(name) : ''
+    }</span>` +
+    '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>' +
+    '</div>'
+  )
+}
+
+/** Unbranded default, kept for callers with no business context. */
+export const PDF_PAGE_FOOTER_TEMPLATE = buildPdfPageFooterTemplate()
 
 export const PDF_EMPTY_HEADER_TEMPLATE = '<div></div>'
 

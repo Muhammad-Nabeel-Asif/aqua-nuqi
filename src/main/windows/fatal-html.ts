@@ -1,4 +1,5 @@
 import type { BootFatal } from '@main/app-context'
+import { BRAND_NAME } from '@shared/brand'
 import { DOWNLOAD_LATEST_URL } from '@shared/constants'
 
 function escapeHtml(s: string): string {
@@ -16,7 +17,7 @@ function fatalCode(fatal: BootFatal): string {
 }
 
 function fatalDetails(fatal: BootFatal, paths?: { userData?: string }): string {
-  const lines = [`Aqua Nuqi fatal error`, `Code: ${fatalCode(fatal)}`]
+  const lines = [`${BRAND_NAME} fatal error`, `Code: ${fatalCode(fatal)}`]
   if (fatal.type === 'app_older_than_data') {
     lines.push(
       `App version: ${fatal.appVersion}`,
@@ -33,10 +34,16 @@ function fatalDetails(fatal: BootFatal, paths?: { userData?: string }): string {
   return lines.join('\n')
 }
 
-/** Pure HTML builder — unit-tested without Electron. */
+/**
+ * Pure HTML builder — unit-tested without Electron.
+ *
+ * `logoDataUrl` is injected rather than read here so this stays free of file
+ * I/O; the caller supplies it from `@main/lib/brand-assets`.
+ */
 export function buildFatalHtml(
   fatal: BootFatal,
   paths?: { userData?: string },
+  options?: { logoDataUrl?: string | null },
 ): { title: string; html: string } {
   let title = 'Something went wrong'
   let body = ''
@@ -47,7 +54,7 @@ export function buildFatalHtml(
   if (fatal.type === 'app_older_than_data') {
     title = 'This app is older than your data'
     body = `
-      <p>This version of Aqua Nuqi (<strong>${escapeHtml(fatal.appVersion)}</strong>) is older than
+      <p>This version of ${escapeHtml(BRAND_NAME)} (<strong>${escapeHtml(fatal.appVersion)}</strong>) is older than
       your data, which was created with a newer schema (version ${fatal.schemaVersion};
       this app knows up to ${fatal.bundledMax}).</p>
       <p><strong>Please install the latest version. Your data is safe and has not been changed.</strong></p>
@@ -92,6 +99,8 @@ export function buildFatalHtml(
 <style>
   body { font-family: "Segoe UI", sans-serif; margin: 32px; color: #0f172a; background: #f8fafc; }
   h1 { font-size: 20px; margin: 0 0 16px; color: #0c4a6e; }
+  .brand { margin: 0 0 20px; }
+  .brand img { height: 34px; width: auto; display: block; }
   p { line-height: 1.5; }
   code { background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 12px; word-break: break-all; }
   .code { font-size: 13px; color: #64748b; }
@@ -105,6 +114,11 @@ export function buildFatalHtml(
   #copy-status { margin-top: 12px; font-size: 13px; color: #047857; display: none; }
 </style></head>
 <body>
+${
+  options?.logoDataUrl
+    ? `<div class="brand"><img src="${options.logoDataUrl}" alt="${escapeHtml(BRAND_NAME)}"/></div>`
+    : `<div class="brand"><strong>${escapeHtml(BRAND_NAME)}</strong></div>`
+}
 <h1>${escapeHtml(title)}</h1>
 ${body}
 <p id="copy-status">Details copied to clipboard.</p>

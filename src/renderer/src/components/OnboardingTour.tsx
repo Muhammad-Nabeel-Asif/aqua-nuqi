@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { AppLogo } from '@renderer/brand'
 import { Button } from '@renderer/components/ui/button'
 import { api } from '@renderer/lib/api'
 import { useSessionStore } from '@renderer/stores/session'
@@ -58,9 +59,12 @@ export function OnboardingTour() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div className="w-full max-w-md rounded-lg border bg-white p-5 shadow-lg">
-        <p className="text-xs font-medium uppercase tracking-wide text-sky-700">
-          First-run tour · {step + 1} / {STEPS.length}
-        </p>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <AppLogo size="sm" />
+          <p className="text-xs font-medium uppercase tracking-wide text-sky-700">
+            First-run tour · {step + 1} / {STEPS.length}
+          </p>
+        </div>
         <h2 className="mt-1 text-lg font-semibold text-sky-950">{current.title}</h2>
         <p className="mt-2 text-sm text-slate-600">{current.body}</p>
         <div className="mt-5 flex flex-wrap justify-end gap-2">

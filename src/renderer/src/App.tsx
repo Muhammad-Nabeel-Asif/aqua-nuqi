@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { RouterProvider } from 'react-router-dom'
+import { BrandLockup } from './brand'
 import { ConfirmDialogHost } from './components/ConfirmDialog'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Skeleton } from './components/Skeleton'
@@ -28,11 +29,13 @@ export function App() {
       })
   }, [setReady, setSession])
 
+  // Branded splash: this is the first frame of every launch, and on a slow
+  // laptop the session probe can take a moment.
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-8">
+        <BrandLockup size="2xl" />
         <div className="w-64 space-y-3">
-          <Skeleton className="h-8 w-40" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-3/4" />
         </div>

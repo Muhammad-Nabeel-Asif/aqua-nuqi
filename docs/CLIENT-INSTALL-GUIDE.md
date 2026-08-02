@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../resources/brand/logo-full.png" alt="Aqua Nuqi" width="260" />
+</p>
+
 # Aqua Nuqi — Install guide
 
 One page. Keep this on your phone or print it. No technical knowledge needed.

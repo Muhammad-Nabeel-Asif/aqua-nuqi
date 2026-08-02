@@ -1684,3 +1684,93 @@ Addressed Phase 9 re-review findings (Backup/Audit live crash + high/medium corr
 **Phase 9 closed** with stable **v1.0.64**. Residual human checks at handover: Windows 11 clean
 install + auto-update from prior stable, code-signing certificate when purchased, and support
 contact line in `docs/CLIENT-HANDOVER.md`.
+
+---
+
+## Branding pass — Aqua Nuqi identity rollout
+
+**Date:** 2026-08-02 · **Status:** complete · **Scope:** cross-cutting (post Phase 9)
+
+### Built
+
+Single source of truth for brand artwork, then applied it everywhere.
+
+- `resources/brand/source/aqua-nuqi-logo-source.jpg` — the one file to replace on a logo change.
+- `scripts/generate-brand-assets.py` — regenerates every derived asset (lockups, print lockup,
+  mark, app icons, `icon.ico`/`icon.png`, NSIS BMPs) plus the renderer copies under
+  `src/renderer/src/assets/brand/`.
+- `src/shared/brand.ts` — brand name, tagline, palette, asset file names. No Node/Electron imports.
+- `src/renderer/src/brand/index.tsx` — `AppLogo` (`full` | `mark` | `badge`, six sizes, `onDark`)
+  and `BrandLockup`. The only renderer module that imports brand images.
+- `src/main/lib/brand-assets.ts` — path resolution across dev / packaged / bundled layouts, cached
+  data URLs, `appIconPath`. Returns `null` rather than throwing when artwork is missing.
+- `src/renderer/src/print/ThermalBrandHeader.tsx` — shared 80 mm header (was duplicated markup in
+  two templates, neither of which showed a logo).
+
+Surfaces branded: sidebar (expanded + collapsed rail), boot splash, login, lock overlay, all four
+setup screens, Settings → About, Help, first-run tour, error boundary, fatal window, favicon,
+`BrowserWindow` icons, thermal delivery slip, thermal receipt, PDF page footer, Excel exports,
+NSIS installer header/sidebar, README and client install guide.
+
+### Deviations from the spec
+
+- **Logo on documents.** The invoice/receipt logo is business identity, not app identity, and the
+  architecture already supported an uploaded `business.logoPath`. Rather than hard-coding the Aqua
+  Nuqi logo onto documents, it is now the **fallback** when no business logo is uploaded (and when
+  an uploaded one is missing or corrupt). An uploaded logo still wins. If the intent was to force
+  the Aqua Nuqi mark onto every document regardless, that is a one-line change in
+  `pdf.service.ts → businessHeader()`.
+- **Asset generator is Python (Pillow), not Node.** Adding `sharp` next to `better-sqlite3` would
+  complicate the Electron native rebuild for assets that are generated rarely and committed.
+- Collapsed sidebar uses the square slate badge, not the bare splash: at ~40px the splash alone
+  measured illegible in a screenshot check.
+
+### New modules / APIs
+
+- `@shared/brand`: `BRAND_NAME`, `BRAND_TAGLINE`, `BRAND_COLOURS`, `BRAND_ASSETS`
+- `@renderer/brand`: `AppLogo`, `BrandLockup`, `BRAND_ASSET_URLS`
+- `@main/lib/brand-assets`: `resolveBrandAssetPath`, `brandAssetDataUrl`, `brandPrintLogoDataUrl`,
+  `brandLogoDataUrl`, `appIconPath`, `fileToDataUrl`, `__clearBrandAssetCache`
+- `PdfPlatform.readBrandLogoAsDataUrl?()` — optional, so tests and headless callers can omit it
+- `buildPdfPageFooterTemplate(businessName?)` in `@shared/print-page-size`
+- `RenderPdfOptions.footerBusinessName`
+- `buildFatalHtml(fatal, paths, { logoDataUrl })` — third arg optional; the builder stays pure
+
+### Tests added
+
+- `src/main/lib/brand-assets.test.ts` — every referenced asset ships and is non-empty; renderer
+  copies are byte-identical to `resources/brand/`; print lockup encodes to a data URL under 120 KB;
+  the cache returns the identical string; missing artwork returns `null`; `BRAND_NAME` matches the
+  frozen `PRODUCT_NAME`.
+- `packaging-safety.test.ts` — parses the NSIS BMP headers and asserts 24-bit at exactly 150×57 and
+  164×314, and that `resources/**/*` stays in `files`. Getting either wrong fails the Windows build
+  in CI rather than locally.
+- `print-page-size.test.ts` — footer keeps the Chromium page-number spans, brands with the business
+  name, omits a blank name cleanly, and HTML-escapes (`Ali & Sons <Water>`).
+- `pdf.service.test.ts` — Excel export assertions updated for the new business header block.
+
+### Verification performed
+
+- Rendered real PDFs through the print route and rasterised them: invoice header and 80 mm thermal
+  receipt both show the logo correctly.
+- Screenshotted the running app against a throwaway profile: login lockup, expanded sidebar,
+  collapsed rail badge. Confirmed `naturalWidth > 0` on every brand image, so a silent 404 could
+  not pass as "branded".
+
+### What the next phase must know
+
+- **Do not import a brand PNG in a feature file.** Add a variant to `AppLogo` instead.
+- **Do not hand-edit anything in `resources/brand/`, `src/renderer/src/assets/brand/`, or
+  `resources/icon.*`** — the generator overwrites them.
+- Keep `BRAND_COLOURS` in `src/shared/brand.ts` in sync with `SPLASH`/`SLATE` in the generator;
+  that link is manual because the generator is Python.
+- `logo-print.png` is deliberately small (~27 KB): it is base64-embedded into every PDF, so a
+  batch of 300 invoices pays its size 300 times.
+
+### Escalations / questions for the human
+
+1. **Aqua Nuqi as app name vs the client's business name.** Documents are branded via the fallback
+   described above. Confirm which reading is right — it decides whether the client should upload
+   their own logo in Settings → Invoice.
+2. **First Windows build should be watched.** The NSIS header/sidebar BMPs are new and have only
+   been validated by header parsing on Linux; NSIS itself has not run against them.

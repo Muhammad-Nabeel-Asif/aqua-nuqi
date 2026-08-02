@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { AppLogo, BRAND_NAME, BRAND_TAGLINE } from '@renderer/brand'
 import { DateText } from '@renderer/components/DateText'
 import { PageHeader } from '@renderer/components/PageHeader'
 import { toast } from '@renderer/components/Toast'
@@ -576,6 +577,16 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="about" className="max-w-2xl space-y-4">
+          <div className="flex items-center gap-4 rounded-lg border bg-white p-5">
+            <AppLogo size="xl" title={BRAND_NAME} />
+            <div>
+              <p className="text-lg font-semibold text-sky-950">{BRAND_NAME}</p>
+              <p className="text-sm text-muted-foreground">{BRAND_TAGLINE}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Version {aboutQuery.data?.appVersion ?? '—'}
+              </p>
+            </div>
+          </div>
           <div className="rounded-lg border bg-white p-4 text-sm">
             <dl className="grid grid-cols-[160px_1fr] gap-2">
               <dt className="text-muted-foreground">App version</dt>

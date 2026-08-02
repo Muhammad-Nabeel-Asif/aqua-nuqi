@@ -39,6 +39,28 @@ describe('packaging data-safety (FR-CI-07)', () => {
     expect(yml).toMatch(/^\s*-\s*package\.json\s*$/m)
   })
 
+  it('ships branded icons and installer graphics at the sizes NSIS requires', () => {
+    const yml = fs.readFileSync(path.join(root, 'electron-builder.yml'), 'utf8')
+    expect(yml).toMatch(/icon:\s*resources\/icon\.ico/)
+    expect(yml).toMatch(/icon:\s*resources\/icon\.png/)
+    expect(yml).toMatch(/installerHeader:\s*resources\/brand\/installerHeader\.bmp/)
+    expect(yml).toMatch(/installerSidebar:\s*resources\/brand\/installerSidebar\.bmp/)
+    // resources/**/* must stay in `files`, or brand artwork is absent at runtime
+    // and every PDF falls back to a bare initial.
+    expect(yml).toMatch(/^\s*-\s*resources\/\*\*\/\*\s*$/m)
+
+    // NSIS rejects anything but 24-bit BMP at these exact pixel sizes.
+    const expectBmp = (file: string, width: number, height: number) => {
+      const buf = fs.readFileSync(path.join(root, 'resources', 'brand', file))
+      expect(buf.subarray(0, 2).toString('ascii'), `${file} is not a BMP`).toBe('BM')
+      expect(buf.readInt32LE(18), `${file} width`).toBe(width)
+      expect(buf.readInt32LE(22), `${file} height`).toBe(height)
+      expect(buf.readUInt16LE(28), `${file} bit depth`).toBe(24)
+    }
+    expectBmp('installerHeader.bmp', 150, 57)
+    expectBmp('installerSidebar.bmp', 164, 314)
+  })
+
   it('keeps deleteAppDataOnUninstall false (assisted installer; do not rely on it alone)', () => {
     const yml = fs.readFileSync(path.join(root, 'electron-builder.yml'), 'utf8')
     expect(yml).toMatch(/deleteAppDataOnUninstall:\s*false/)

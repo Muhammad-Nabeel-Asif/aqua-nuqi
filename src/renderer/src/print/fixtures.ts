@@ -1,6 +1,13 @@
+import logoUrl from '@renderer/assets/brand/logo-full.png'
+import { BRAND_COLOURS, BRAND_NAME } from '@shared/brand'
 import type { InvoiceTemplateProps } from './templates/InvoiceTemplate'
 
-/** Synthetic payloads for `#/print/:template?fixture=…` verification (no IPC). */
+/**
+ * Synthetic payloads for `#/print/:template?fixture=…` verification (no IPC).
+ *
+ * The real payload carries a base64 data URL; a bundled URL renders the same
+ * in the print window and keeps these fixtures readable.
+ */
 export function invoiceFixture(lineCount: number): InvoiceTemplateProps {
   const lines = Array.from({ length: lineCount }, (_, i) => {
     const day = String((i % 28) + 1).padStart(2, '0')
@@ -18,15 +25,15 @@ export function invoiceFixture(lineCount: number): InvoiceTemplateProps {
   const deliveriesTotal = lineCount * 12000
   return {
     business: {
-      name: 'Aqua Nuqi',
+      name: BRAND_NAME,
       address: 'Lahore',
       phone: '03001234567',
       phone2: '',
       email: 'billing@aquanuqi.local',
       bankDetails: 'JazzCash 0300-1234567',
       taxNumber: '',
-      logoDataUrl: null,
-      accentColour: '#0284c7',
+      logoDataUrl: logoUrl,
+      accentColour: BRAND_COLOURS.accent,
       footerNote: 'Thank you for your business.',
       termsText: 'Payment due within 10 days.',
       showBottleBalance: true,
@@ -72,13 +79,13 @@ export function thermalReceiptFixture(): Record<string, unknown> {
     kind: 'payment-receipt',
     variant: 'thermal',
     business: {
-      name: 'Aqua Nuqi',
+      name: BRAND_NAME,
       address: 'Lahore',
       phone: '03001234567',
       phone2: '',
       email: '',
-      logoDataUrl: null,
-      accentColour: '#0284c7',
+      logoDataUrl: logoUrl,
+      accentColour: BRAND_COLOURS.accent,
       currencySymbol: 'Rs',
       decimalPlaces: 0,
     },

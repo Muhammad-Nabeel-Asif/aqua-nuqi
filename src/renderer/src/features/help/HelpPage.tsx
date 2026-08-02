@@ -1,9 +1,13 @@
+import { AppLogo, BRAND_NAME } from '@renderer/brand'
 import { PageHeader } from '@renderer/components/PageHeader'
 
 export function HelpPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
-      <PageHeader title="Help" subtitle="How a normal month works in Aqua Nuqi" />
+      <div className="flex items-center gap-4">
+        <AppLogo size="lg" title={BRAND_NAME} />
+        <PageHeader title="Help" subtitle={`How a normal month works in ${BRAND_NAME}`} />
+      </div>
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">How a normal month works</h2>

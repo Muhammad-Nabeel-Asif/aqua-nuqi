@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AppLogo, BRAND_NAME } from '@renderer/brand'
 import { api } from '@renderer/lib/api'
 import { t } from '@renderer/lib/i18n'
 import { useSessionStore } from '@renderer/stores/session'
@@ -53,6 +54,7 @@ export function LockOverlay() {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-xl border bg-white p-6 shadow-2xl">
+        <AppLogo size="md" title={BRAND_NAME} className="mb-4" />
         <h2 className="text-xl font-bold text-sky-950">Session locked</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Signed in as {user?.displayName}. Enter password or PIN to continue.

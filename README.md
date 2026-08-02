@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="resources/brand/logo-full.png" alt="Aqua Nuqi" width="300" />
+</p>
+
 # Aqua Nuqi — Water Plant Management System
 
 [![Latest stable](https://img.shields.io/github/v/release/Muhammad-Nabeel-Asif/aqua-nuqi?label=latest%20stable)](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest)
@@ -77,6 +81,7 @@ module error after packaging (or the reverse), run the matching rebuild script.
 | [`docs/05-open-questions-and-recommendations.md`](docs/05-open-questions-and-recommendations.md) | **Before the next client meeting** — gaps, risks and questions                                                      |
 | [`docs/06-client-questionnaire.md`](docs/06-client-questionnaire.md)                             | **In the client meeting** — a plain-language script with blanks to fill in                                          |
 | [`docs/07-data-lifecycle-and-upgrades.md`](docs/07-data-lifecycle-and-upgrades.md)               | Before touching the database path, packaging config, migrations or the installer — how client data survives updates |
+| [`docs/08-branding.md`](docs/08-branding.md)                                                     | Before changing any logo, icon or installer graphic — all artwork is generated from one source file                 |
 | [`docs/DEV-RESET-LOCAL-DATA.md`](docs/DEV-RESET-LOCAL-DATA.md)                                   | Download AppImage/Setup, run it, wipe local data, re-test first-run or upgrade                                      |
 | [`docs/CLIENT-INSTALL-GUIDE.md`](docs/CLIENT-INSTALL-GUIDE.md)                                   | Send to the client over WhatsApp                                                                                    |
 | [`docs/phases/PROMPTS.md`](docs/phases/PROMPTS.md)                                               | **Copy-paste prompts** — one per phase, plus review, resume, bug-fix and client-answer prompts                      |

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { AppLogo, BrandLockup } from '@renderer/brand'
 import { Button } from '@renderer/components/ui/button'
 import {
   Card,
@@ -11,6 +12,7 @@ import {
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { api } from '@renderer/lib/api'
+import { t } from '@renderer/lib/i18n'
 import { useSessionStore } from '@renderer/stores/session'
 import { AppError } from '@shared/errors'
 
@@ -124,6 +126,7 @@ export function SetupWizard() {
       <div className="flex min-h-screen items-center justify-center p-6">
         <Card className="w-full max-w-lg border-amber-200 shadow-lg">
           <CardHeader>
+            <AppLogo size="sm" className="mb-2" />
             <CardTitle className="text-sky-950">Save your recovery code</CardTitle>
             <CardDescription>
               This code is shown once. Without it, the only way to recover a lost owner password is
@@ -153,10 +156,11 @@ export function SetupWizard() {
 
   if (path === 'choose') {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 p-6">
+        <BrandLockup size="2xl" />
         <Card className="w-full max-w-xl border-sky-100 shadow-lg">
           <CardHeader>
-            <CardTitle className="text-2xl text-sky-950">Welcome to Aqua Nuqi</CardTitle>
+            <CardTitle className="text-2xl text-sky-950">{t('setup.welcome')}</CardTitle>
             <CardDescription>
               Offline water-plant management. Choose how to get started on this computer.
             </CardDescription>
@@ -186,6 +190,7 @@ export function SetupWizard() {
       <div className="flex min-h-screen items-center justify-center p-6">
         <Card className="w-full max-w-lg">
           <CardHeader>
+            <AppLogo size="sm" className="mb-2" />
             <CardTitle>Restore from a backup</CardTitle>
             <CardDescription>
               Select a database backup created by Aqua Nuqi. Pending migrations will run
@@ -223,6 +228,7 @@ export function SetupWizard() {
     <div className="flex min-h-screen items-center justify-center p-6">
       <Card className="w-full max-w-lg">
         <CardHeader>
+          <AppLogo size="sm" className="mb-2" />
           <CardTitle>Set up a new business</CardTitle>
           <CardDescription>
             Step {step + 1} of {steps.length}: {steps[step]}

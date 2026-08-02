@@ -1,4 +1,5 @@
 import { fmtDate, fmtMoney, fmtTs } from '../format'
+import { ThermalBrandHeader } from '../ThermalBrandHeader'
 
 type Props = {
   business: {
@@ -7,6 +8,7 @@ type Props = {
     accentColour: string
     currencySymbol: string
     decimalPlaces: number
+    logoDataUrl?: string | null
   }
   delivery: {
     deliveryDate: string
@@ -31,13 +33,7 @@ export function DeliverySlipTemplate({
   return (
     <div className="print-root w-[72mm] bg-white p-1 text-[10px]">
       <style>{`@page { size: 80mm 297mm; margin: 3mm; }`}</style>
-      <div className="mb-2 text-center">
-        <div className="font-bold" style={{ color: business.accentColour }}>
-          {business.name}
-        </div>
-        <div className="text-[9px]">{business.phone}</div>
-        <div className="mt-1 font-semibold">DELIVERY SLIP</div>
-      </div>
+      <ThermalBrandHeader business={business} title="DELIVERY SLIP" />
       <div className="space-y-1">
         <div className="flex justify-between">
           <span>Date</span>

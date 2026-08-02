@@ -1,5 +1,6 @@
 import { BusinessHeader } from '../BusinessHeader'
 import { fmtDate, fmtMoney, fmtTs } from '../format'
+import { ThermalBrandHeader } from '../ThermalBrandHeader'
 
 type Props = {
   variant: 'a5' | 'thermal'
@@ -58,13 +59,7 @@ export function PaymentReceiptTemplate({
           }
         />
       ) : (
-        <div className="mb-2 text-center">
-          <div className="font-bold" style={{ color: business.accentColour }}>
-            {business.name}
-          </div>
-          <div className="text-[9px]">{business.phone}</div>
-          <div className="mt-1 font-semibold">PAYMENT RECEIPT</div>
-        </div>
+        <ThermalBrandHeader business={business} title="PAYMENT RECEIPT" />
       )}
 
       <div className="space-y-1">

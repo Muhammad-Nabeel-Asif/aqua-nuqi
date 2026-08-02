@@ -4,6 +4,7 @@ import { and, eq, inArray, lte, sql } from 'drizzle-orm'
 import type { AppDatabase } from '@main/db/client'
 import { customers, deliveries as deliveriesTable, invoices, ledgerEntries } from '@main/db/schema'
 import { newUuid } from '@main/lib/ids'
+import { BRAND_COLOURS, BRAND_NAME } from '@shared/brand'
 import type {
   BatchProgressEvent,
   ExportExcelInput,
@@ -74,6 +75,7 @@ export type PdfRenderer = {
     accentColour: string
     margins?: { top?: number; bottom?: number; left?: number; right?: number }
     landscape?: boolean
+    footerBusinessName?: string
   }) => Promise<Buffer>
   print: (opts: {
     jobId: string
@@ -98,6 +100,11 @@ export type PdfPlatform = {
     filters?: { name: string; extensions: string[] }[]
   }) => Promise<string | null>
   readLogoAsDataUrl: (logoPath: string) => string | null
+  /**
+   * Bundled Aqua Nuqi lockup, used when the business has not uploaded its own
+   * logo. Optional so tests and headless callers can omit it.
+   */
+  readBrandLogoAsDataUrl?: () => string | null
   emitProgress?: (event: BatchProgressEvent) => void
 }
 
@@ -120,16 +127,23 @@ export function createPdfService(
 
   function businessHeader(): BusinessPrintHeader {
     const logoPath = settings.get('business.logoPath')
+    // An uploaded business logo always wins. Otherwise fall back to the
+    // bundled Aqua Nuqi lockup so no document ever prints unbranded — and so
+    // a logo file that has been deleted or corrupted degrades to the brand
+    // mark rather than a bare initial.
+    const uploaded = logoPath ? platform.readLogoAsDataUrl(logoPath) : null
+    const logoDataUrl = uploaded ?? platform.readBrandLogoAsDataUrl?.() ?? null
+
     return {
-      name: settings.get('business.name') || 'Aqua Nuqi',
+      name: settings.get('business.name') || BRAND_NAME,
       address: settings.get('business.address'),
       phone: settings.get('business.phone'),
       phone2: settings.get('business.phone2'),
       email: settings.get('business.email'),
       bankDetails: settings.get('business.bankDetails'),
       taxNumber: settings.get('business.taxNumber'),
-      logoDataUrl: logoPath ? platform.readLogoAsDataUrl(logoPath) : null,
-      accentColour: settings.get('invoice.accentColour') || '#0284c7',
+      logoDataUrl,
+      accentColour: settings.get('invoice.accentColour') || BRAND_COLOURS.accent,
       footerNote: settings.get('invoice.footerNote'),
       termsText: settings.get('invoice.termsText'),
       showBottleBalance: settings.get('invoice.showBottleBalance'),
@@ -287,9 +301,10 @@ export function createPdfService(
       template,
       payload,
       pageSize,
-      accentColour: settings.get('invoice.accentColour') || '#0284c7',
+      accentColour: settings.get('invoice.accentColour') || BRAND_COLOURS.accent,
       landscape: opts?.landscape,
       margins: opts?.margins,
+      footerBusinessName: settings.get('business.name') || BRAND_NAME,
     })
     fs.mkdirSync(path.dirname(destPath), { recursive: true })
     fs.writeFileSync(destPath, buf)
@@ -752,17 +767,33 @@ export function createPdfService(
     const XLSX = await import('xlsx')
     const headers = input.columns.map((c) => c.header)
     const keys = input.columns.map((c) => c.key)
-    const aoa: (string | number | null)[][] = [[input.title]]
+
+    // Spreadsheets get a text header block rather than an image: SheetJS cannot
+    // embed pictures, and these files are forwarded to accountants and banks
+    // where an unattributed sheet of numbers is worse than useless.
+    const business = businessHeader()
+    const contact = [business.phone, business.phone2, business.email].filter(Boolean).join(' · ')
+    const aoa: (string | number | null)[][] = [[business.name]]
+    if (business.address) aoa.push([business.address.replace(/\s*\n\s*/g, ', ')])
+    if (contact) aoa.push([contact])
+    aoa.push([])
+    aoa.push([input.title])
     for (const f of input.filters ?? []) {
       aoa.push([`${f.label}: ${f.value}`])
     }
+    aoa.push([`Generated: ${formatDisplayDate(todayBusinessDate())}`])
     aoa.push([]) // blank separator under title/filters
     aoa.push(headers)
     for (const row of input.rows) {
       aoa.push(keys.map((k) => (row[k] === undefined ? null : row[k]!)))
     }
     const ws = XLSX.utils.aoa_to_sheet(aoa)
+    // Widen the first column so the business name and title are readable.
+    ws['!cols'] = input.columns.map((c, i) => ({
+      wch: i === 0 ? Math.max(24, c.header.length + 2) : Math.max(12, c.header.length + 2),
+    }))
     const wb = XLSX.utils.book_new()
+    wb.Props = { Title: input.title, Company: business.name, Author: business.name }
     XLSX.utils.book_append_sheet(wb, ws, (input.sheetName ?? 'Sheet1').slice(0, 31))
     const fileName = input.fileName ?? `${slugifyName(input.title)}-${todayBusinessDate()}.xlsx`
     const dest = path.join(
@@ -799,7 +830,7 @@ export function createPdfService(
       previousBalance: money(inv.openingBalance),
       totalPayable: money(inv.totalPayable),
       dueDate: inv.dueDate ? formatDisplayDate(inv.dueDate) : '',
-      businessName: settings.get('business.name') || 'Aqua Nuqi',
+      businessName: settings.get('business.name') || BRAND_NAME,
       invoiceNo: inv.invoiceNo,
     }
   }

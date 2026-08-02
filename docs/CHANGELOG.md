@@ -4,6 +4,29 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ## [Unreleased]
 
+### Added
+
+- **Brand identity rollout.** The official Aqua Nuqi logo now appears across every customer-facing
+  surface: sidebar (full lockup expanded, square badge on the collapsed rail), boot splash, login,
+  lock overlay, all four setup screens, Settings → About, Help, first-run tour, error boundary,
+  fatal-error window, favicon and window/taskbar icons.
+- **Branded documents.** Thermal delivery slips and thermal payment receipts now carry the logo
+  (previously text only); multi-page PDFs print the business name in the page footer beside the
+  page number; Excel exports gained a business header block and workbook metadata.
+- **Centralised brand source.** All artwork is generated from a single source file by
+  `scripts/generate-brand-assets.py`; code reaches it only through `@renderer/brand` (`AppLogo`,
+  `BrandLockup`) or `@main/lib/brand-assets`. See `docs/08-branding.md`.
+- **Branded installer.** NSIS header and sidebar graphics, plus regenerated `icon.ico` / `icon.png`
+  from the new mark.
+
+### Changed
+
+- Documents with no uploaded business logo now fall back to the bundled Aqua Nuqi lockup instead of
+  a single-letter square. An uploaded business logo still takes precedence, and the fallback also
+  covers a deleted or corrupted upload.
+- `createPdfPlatformFromElectron` is typed as `PdfPlatform` rather than an inline duplicate, so a
+  new platform capability can no longer leave the adapter silently behind.
+
 ## [1.0.0] — 2026-08-02
 
 ### Added

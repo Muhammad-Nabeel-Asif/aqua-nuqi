@@ -3,8 +3,8 @@ import { BrowserWindow } from 'electron'
 import { log } from '@main/lib/logger'
 import type { PageSizeSpec, PrintTemplateId } from '@shared/contracts/pdf'
 import {
+  buildPdfPageFooterTemplate,
   PDF_EMPTY_HEADER_TEMPLATE,
-  PDF_PAGE_FOOTER_TEMPLATE,
   pdfPageNumbersEnabled,
   preferCssPageSize,
   toElectronPageSize,
@@ -130,6 +130,8 @@ export type RenderPdfOptions = {
   accentColour: string
   margins?: { top?: number; bottom?: number; left?: number; right?: number }
   landscape?: boolean
+  /** Printed in the page footer so every page is attributable on its own. */
+  footerBusinessName?: string
 }
 
 export async function renderTemplateToPdf(opts: RenderPdfOptions): Promise<Buffer> {
@@ -171,7 +173,7 @@ export async function renderTemplateToPdf(opts: RenderPdfOptions): Promise<Buffe
       ...(pageNumbers
         ? {
             headerTemplate: PDF_EMPTY_HEADER_TEMPLATE,
-            footerTemplate: PDF_PAGE_FOOTER_TEMPLATE,
+            footerTemplate: buildPdfPageFooterTemplate(opts.footerBusinessName),
           }
         : {}),
       margins: {

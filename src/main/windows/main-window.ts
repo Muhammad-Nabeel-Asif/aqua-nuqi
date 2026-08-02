@@ -1,14 +1,21 @@
 import { join } from 'node:path'
-import { BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
+import { appIconPath } from '@main/lib/brand-assets'
+import { PRODUCT_NAME } from '@shared/constants'
 
 export function createMainWindow(): BrowserWindow {
+  // Packaged builds get the icon from electron-builder; setting it explicitly
+  // also gives `npm run dev` the real icon instead of the Electron default.
+  const icon = appIconPath([app.getAppPath(), process.resourcesPath])
+
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 1024,
     minHeight: 680,
     show: false,
-    title: 'Aqua Nuqi',
+    title: PRODUCT_NAME,
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

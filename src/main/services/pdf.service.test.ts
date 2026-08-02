@@ -338,12 +338,21 @@ describe('pdfService', () => {
     const wb = XLSX.readFile(xlsx.path)
     const sheet = wb.Sheets[wb.SheetNames[0]!]!
     const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1 })
-    expect(aoa[0]?.[0]).toBe('Demo excel')
-    expect(String(aoa[1]?.[0])).toContain('From: 2026-07-01')
-    expect(String(aoa[2]?.[0])).toContain('To: 2026-07-31')
-    // Header row after blank separator
-    expect(aoa[4]).toEqual(['Code', 'Qty'])
-    expect(aoa[5]).toEqual(['A', 1])
+    // Spreadsheets are forwarded to accountants and banks, so they carry a
+    // business header block before the report title.
+    const flat = aoa.map((row) => String(row?.[0] ?? ''))
+    expect(flat[0]).toBe('Aqua Nuqi')
+    expect(flat).toContain('Demo excel')
+    expect(flat.some((line) => line.includes('From: 2026-07-01'))).toBe(true)
+    expect(flat.some((line) => line.includes('To: 2026-07-31'))).toBe(true)
+    expect(flat.some((line) => line.startsWith('Generated:'))).toBe(true)
+    expect(wb.Props?.Company).toBe('Aqua Nuqi')
+
+    // Data still starts on the row after the column headers.
+    const headerRow = aoa.findIndex((row) => row?.[0] === 'Code')
+    expect(headerRow).toBeGreaterThan(0)
+    expect(aoa[headerRow]).toEqual(['Code', 'Qty'])
+    expect(aoa[headerRow + 1]).toEqual(['A', 1])
   })
 
   it('buildInvoicePayload includes logo, phones, address, amountInWords (WYSIWYG)', async () => {
