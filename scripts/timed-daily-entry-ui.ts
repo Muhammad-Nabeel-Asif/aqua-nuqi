@@ -77,7 +77,7 @@ async function main(): Promise<void> {
   })
   ctx.setupRequired = false
 
-  const seed = seedDemoCustomers(ctx.db, {
+  const seed = await seedDemoCustomers(ctx.db, {
     audit: ctx.audit,
     period: ctx.period,
     rate: ctx.rates,

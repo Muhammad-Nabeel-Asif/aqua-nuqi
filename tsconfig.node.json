@@ -5,6 +5,12 @@
     "moduleResolution": "bundler",
     "lib": ["ES2022"],
     "types": ["node"],
+    // Pinned rather than relying on the default walk-up from this file's
+    // directory: the editor and the CLI resolve `types` independently, and a
+    // stale language-service cache reports "Cannot find type definition file
+    // for 'node'" while `tsc` stays green. An explicit root removes the
+    // ambiguity.
+    "typeRoots": ["./node_modules/@types"],
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -21,7 +27,11 @@
       "@main/*": ["./src/main/*"],
       "@shared/*": ["./src/shared/*"]
     },
-    "outDir": "./out"
+    // electron-vite builds main/preload; tsc only typechecks. Emitting here is
+    // not merely redundant — `outDir: ./out` made `tsc -b` write out/src/**,
+    // out/scripts/** and out/*.js into Vite's output directory, which
+    // electron-builder packages wholesale via `files: out/**/*`.
+    "noEmit": true
   },
   "include": [
     "electron.vite.config.ts",

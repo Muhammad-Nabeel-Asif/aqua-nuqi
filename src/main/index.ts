@@ -7,7 +7,12 @@ import { startBackupScheduler, stopBackupScheduler } from './ipc/backup-schedule
 import { registerAllHandlers } from './ipc/register'
 import { checkForUpdatesQuietly, configureUpdater, setAutomaticUpdates } from './ipc/updater'
 import { configureLogger, log } from './lib/logger'
-import { assertAppIdentity, assertUserDataPath, resolveCanonicalUserData } from './lib/paths'
+import {
+  assertAppIdentity,
+  assertUserDataPath,
+  resolveCanonicalUserData,
+  resolveDevUserData,
+} from './lib/paths'
 import { isPortableBuild, resolvePortableUserData } from './lib/portable'
 import { showFatalWindow } from './windows/fatal-window'
 import { createMainWindow } from './windows/main-window'
@@ -21,10 +26,17 @@ if (!gotLock) {
   // for userData instead of PRODUCT_NAME ("Aqua Nuqi").
   app.setName(PRODUCT_NAME)
   const portableData = resolvePortableUserData()
-  if (portableData) {
+  const envUserData = process.env.AQUA_NUQI_USER_DATA?.trim()
+  if (envUserData) {
+    // Explicit override (scripts / local experiments). Basename must still pass assert.
+    app.setPath('userData', path.resolve(envUserData))
+  } else if (portableData) {
     // Portable builds keep data beside the exe in a clearly labelled folder —
     // never shared with the installed version's Roaming\Aqua Nuqi data.
     app.setPath('userData', portableData)
+  } else if (!app.isPackaged) {
+    // `npm run dev` — keep seed/reset data out of the packaged AppImage/Setup folder.
+    app.setPath('userData', resolveDevUserData())
   } else {
     app.setPath('userData', resolveCanonicalUserData(app.getPath('appData')))
   }

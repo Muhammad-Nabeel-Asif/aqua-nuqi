@@ -113,6 +113,14 @@ export function resolveCanonicalUserData(appData: string): string {
   return path.join(appData, PRODUCT_NAME)
 }
 
+/**
+ * Unpackaged (`npm run dev`) data — isolated from packaged AppImage/Setup userData.
+ * Basename stays PRODUCT_NAME so assertUserDataPath passes.
+ */
+export function resolveDevUserData(repoRoot: string = process.cwd()): string {
+  return path.join(repoRoot, '.tmp', PRODUCT_NAME)
+}
+
 export function readElectronBuilderIdentity(ymlText: string): {
   appId: string | null
   productName: string | null

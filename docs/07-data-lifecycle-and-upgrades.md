@@ -208,7 +208,7 @@ any migration that alters existing rows.
 ## 8. Local AppImage / install & wipe while developing
 
 To download a GitHub AppImage or Setup.exe, run it, wipe your **own** machine, and re-test
-first-run or upgrade, see [`DEV-RESET-LOCAL-DATA.md`](./DEV-RESET-LOCAL-DATA.md). Never confuse
+first-run or upgrade, see [`LOCAL-DEV-AND-TEST.md`](./LOCAL-DEV-AND-TEST.md). Never confuse
 that with uninstalling on the client’s PC — production data must stay under `userData` and
 survive updates (sections above).
 

@@ -81,7 +81,12 @@ const LAST = [
 
 const RATES_RUPEES = [50, 55, 60, 65, 70, 75, 80]
 
-export function seedDemoCustomers(
+/** Keep the Electron main/UI thread responsive during long synchronous seed work. */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
+export async function seedDemoCustomers(
   db: AppDatabase,
   deps: {
     audit: AuditService
@@ -90,7 +95,7 @@ export function seedDemoCustomers(
     balance: BalanceService
     userId?: number | null
   },
-): { areas: number; routes: number; customers: number; deliveries: number } {
+): Promise<{ areas: number; routes: number; customers: number; deliveries: number }> {
   const master = createMasterDataService(db, deps.audit)
   const customerService = createCustomerService(
     db,
@@ -219,10 +224,11 @@ export function seedDemoCustomers(
         deps.userId,
       )
       createdCount += 1
+      if (createdCount % 5 === 0) await yieldToEventLoop()
     }
   }
 
-  const deliveryCount = seedDemoDeliveries(db, deliveryService, deps.userId)
+  const deliveryCount = await seedDemoDeliveries(db, deliveryService, deps.userId)
   seedDemoEmployees(db, deps)
 
   return {
@@ -268,11 +274,11 @@ function seedDemoEmployees(
  * Generate ~4.5 months of realistic deliveries ending at today (or 2026-07-31 for
  * stable month-boundary demos when today is outside the seed window).
  */
-function seedDemoDeliveries(
+async function seedDemoDeliveries(
   db: AppDatabase,
   deliveryService: ReturnType<typeof createDeliveryService>,
   userId?: number | null,
-): number {
+): Promise<number> {
   const existingCount = db
     .select({ c: sql<number>`count(*)` })
     .from(deliveries)
@@ -323,12 +329,15 @@ function seedDemoDeliveries(
             userId,
           })
           created += 1
+          if (created % 25 === 0) await yieldToEventLoop()
         } catch {
           // ignore period/validation issues in seed
         }
       }
       date = addBusinessDays(date, interval)
     }
+    // Also yield once per customer path so long empty skip stretches still breathe
+    if (i % 3 === 0) await yieldToEventLoop()
   }
 
   // Also seed a handful of deliveries on "today" for daily-entry demos when today is in range

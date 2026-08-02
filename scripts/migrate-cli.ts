@@ -7,13 +7,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { closeDatabase } from '../src/main/db/client'
 import { runBootMigrations } from '../src/main/db/migrate'
-import { ensureDirs, resolveAppPaths } from '../src/main/lib/paths'
+import { ensureDirs, resolveAppPaths, resolveDevUserData } from '../src/main/lib/paths'
 
 const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8')) as {
   version: string
 }
 
-const userData = process.env.AQUA_NUQI_USER_DATA ?? path.join(process.cwd(), '.tmp', 'userData')
+const userData = process.env.AQUA_NUQI_USER_DATA?.trim() || resolveDevUserData()
 const installDir = path.join(process.cwd(), '.tmp', 'install-fake')
 const resourcesPath = path.join(installDir, 'resources')
 

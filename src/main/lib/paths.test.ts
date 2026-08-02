@@ -12,6 +12,7 @@ import {
   assertUserDataPath,
   resolveAppPaths,
   resolveCanonicalUserData,
+  resolveDevUserData,
   resolvePackageJsonPath,
 } from './paths'
 
@@ -69,6 +70,12 @@ describe('frozen identity', () => {
     expect(path.basename(canonical)).toBe(PRODUCT_NAME)
     expect(() => assertUserDataPath(canonical)).not.toThrow()
     expect(() => assertUserDataPath('/tmp/appData/aqua-nuqi')).toThrow(AppError)
+  })
+
+  it('resolves unpackaged dev userData under .tmp with PRODUCT_NAME basename', () => {
+    const dev = resolveDevUserData('/repo/Aqua Nuqi')
+    expect(dev).toBe(path.join('/repo/Aqua Nuqi', '.tmp', PRODUCT_NAME))
+    expect(() => assertUserDataPath(dev)).not.toThrow()
   })
 
   it('allows the portable data folder basename', () => {

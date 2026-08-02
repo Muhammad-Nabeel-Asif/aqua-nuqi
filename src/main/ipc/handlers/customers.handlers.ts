@@ -238,7 +238,7 @@ export function registerCustomerHandlers(): void {
     input: z.object({}),
     output: seedDemoOutput,
     roles: ['owner'],
-    handler: (_input, ctx) => {
+    handler: async (_input, ctx) => {
       if (process.env.NODE_ENV === 'production') {
         throw new AppError('FORBIDDEN', 'Demo seed is not available in production builds')
       }

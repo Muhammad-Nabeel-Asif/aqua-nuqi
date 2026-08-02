@@ -44,6 +44,7 @@ export function SettingsPage() {
     email: '',
     bankDetails: '',
   })
+  const [seedingDemo, setSeedingDemo] = useState(false)
   const [locale, setLocale] = useState({
     currencySymbol: 'Rs',
     dateFormat: 'dd-MM-yyyy',
@@ -632,16 +633,36 @@ export function SettingsPage() {
               <Button
                 className="ml-2 mt-4"
                 variant="outline"
-                onClick={() =>
-                  void api.dev?.seedDemo().then((r) =>
-                    toast({
-                      title: `Seeded ${r.customers} customers, ${r.areas} areas, ${r.routes} routes`,
-                      variant: 'success',
-                    }),
-                  )
-                }
+                disabled={seedingDemo}
+                onClick={() => {
+                  if (seedingDemo) return
+                  setSeedingDemo(true)
+                  toast({
+                    title: 'Seeding demo data…',
+                    description: 'This can take 10–20 seconds. Keep the app open.',
+                  })
+                  void api.dev
+                    ?.seedDemo()
+                    .then((r) => {
+                      toast({
+                        title: `Seeded ${r.customers} customers, ${r.areas} areas, ${r.routes} routes`,
+                        description:
+                          r.deliveries > 0 ? `${r.deliveries} deliveries added` : undefined,
+                        variant: 'success',
+                      })
+                      void qc.invalidateQueries()
+                    })
+                    .catch((err: unknown) =>
+                      toast({
+                        title: 'Seed failed',
+                        description: err instanceof AppError ? err.message : 'Error',
+                        variant: 'error',
+                      }),
+                    )
+                    .finally(() => setSeedingDemo(false))
+                }}
               >
-                Seed demo customers
+                {seedingDemo ? 'Seeding…' : 'Seed demo customers'}
               </Button>
             ) : null}
           </div>
