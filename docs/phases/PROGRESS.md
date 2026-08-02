@@ -1351,7 +1351,7 @@ damaged / lost / scrapped reasons.
 
 ## Phase 8 — Dashboard, Profit & Loss and Reports
 
-**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.10.0`
+**Date:** 2026-08-01 · **Status:** complete · **package.json:** `0.10.0` · **stable:** [v0.10.54](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.10.54)
 
 ### Built
 
@@ -1487,9 +1487,14 @@ receivables / customer-wise sales.
   `resolveRange` uses shared contracts.
 - Trip variance action list formats cash with `paisaToDecimalString`.
 - Large-seed cold perf test (~1000 customers × 36 months) asserts <2s.
+- Stable **[v0.10.54](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v0.10.54)**
+  published after review fixes (`package.json` remains `0.10.0`, schema **14**). Phase 8 done —
+  next is Phase 9.
 
 ### Escalations / questions for the human
 
 - Confirm whether cash P&L should attempt to attribute collections to water vs charges
   (currently total collections only).
-- Optional: on-device overlay install through 0.10.x → schema 14 (`purpose` column).
+- Optional: on-device overlay install through 0.10.x → schema 14 (`purpose` column). Prefer
+  `deposit_received` adjustments for security_deposit_held; `purpose=deposit` payments are
+  excluded from cash revenue but still post a trading `payment` ledger credit.
