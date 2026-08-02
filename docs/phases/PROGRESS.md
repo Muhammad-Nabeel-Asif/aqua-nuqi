@@ -1503,7 +1503,7 @@ receivables / customer-wise sales.
 
 ## Phase 9 — Backup & Restore, Audit, Hardening and Release
 
-**Date:** 2026-08-02 · **Status:** complete · **package.json:** `1.0.0`
+**Date:** 2026-08-02 · **Status:** complete · **package.json:** `1.0.0` · **stable:** [v1.0.61](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v1.0.61)
 
 ### Built
 
@@ -1622,3 +1622,14 @@ certificate purchase.
 - Confirm Windows 11 clean-VM install + auto-update from v0.10.54 → v1.0.x on the client
   laptop at handover.
 - Fill support contact line in `docs/CLIENT-HANDOVER.md` before delivery.
+
+### Release
+
+- Stable **[v1.0.61](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v1.0.61)** published
+  (`package.json` `1.0.0`, CI patch = run number; schema **14**).
+- Assets: `Aqua-Nuqi-Setup.exe`, `Aqua-Nuqi-Portable.exe`, `Aqua-Nuqi.AppImage`,
+  `Aqua-Nuqi.deb`, `latest.yml`, `latest-linux.yml`.
+- **Windows:** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe
+- **Portable:** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Portable.exe
+- **Ubuntu:** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.AppImage
+- Workflow: https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/actions/runs/30731565191
