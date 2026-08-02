@@ -33,6 +33,7 @@ import { createCustomerService } from './services/customer.service'
 import { createDeliveryService } from './services/delivery.service'
 import { createEmployeeService } from './services/employee.service'
 import { createExpenseService } from './services/expense.service'
+import { createIntegrityService } from './services/integrity.service'
 import { createLedgerService } from './services/ledger.service'
 import { createMasterDataService } from './services/master-data.service'
 import { createPaymentService } from './services/payment.service'
@@ -137,10 +138,24 @@ export function bootstrapApp(): BootstrapResult {
         const configured = settings.get('backup.folder')
         return configured || paths.backupsDir
       },
+      getSecondaryFolder: () => String(settings.get('backup.secondaryFolder') || ''),
+      getUserData: () => paths.userData,
+      getDbPath: () => paths.dbPath,
+      getAppVersion: () => appVersion,
+      getKeepDaily: () => Number(settings.get('backup.keepDaily') || 14),
+      getKeepWeekly: () => Number(settings.get('backup.keepWeekly') || 8),
+      isEncryptionEnabled: () => Boolean(settings.get('backup.encryptionEnabled')),
     })
     const masterData = createMasterDataService(db, audit)
     const rates = createRateService(db, audit, period)
     const balances = createBalanceService(db, raw)
+    const integrity = createIntegrityService({
+      db,
+      raw,
+      balances,
+      getDbPath: () => paths.dbPath,
+      getUserData: () => paths.userData,
+    })
     const ledger = createLedgerService(db, balances)
     const expenses = createExpenseService(db, raw, audit, period)
     const stock = createStockService(db, raw, audit, period, rates, settings, expenses, balances)
@@ -207,6 +222,7 @@ export function bootstrapApp(): BootstrapResult {
       audit,
       period,
       backup,
+      integrity,
       masterData,
       rates,
       balances,

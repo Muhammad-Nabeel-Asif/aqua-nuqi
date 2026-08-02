@@ -14,6 +14,7 @@ import {
   Users,
   Wallet,
   ChartColumn,
+  CircleHelp,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
@@ -94,6 +95,12 @@ const NAV: NavItem[] = [
     phase: 8,
   },
   { to: '/settings', label: t('nav.settings'), icon: Settings, roles: ['owner'] },
+  {
+    to: '/help',
+    label: 'Help',
+    icon: CircleHelp,
+    roles: ['owner', 'operator', 'viewer'],
+  },
 ]
 
 export function AppShell() {
@@ -106,8 +113,8 @@ export function AppShell() {
   const [idleMs, setIdleMs] = useState(0)
 
   const backupQuery = useQuery({
-    queryKey: ['backup', 'list'],
-    queryFn: () => api.backup.list(),
+    queryKey: ['backup', 'status'],
+    queryFn: () => api.backup.status(),
     enabled: user?.role === 'owner',
     refetchInterval: 60_000,
   })
@@ -164,12 +171,16 @@ export function AppShell() {
 
   const backupChip = useMemo(() => {
     const last = backupQuery.data?.lastSuccessAt
+    const freshnessHours = backupQuery.data?.freshnessHours ?? 24
     if (!last) return { label: 'No backup yet', tone: 'danger' as const }
     const ageH = (Date.now() - new Date(last).getTime()) / 3_600_000
-    if (ageH < 24)
+    if (ageH < freshnessHours)
       return { label: `Backed up ${Math.max(1, Math.round(ageH))}h ago`, tone: 'ok' as const }
     const days = Math.round(ageH / 24)
-    return { label: `No backup for ${days} day${days === 1 ? '' : 's'}`, tone: 'danger' as const }
+    return {
+      label: days >= 1 ? `No backup for ${days} day${days === 1 ? '' : 's'}` : 'Backup overdue',
+      tone: 'danger' as const,
+    }
   }, [backupQuery.data])
 
   async function logout() {
@@ -231,7 +242,9 @@ export function AppShell() {
               {format(new Date(), 'dd MMM yyyy')}
             </span>
             {user?.role === 'owner' ? (
-              <span
+              <button
+                type="button"
+                onClick={() => navigate('/settings/backup')}
                 className={cn(
                   'rounded-full px-2.5 py-1 text-xs font-medium',
                   backupChip.tone === 'ok'
@@ -240,7 +253,7 @@ export function AppShell() {
                 )}
               >
                 {backupChip.label}
-              </span>
+              </button>
             ) : null}
             <div className="flex items-center gap-2">
               <span className="font-medium">{user?.displayName}</span>

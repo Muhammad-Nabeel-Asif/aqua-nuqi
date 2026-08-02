@@ -42,10 +42,29 @@ export const api = {
     unlock: (input: UnlockInput) => invoke<{ ok: true }>('auth:unlock', input),
     createUser: (input: CreateUserInput) => invoke<{ user: UserDto }>('auth:createUser', input),
     listUsers: () => invoke<{ items: UserDto[] }>('auth:listUsers', {}),
+    updateUser: (input: {
+      userId: number
+      displayName?: string
+      role?: 'owner' | 'operator' | 'viewer'
+    }) => invoke<{ user: UserDto }>('auth:updateUser', input),
+    setUserActive: (input: { userId: number; isActive: boolean }) =>
+      invoke<{ user: UserDto }>('auth:setUserActive', input),
+    resetPassword: (input: { userId: number; newPassword: string }) =>
+      invoke<{ ok: true }>('auth:resetPassword', input),
+    clearPin: (input: { userId: number }) => invoke<{ ok: true }>('auth:clearPin', input),
+    forceLogout: (input: { userId: number }) => invoke<{ ok: true }>('auth:forceLogout', input),
     changePassword: (input: { currentPassword: string; newPassword: string }) =>
       invoke<{ ok: true }>('auth:changePassword', input),
     setPin: (input: { pin: string; password: string }) =>
       invoke<{ ok: true }>('auth:setPin', input),
+    generateRecoveryCode: () => invoke<{ recoveryCode: string }>('auth:generateRecoveryCode', {}),
+    resetOwnerWithRecovery: (input: {
+      username: string
+      recoveryCode: string
+      newPassword: string
+    }) => invoke<{ user: UserDto }>('auth:resetOwnerWithRecovery', input),
+    passwordStrength: (password: string) =>
+      invoke<{ score: number; label: string }>('auth:passwordStrength', { password }),
   },
   settings: {
     get: (input?: SettingsGetInput) =>
@@ -81,10 +100,27 @@ export const api = {
       }>('period:list', {}),
   },
   backup: {
-    create: (kind: 'manual' | 'on_exit' | 'daily' | 'weekly' = 'manual') =>
-      invoke<{ filePath: string; sizeBytes: number; checksum: string }>('backup:create', {
-        kind,
-      }),
+    create: (kind: 'manual' | 'on_exit' | 'daily' | 'weekly' = 'manual', password?: string) =>
+      invoke<{
+        filePath: string
+        sizeBytes: number
+        checksum: string
+        kind: string
+        secondaryCopied: boolean
+        secondaryWarning: string | null
+        manifest: {
+          formatVersion: 1
+          appVersion: string
+          schemaVersion: number
+          createdAt: string
+          kind: string
+          dbFileName: string
+          dbChecksumSha256: string
+          rowCounts: Record<string, number>
+          encrypted: boolean
+          attachmentFileCount: number
+        }
+      }>('backup:create', { kind, password }),
     list: () =>
       invoke<{
         items: {
@@ -96,9 +132,177 @@ export const api = {
           checksum: string | null
           status: string
           message: string | null
+          exists: boolean
         }[]
         lastSuccessAt: string | null
+        storageUsedBytes: number
+        nextDailyDue: boolean
+        nextWeeklyDue: boolean
       }>('backup:list', {}),
+    status: () =>
+      invoke<{
+        lastSuccessAt: string | null
+        freshnessHours: number
+        isStale: boolean
+        storageUsedBytes: number
+        primaryFolder: string
+        secondaryFolder: string
+        nextDailyDue: boolean
+        nextWeeklyDue: boolean
+        encryptionEnabled: boolean
+        isPortable: boolean
+      }>('backup:status', {}),
+    verify: (filePath: string, password?: string) =>
+      invoke<{
+        ok: boolean
+        message: string
+        manifest: {
+          formatVersion: 1
+          appVersion: string
+          schemaVersion: number
+          createdAt: string
+          kind: string
+          dbFileName: string
+          dbChecksumSha256: string
+          rowCounts: Record<string, number>
+          encrypted: boolean
+          attachmentFileCount: number
+        }
+      }>('backup:verify', { filePath, password }),
+    inspect: (filePath: string, password?: string) =>
+      invoke<{
+        filePath: string
+        encrypted: boolean
+        validChecksum: boolean
+        manifest: {
+          formatVersion: 1
+          appVersion: string
+          schemaVersion: number
+          createdAt: string
+          kind: string
+          dbFileName: string
+          dbChecksumSha256: string
+          rowCounts: Record<string, number>
+          encrypted: boolean
+          attachmentFileCount: number
+        }
+      }>('backup:inspect', { filePath, password }),
+    restore: (filePath: string, confirmation: 'RESTORE', password?: string) =>
+      invoke<{ ok: true; restartRequired: true; preRestorePath: string }>('backup:restore', {
+        filePath,
+        confirmation,
+        password,
+      }),
+    openReadonly: (filePath: string, password?: string) =>
+      invoke<{
+        stagingDir: string
+        dbPath: string
+        manifest: {
+          formatVersion: 1
+          appVersion: string
+          schemaVersion: number
+          createdAt: string
+          kind: string
+          dbFileName: string
+          dbChecksumSha256: string
+          rowCounts: Record<string, number>
+          encrypted: boolean
+          attachmentFileCount: number
+        }
+      }>('backup:openReadonly', { filePath, password }),
+    closeReadonly: (stagingDir: string) =>
+      invoke<{ ok: true }>('backup:closeReadonly', { stagingDir }),
+    openFolder: () => invoke<unknown>('backup:openFolder', {}),
+  },
+  audit: {
+    list: (
+      input: {
+        from?: string
+        to?: string
+        userId?: number
+        action?: string
+        entityTable?: string
+        search?: string
+        limit?: number
+        offset?: number
+      } = {},
+    ) =>
+      invoke<{
+        items: Array<{
+          id: number
+          occurredAt: string
+          userId: number | null
+          username: string | null
+          action: string
+          entityTable: string | null
+          entityId: number | null
+          summary: string
+          beforeJson: string | null
+          afterJson: string | null
+          diff: Array<{ field: string; oldValue: string | null; newValue: string | null }>
+        }>
+        total: number
+      }>('audit:list', input),
+    export: (input: {
+      format: 'excel' | 'pdf'
+      destinationFolder: string
+      from?: string
+      to?: string
+      userId?: number
+      action?: string
+      entityTable?: string
+      search?: string
+    }) => invoke<{ filePath: string }>('audit:export', input),
+  },
+  integrity: {
+    check: () =>
+      invoke<{
+        ranAt: string
+        pragmaOk: boolean
+        issues: Array<{
+          id: string
+          severity: string
+          category: string
+          message: string
+          details?: string
+          fixable: boolean
+          fixAction?: string
+        }>
+        tableCounts: Record<string, number>
+        dbSizeBytes: number
+        oldestTransactionDate: string | null
+        newestTransactionDate: string | null
+      }>('integrity:check', {}),
+    fix: (fixAction: 'recalculate_balances') =>
+      invoke<{ fixed: number; message: string }>('integrity:fix', { fixAction }),
+  },
+  maintenance: {
+    stats: () =>
+      invoke<{
+        dbSizeBytes: number
+        tableCounts: Record<string, number>
+        oldestTransactionDate: string | null
+        newestTransactionDate: string | null
+      }>('maintenance:stats', {}),
+    compact: () => invoke<{ beforeBytes: number; afterBytes: number }>('maintenance:compact', {}),
+    rebuildSummaries: () => invoke<{ updated: number }>('maintenance:rebuildSummaries', {}),
+  },
+  updates: {
+    status: () =>
+      invoke<{
+        currentVersion: string
+        channel: 'stable'
+        automatic: boolean
+        checking: boolean
+        updateAvailable: boolean
+        updateDownloaded: boolean
+        availableVersion: string | null
+        releaseNotes: string | null
+        lastError: string | null
+        portable: boolean
+      }>('updates:status', {}),
+    check: () => invoke<unknown>('updates:check', {}),
+    install: () => invoke<{ ok: true }>('updates:install', {}),
   },
   about: {
     get: () => invoke<AboutGetOutput>('about:get', {}),
@@ -106,6 +310,8 @@ export const api = {
   diagnostics: {
     export: (destinationFolder: string) =>
       invoke<{ zipPath: string }>('diagnostics:export', { destinationFolder }),
+    reportProblem: (destinationFolder: string) =>
+      invoke<{ zipPath: string }>('diagnostics:reportProblem', { destinationFolder }),
   },
   shell: {
     openPath: (path: string) => invoke<{ ok: true }>('shell:openPath', { path }),

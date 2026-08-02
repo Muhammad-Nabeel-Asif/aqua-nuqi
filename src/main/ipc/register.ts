@@ -1,3 +1,4 @@
+import { registerAuditHandlers } from './handlers/audit.handlers'
 import { registerAuthHandlers } from './handlers/auth.handlers'
 import { registerBackupHandlers } from './handlers/backup.handlers'
 import { registerBillingHandlers } from './handlers/billing.handlers'
@@ -6,6 +7,7 @@ import { registerDeliveryHandlers } from './handlers/deliveries.handlers'
 import { registerDiagnosticsHandlers } from './handlers/diagnostics.handlers'
 import { registerEmployeeHandlers } from './handlers/employees.handlers'
 import { registerExpenseHandlers } from './handlers/expenses.handlers'
+import { registerIntegrityHandlers } from './handlers/integrity.handlers'
 import { registerInventoryHandlers } from './handlers/inventory.handlers'
 import { registerMasterDataHandlers } from './handlers/master-data.handlers'
 import { registerPaymentHandlers } from './handlers/payments.handlers'
@@ -14,12 +16,16 @@ import { registerPeriodHandlers } from './handlers/period.handlers'
 import { registerReportHandlers } from './handlers/reports.handlers'
 import { registerSettingsHandlers } from './handlers/settings.handlers'
 import { registerSetupHandlers } from './handlers/setup.handlers'
+import { registerUpdatesHandlers } from './handlers/updates.handlers'
 
 export function registerAllHandlers(): void {
   registerAuthHandlers()
   registerSettingsHandlers()
   registerPeriodHandlers()
   registerBackupHandlers()
+  registerAuditHandlers()
+  registerIntegrityHandlers()
+  registerUpdatesHandlers()
   registerSetupHandlers()
   registerDiagnosticsHandlers()
   registerMasterDataHandlers()

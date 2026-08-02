@@ -19,6 +19,8 @@ win:
   target:
     - target: nsis
       arch: [x64]
+    - target: portable
+      arch: [x64]
   icon: resources/icon.ico
 
 nsis:
@@ -33,6 +35,13 @@ nsis:
   installerIcon: resources/icon.ico
   uninstallerIcon: resources/icon.ico
   installerHeaderIcon: resources/icon.ico
+  # Path relative to buildResources (resources/)
+  include: installer.nsh
+
+portable:
+  artifactName: Aqua-Nuqi-Portable.${ext}
+  # Portable data lives in "Aqua Nuqi Portable Data" beside the exe
+  # (see src/main/lib/portable.ts) — never shared with the installed app.
 
 linux:
   target: [AppImage, deb]

@@ -20,7 +20,7 @@ export const setupCompleteInput = z.object({
   backupFolder: z.string().optional().default(''),
   ownerUsername: z.string().min(3).max(64),
   ownerDisplayName: z.string().min(1).max(120),
-  ownerPassword: z.string().min(6).max(200),
+  ownerPassword: z.string().min(8).max(200),
 })
 export const setupCompleteOutput = z.object({ user: userDto })
 export type SetupCompleteInput = z.infer<typeof setupCompleteInput>

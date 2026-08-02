@@ -19,6 +19,7 @@ import { EmployeesPage } from './features/employees/EmployeesPage'
 import { PayrollPage } from './features/employees/PayrollPage'
 import { ExpenseCategoriesPage } from './features/expenses/ExpenseCategoriesPage'
 import { ExpensesPage } from './features/expenses/ExpensesPage'
+import { HelpPage } from './features/help/HelpPage'
 import { InventoryBottlesOutPage } from './features/inventory/InventoryBottlesOutPage'
 import { InventoryPage } from './features/inventory/InventoryPage'
 import { TripsPage } from './features/inventory/TripsPage'
@@ -222,6 +223,7 @@ export const router = createHashRouter([
           </RequireOwner>
         ),
       },
+      { path: 'help', element: <HelpPage /> },
     ],
   },
 ])

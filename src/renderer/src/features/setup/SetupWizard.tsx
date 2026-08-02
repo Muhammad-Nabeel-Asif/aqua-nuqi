@@ -43,7 +43,10 @@ export function SetupWizard() {
   async function pickBackupFile() {
     const res = await api.dialog.pickFile({
       title: 'Choose a backup database',
-      filters: [{ name: 'SQLite backup', extensions: ['db', 'sqlite'] }],
+      filters: [
+        { name: 'Aqua Nuqi backup', extensions: ['zip', 'db', 'sqlite'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
     })
     if (res.path) setBackupFile(res.path)
   }

@@ -1,10 +1,14 @@
 import path from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { APP_ID, PRODUCT_NAME } from '@shared/constants'
+import { tryGetAppContext } from './app-context'
 import { bootstrapApp, shutdownApp } from './bootstrap'
+import { startBackupScheduler, stopBackupScheduler } from './ipc/backup-scheduler'
 import { registerAllHandlers } from './ipc/register'
+import { checkForUpdatesQuietly, configureUpdater, setAutomaticUpdates } from './ipc/updater'
 import { configureLogger, log } from './lib/logger'
 import { assertAppIdentity, assertUserDataPath, resolveCanonicalUserData } from './lib/paths'
+import { isPortableBuild, resolvePortableUserData } from './lib/portable'
 import { showFatalWindow } from './windows/fatal-window'
 import { createMainWindow } from './windows/main-window'
 
@@ -16,7 +20,14 @@ if (!gotLock) {
   // Force identity before ready — Linux otherwise uses package.json name (aqua-nuqi)
   // for userData instead of PRODUCT_NAME ("Aqua Nuqi").
   app.setName(PRODUCT_NAME)
-  app.setPath('userData', resolveCanonicalUserData(app.getPath('appData')))
+  const portableData = resolvePortableUserData()
+  if (portableData) {
+    // Portable builds keep data beside the exe in a clearly labelled folder —
+    // never shared with the installed version's Roaming\Aqua Nuqi data.
+    app.setPath('userData', portableData)
+  } else {
+    app.setPath('userData', resolveCanonicalUserData(app.getPath('appData')))
+  }
   if (process.platform === 'win32') {
     app.setAppUserModelId(APP_ID)
   }
@@ -57,9 +68,56 @@ if (!gotLock) {
 
     registerAllHandlers()
     createMainWindow()
+    startBackupScheduler(() => tryGetAppContext())
+
+    const ctx = tryGetAppContext()
+    if (ctx && !isPortableBuild()) {
+      try {
+        const automatic = Boolean(ctx.settings.get('updates.automatic'))
+        configureUpdater({
+          automatic,
+          backupBeforeUpdate: () => {
+            const live = tryGetAppContext()
+            if (!live) return
+            live.backup.createBackup('manual', { skipPrune: true })
+          },
+        })
+        setAutomaticUpdates(automatic)
+        if (automatic) {
+          void checkForUpdatesQuietly()
+        }
+      } catch (err) {
+        log.warn('Updater init failed (non-fatal)', err)
+      }
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
+    })
+
+    app.on('browser-window-blur', (_event, win) => {
+      try {
+        const live = tryGetAppContext()
+        if (!live?.settings.get('security.lockOnMinimise')) return
+        if (win.isMinimized() || !win.isFocused()) {
+          // lock-on-minimise is handled via minimize event below
+        }
+      } catch {
+        // ignore
+      }
+    })
+
+    app.on('browser-window-created', (_event, win) => {
+      win.on('minimize', () => {
+        try {
+          const live = tryGetAppContext()
+          if (!live?.settings.get('security.lockOnMinimise')) return
+          if (live.auth.getSession().user) live.auth.lock()
+          win.webContents.send('auth:locked', {})
+        } catch {
+          // ignore
+        }
+      })
     })
   })
 
@@ -67,6 +125,7 @@ if (!gotLock) {
   const gracefulShutdown = (): void => {
     if (shuttingDown) return
     shuttingDown = true
+    stopBackupScheduler()
     shutdownApp()
   }
 

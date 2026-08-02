@@ -1,4 +1,6 @@
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { app, dialog } from 'electron'
 import { getAppContext, setAppContext } from '@main/app-context'
 import { closeDatabase, getDb, getRawDb } from '@main/db/client'
@@ -108,14 +110,25 @@ export function registerSetupHandlers(): void {
 
       if (fs.existsSync(ctx.paths.dbPath)) {
         try {
-          ctx.backup.createBackup('pre_restore')
+          ctx.backup.createBackup('pre_restore', { skipPrune: true })
         } catch {
           // empty/partial DB — continue
         }
       }
 
       closeDatabase()
-      ctx.backup.restoreDatabaseFile(input.backupFilePath, ctx.paths.dbPath)
+      if (ctx.backup.isLegacyDbBackup(input.backupFilePath)) {
+        ctx.backup.restoreDatabaseFile(input.backupFilePath, ctx.paths.dbPath)
+      } else {
+        const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'aquanuqi-setup-restore-'))
+        try {
+          const extracted = ctx.backup.extractBackup(input.backupFilePath, staging)
+          ctx.backup.restoreDatabaseFile(extracted.dbPath, ctx.paths.dbPath)
+          ctx.backup.restoreAttachmentFolders(staging)
+        } finally {
+          fs.rmSync(staging, { recursive: true, force: true })
+        }
+      }
 
       const migrationsFolder = resolveMigrationsFolder(app.getAppPath(), process.resourcesPath)
       const outcome = runBootMigrations({
@@ -142,6 +155,13 @@ export function registerSetupHandlers(): void {
         db,
         raw,
         getBackupFolder: () => (settings.get('backup.folder') as string) || ctx.paths.backupsDir,
+        getSecondaryFolder: () => String(settings.get('backup.secondaryFolder') || ''),
+        getUserData: () => ctx.paths.userData,
+        getDbPath: () => ctx.paths.dbPath,
+        getAppVersion: () => ctx.appVersion,
+        getKeepDaily: () => Number(settings.get('backup.keepDaily') || 14),
+        getKeepWeekly: () => Number(settings.get('backup.keepWeekly') || 8),
+        isEncryptionEnabled: () => Boolean(settings.get('backup.encryptionEnabled')),
       })
 
       audit.record({

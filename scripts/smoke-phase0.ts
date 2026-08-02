@@ -55,6 +55,13 @@ async function main() {
     db,
     raw,
     getBackupFolder: () => paths.backupsDir,
+    getSecondaryFolder: () => '',
+    getUserData: () => paths.userData,
+    getDbPath: () => paths.dbPath,
+    getAppVersion: () => '1.0.0',
+    getKeepDaily: () => 14,
+    getKeepWeekly: () => 8,
+    isEncryptionEnabled: () => false,
   })
 
   settings.setMany(

@@ -1,7 +1,7 @@
 import { hash, verify } from '@node-rs/argon2'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { AppDatabase } from '@main/db/client'
-import { users } from '@main/db/schema'
+import { appMeta, users } from '@main/db/schema'
 import { newUuid } from '@main/lib/ids'
 import type { Role } from '@shared/constants'
 import type { UserDto } from '@shared/contracts'
@@ -33,8 +33,34 @@ const argonOpts = {
   parallelism: 1,
 }
 
+const RECOVERY_META_KEY = 'recovery_code_hash'
+
+type FailureState = { count: number; lockedUntil: number }
+
+export function passwordStrength(password: string): {
+  score: number
+  label: 'too_short' | 'weak' | 'fair' | 'good' | 'strong'
+} {
+  if (password.length < 8) return { score: 0, label: 'too_short' }
+  let score = 1
+  if (password.length >= 10) score++
+  if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++
+  if (/\d/.test(password)) score++
+  if (/[^A-Za-z0-9]/.test(password)) score++
+  score = Math.min(4, score)
+  const labels = ['too_short', 'weak', 'fair', 'good', 'strong'] as const
+  return { score, label: labels[score] }
+}
+
+function assertPasswordPolicy(password: string): void {
+  if (password.length < 8) {
+    throw new AppError('VALIDATION_FAILED', 'Password must be at least 8 characters')
+  }
+}
+
 export function createAuthService(db: AppDatabase, audit: AuditService) {
   const session: SessionState = { user: null, locked: false }
+  const failures = new Map<string, FailureState>()
 
   async function hashSecret(value: string): Promise<string> {
     return hash(value, argonOpts)
@@ -59,12 +85,61 @@ export function createAuthService(db: AppDatabase, audit: AuditService) {
     return session.user
   }
 
+  function countActiveOwners(excludeUserId?: number): number {
+    const rows = db
+      .select()
+      .from(users)
+      .where(and(eq(users.role, 'owner'), eq(users.isActive, 1)))
+      .all()
+    return rows.filter((r) => r.id !== excludeUserId).length
+  }
+
+  function guardThrottle(username: string): void {
+    const state = failures.get(username.toLowerCase())
+    if (!state) return
+    if (state.lockedUntil > Date.now()) {
+      const waitSec = Math.ceil((state.lockedUntil - Date.now()) / 1000)
+      throw new AppError(
+        'UNAUTHORIZED',
+        `Too many failed logins. Try again in ${waitSec} second(s).`,
+        { retryAfterSeconds: waitSec },
+      )
+    }
+  }
+
+  function recordFailure(username: string, userId: number | null): void {
+    const key = username.toLowerCase()
+    const prev = failures.get(key) ?? { count: 0, lockedUntil: 0 }
+    const count = prev.count + 1
+    // Progressive delay after 5 failures: 5s, 15s, 30s, 60s, …
+    let lockedUntil = 0
+    if (count >= 5) {
+      const step = count - 4
+      const delayMs = Math.min(60_000, 5_000 * Math.pow(2, step - 1))
+      lockedUntil = Date.now() + delayMs
+    }
+    failures.set(key, { count, lockedUntil })
+    audit.record({
+      userId,
+      action: 'login',
+      entityTable: 'users',
+      entityId: userId,
+      summary: `Failed login attempt for ${username} (#${count})`,
+      after: { username, failures: count },
+    })
+  }
+
+  function clearFailures(username: string): void {
+    failures.delete(username.toLowerCase())
+  }
+
   async function createUser(input: {
     username: string
     displayName: string
     password: string
     role: Role
   }): Promise<UserDto> {
+    assertPasswordPolicy(input.password)
     const existing = db.select().from(users).where(eq(users.username, input.username)).get()
     if (existing) {
       throw new AppError('CONFLICT', `Username "${input.username}" already exists`)
@@ -112,14 +187,18 @@ export function createAuthService(db: AppDatabase, audit: AuditService) {
   }
 
   async function login(username: string, password: string): Promise<UserDto> {
+    guardThrottle(username)
     const row = db.select().from(users).where(eq(users.username, username)).get()
     if (!row || row.isActive !== 1) {
+      recordFailure(username, row?.id ?? null)
       throw new AppError('UNAUTHORIZED', 'Invalid username or password')
     }
     const ok = await verifySecret(row.passwordHash, password)
     if (!ok) {
+      recordFailure(username, row.id)
       throw new AppError('UNAUTHORIZED', 'Invalid username or password')
     }
+    clearFailures(username)
     const now = nowIsoUtc()
     const dto = db.transaction((tx) => {
       tx.update(users).set({ lastLoginAt: now, updatedAt: now }).where(eq(users.id, row.id)).run()
@@ -185,6 +264,7 @@ export function createAuthService(db: AppDatabase, audit: AuditService) {
     currentPassword: string,
     newPassword: string,
   ): Promise<void> {
+    assertPasswordPolicy(newPassword)
     const row = db.select().from(users).where(eq(users.id, userId)).get()
     if (!row) throw new AppError('NOT_FOUND', 'User not found')
     const ok = await verifySecret(row.passwordHash, currentPassword)
@@ -232,6 +312,204 @@ export function createAuthService(db: AppDatabase, audit: AuditService) {
     }
   }
 
+  async function clearPin(userId: number): Promise<void> {
+    const row = db.select().from(users).where(eq(users.id, userId)).get()
+    if (!row) throw new AppError('NOT_FOUND', 'User not found')
+    db.transaction((tx) => {
+      tx.update(users)
+        .set({ pinHash: null, updatedAt: nowIsoUtc() })
+        .where(eq(users.id, userId))
+        .run()
+      audit.record(
+        {
+          userId: session.user?.id ?? userId,
+          action: 'update',
+          entityTable: 'users',
+          entityId: userId,
+          summary: `PIN cleared for ${row.username}`,
+        },
+        tx,
+      )
+    })
+    if (session.user?.id === userId) {
+      session.user = { ...session.user, hasPin: false }
+    }
+  }
+
+  function updateUser(userId: number, patch: { displayName?: string; role?: Role }): UserDto {
+    const row = db.select().from(users).where(eq(users.id, userId)).get()
+    if (!row) throw new AppError('NOT_FOUND', 'User not found')
+    if (patch.role && patch.role !== 'owner' && row.role === 'owner' && row.isActive === 1) {
+      if (countActiveOwners(userId) < 1) {
+        throw new AppError('CONFLICT', 'There must always be at least one active owner')
+      }
+    }
+    const next = db.transaction((tx) => {
+      tx.update(users)
+        .set({
+          displayName: patch.displayName ?? row.displayName,
+          role: patch.role ?? row.role,
+          updatedAt: nowIsoUtc(),
+        })
+        .where(eq(users.id, userId))
+        .run()
+      const updated = tx.select().from(users).where(eq(users.id, userId)).get()!
+      audit.record(
+        {
+          userId: session.user?.id ?? userId,
+          action: 'update',
+          entityTable: 'users',
+          entityId: userId,
+          summary: `Updated user ${row.username}`,
+          before: { displayName: row.displayName, role: row.role },
+          after: { displayName: updated.displayName, role: updated.role },
+        },
+        tx,
+      )
+      return updated
+    })
+    if (session.user?.id === userId) {
+      session.user = toDto(next)
+    }
+    return toDto(next)
+  }
+
+  function setUserActive(userId: number, isActive: boolean): UserDto {
+    const row = db.select().from(users).where(eq(users.id, userId)).get()
+    if (!row) throw new AppError('NOT_FOUND', 'User not found')
+    if (!isActive && row.role === 'owner' && row.isActive === 1) {
+      if (countActiveOwners(userId) < 1) {
+        throw new AppError('CONFLICT', 'There must always be at least one active owner')
+      }
+    }
+    const next = db.transaction((tx) => {
+      tx.update(users)
+        .set({ isActive: isActive ? 1 : 0, updatedAt: nowIsoUtc() })
+        .where(eq(users.id, userId))
+        .run()
+      const updated = tx.select().from(users).where(eq(users.id, userId)).get()!
+      audit.record(
+        {
+          userId: session.user?.id ?? userId,
+          action: 'update',
+          entityTable: 'users',
+          entityId: userId,
+          summary: `${isActive ? 'Activated' : 'Deactivated'} user ${row.username}`,
+          before: { isActive: row.isActive === 1 },
+          after: { isActive },
+        },
+        tx,
+      )
+      return updated
+    })
+    if (!isActive && session.user?.id === userId) {
+      session.user = null
+      session.locked = false
+    }
+    return toDto(next)
+  }
+
+  async function resetPassword(userId: number, newPassword: string): Promise<void> {
+    assertPasswordPolicy(newPassword)
+    const row = db.select().from(users).where(eq(users.id, userId)).get()
+    if (!row) throw new AppError('NOT_FOUND', 'User not found')
+    const passwordHash = await hashSecret(newPassword)
+    db.transaction((tx) => {
+      tx.update(users)
+        .set({ passwordHash, updatedAt: nowIsoUtc() })
+        .where(eq(users.id, userId))
+        .run()
+      audit.record(
+        {
+          userId: session.user?.id ?? userId,
+          action: 'update',
+          entityTable: 'users',
+          entityId: userId,
+          summary: `Password reset for ${row.username}`,
+        },
+        tx,
+      )
+    })
+  }
+
+  function forceLogout(userId: number): void {
+    if (session.user?.id === userId) {
+      audit.record({
+        userId: session.user.id,
+        action: 'logout',
+        entityTable: 'users',
+        entityId: userId,
+        summary: `Forced logout for ${session.user.username}`,
+      })
+      session.user = null
+      session.locked = false
+    }
+  }
+
+  async function generateRecoveryCode(): Promise<string> {
+    const code = Array.from({ length: 4 }, () =>
+      Math.random().toString(36).slice(2, 6).toUpperCase(),
+    ).join('-')
+    const recoveryHash = await hashSecret(code)
+    const existing = db.select().from(appMeta).where(eq(appMeta.key, RECOVERY_META_KEY)).get()
+    if (existing) {
+      db.update(appMeta)
+        .set({ value: recoveryHash })
+        .where(eq(appMeta.key, RECOVERY_META_KEY))
+        .run()
+    } else {
+      db.insert(appMeta).values({ key: RECOVERY_META_KEY, value: recoveryHash }).run()
+    }
+    audit.record({
+      userId: session.user?.id ?? null,
+      action: 'update',
+      entityTable: 'app_meta',
+      summary: 'Generated new owner recovery code',
+    })
+    return code
+  }
+
+  async function resetOwnerWithRecovery(input: {
+    username: string
+    recoveryCode: string
+    newPassword: string
+  }): Promise<UserDto> {
+    assertPasswordPolicy(input.newPassword)
+    const meta = db.select().from(appMeta).where(eq(appMeta.key, RECOVERY_META_KEY)).get()
+    if (!meta) {
+      throw new AppError(
+        'NOT_FOUND',
+        'No recovery code is set. Restore from a backup to recover access.',
+      )
+    }
+    const ok = await verifySecret(meta.value, input.recoveryCode.trim())
+    if (!ok) throw new AppError('UNAUTHORIZED', 'Invalid recovery code')
+
+    const row = db.select().from(users).where(eq(users.username, input.username)).get()
+    if (!row || row.role !== 'owner') {
+      throw new AppError('NOT_FOUND', 'Owner user not found')
+    }
+    const passwordHash = await hashSecret(input.newPassword)
+    const dto = db.transaction((tx) => {
+      tx.update(users)
+        .set({ passwordHash, isActive: 1, updatedAt: nowIsoUtc() })
+        .where(eq(users.id, row.id))
+        .run()
+      audit.record(
+        {
+          userId: row.id,
+          action: 'update',
+          entityTable: 'users',
+          entityId: row.id,
+          summary: `Owner password reset via recovery code for ${row.username}`,
+        },
+        tx,
+      )
+      return toDto({ ...row, isActive: 1 })
+    })
+    return dto
+  }
+
   function listUsers(): UserDto[] {
     return db.select().from(users).all().map(toDto)
   }
@@ -255,6 +533,14 @@ export function createAuthService(db: AppDatabase, audit: AuditService) {
     unlock,
     changePassword,
     setPin,
+    clearPin,
+    updateUser,
+    setUserActive,
+    resetPassword,
+    forceLogout,
+    generateRecoveryCode,
+    resetOwnerWithRecovery,
+    passwordStrength,
     listUsers,
     hasAnyUser,
     setSessionUser,

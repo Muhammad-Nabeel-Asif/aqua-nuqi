@@ -20,7 +20,18 @@ describe('packaging data-safety (FR-CI-07)', () => {
     const yml = fs.readFileSync(path.join(root, 'electron-builder.yml'), 'utf8')
     expect(yml).toMatch(/artifactName:\s*Aqua-Nuqi-Setup\.\$\{ext\}/)
     expect(yml).toMatch(/artifactName:\s*Aqua-Nuqi\.\$\{ext\}/)
+    expect(yml).toMatch(/artifactName:\s*Aqua-Nuqi-Portable\.\$\{ext\}/)
     expect(yml).not.toMatch(/artifactName:.*\$\{version\}/)
+  })
+
+  it('includes a portable Windows target and uninstall data-delete guard', () => {
+    const yml = fs.readFileSync(path.join(root, 'electron-builder.yml'), 'utf8')
+    expect(yml).toMatch(/target:\s*portable/)
+    expect(yml).toMatch(/include:\s*installer\.nsh/)
+    const nsh = fs.readFileSync(path.join(root, 'resources', 'installer.nsh'), 'utf8')
+    expect(nsh).toMatch(/!macro\s+customUnInstall/i)
+    expect(nsh).toMatch(/\$\{IfNot\}\s+\$\{isUpdated\}/i)
+    expect(nsh).toMatch(/MB_DEFBUTTON2/)
   })
 
   it('includes package.json in the packaged files (frozen name check on Windows)', () => {

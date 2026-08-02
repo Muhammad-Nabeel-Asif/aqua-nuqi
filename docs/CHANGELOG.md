@@ -4,6 +4,30 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-08-02
+
+### Added
+
+- **Phase 9 — Backup, restore, audit, hardening and release:** Full backup archives
+  (`VACUUM INTO` + attachments + logos + manifest with SHA-256 and row counts), schedules
+  (exit / daily / weekly), retention that never prunes the latest success or
+  `pre_migration` / `pre_restore`, optional secondary destination and AES password wrap.
+  Restore wizard with typed `RESTORE`, schema-newer refusal, pre_restore snapshot, and
+  read-only inspection. Integrity check + safe Fix for `customer_balances`. Audit log
+  viewer with readable diffs and Excel export. Full user management (deactivate, reset
+  password, PIN clear, force logout, last-owner guard), failed-login throttling, password
+  policy (min 8), recovery code, lock-on-minimise. Settings tabs completed (Backup,
+  Maintenance, Audit, Users & security, Billing). In-app auto-update via `electron-updater`
+  on the **stable** channel only, with backup before install. Diagnostics zip includes
+  row counts + last 200 audit entries; rotating logs (14 days); Help page + client
+  handover doc. Portable Windows target (`Aqua-Nuqi-Portable.exe`) with separate
+  `Aqua Nuqi Portable Data` folder; uninstall asks before deleting data (default No).
+
+### Changed
+
+- Version bumped to **1.0.0** (first production-stable release).
+- First-run restore accepts `.zip` archives as well as legacy `.db` files.
+
 ## [0.10.0] — 2026-08-01
 
 ### Added

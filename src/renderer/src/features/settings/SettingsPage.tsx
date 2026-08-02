@@ -10,7 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/u
 import { api } from '@renderer/lib/api'
 import { useSessionStore } from '@renderer/stores/session'
 import { AppError } from '@shared/errors'
+import { AuditPanel } from './AuditPanel'
+import { BackupPanel } from './BackupPanel'
 import { InvoiceSettingsPanel } from './InvoiceSettingsPanel'
+import { MaintenancePanel } from './MaintenancePanel'
 import { MasterDataPanel } from './MasterDataPanel'
 
 export function SettingsPage() {
@@ -52,8 +55,19 @@ export function SettingsPage() {
     password: '',
     role: 'operator' as 'owner' | 'operator' | 'viewer',
   })
+  const [passwordStrength, setPasswordStrength] = useState('')
+  const [autoLockMinutes, setAutoLockMinutes] = useState(15)
+  const [lockOnMinimise, setLockOnMinimise] = useState(false)
+  const [autoUpdates, setAutoUpdates] = useState(true)
+  const [recoveryShown, setRecoveryShown] = useState<string | null>(null)
   const [period, setPeriod] = useState('2026-06')
   const [reopenReason, setReopenReason] = useState('')
+  const [tab, setTab] = useState(() => {
+    const hash = window.location.hash
+    if (hash.includes('/settings/backup')) return 'backup'
+    if (hash.includes('/settings/audit')) return 'audit'
+    return 'business'
+  })
 
   useEffect(() => {
     const v = settingsQuery.data?.values
@@ -75,6 +89,9 @@ export function SettingsPage() {
           ? basis
           : 'fixed_26',
     })
+    setAutoLockMinutes(Number(v['security.autoLockMinutes'] ?? 15))
+    setLockOnMinimise(Boolean(v['security.lockOnMinimise']))
+    setAutoUpdates(Boolean(v['updates.automatic'] ?? true))
   }, [settingsQuery.data])
 
   async function saveBusiness() {
@@ -154,17 +171,18 @@ export function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Settings" subtitle="Business profile, users and system information." />
-      <Tabs defaultValue="business">
-        <TabsList>
-          <TabsTrigger value="business">Business profile</TabsTrigger>
+      <PageHeader title="Settings" subtitle="Business profile, backup, users and maintenance." />
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="flex h-auto flex-wrap">
+          <TabsTrigger value="business">Business</TabsTrigger>
           <TabsTrigger value="locale">Localisation</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="invoice">Invoice</TabsTrigger>
-          <TabsTrigger value="backup" disabled>
-            Backup
-          </TabsTrigger>
+          <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="master">Master data</TabsTrigger>
+          <TabsTrigger value="backup">Backup</TabsTrigger>
+          <TabsTrigger value="users">Users & security</TabsTrigger>
+          <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+          <TabsTrigger value="audit">Audit</TabsTrigger>
           <TabsTrigger value="about">About</TabsTrigger>
         </TabsList>
 
@@ -201,8 +219,69 @@ export function SettingsPage() {
           <InvoiceSettingsPanel />
         </TabsContent>
 
+        <TabsContent value="billing" className="max-w-xl space-y-3">
+          <p className="text-sm text-slate-600">
+            Default billing day of month and tax settings. Tax is off by default.
+          </p>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              const v = settingsQuery.data?.values
+              const day = Number(v?.['billing.defaultBillingDay'] ?? 1)
+              const taxOn = Boolean(v?.['tax.enabled'])
+              const taxRate = Number(v?.['tax.rate'] ?? 0)
+              await api.settings.setMany({
+                values: {
+                  'billing.defaultBillingDay': day,
+                  'tax.enabled': taxOn,
+                  'tax.rate': taxRate,
+                },
+              })
+              toast({
+                title: 'Billing defaults unchanged — edit via fields below after reload',
+                variant: 'success',
+              })
+            }}
+          >
+            Refresh billing settings
+          </Button>
+          <Field
+            label="Default billing day (1–28)"
+            value={String(settingsQuery.data?.values['billing.defaultBillingDay'] ?? 1)}
+            onChange={async (v) => {
+              await api.settings.setMany({
+                values: { 'billing.defaultBillingDay': Number(v) || 1 },
+              })
+              await qc.invalidateQueries({ queryKey: ['settings'] })
+            }}
+          />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={Boolean(settingsQuery.data?.values['tax.enabled'])}
+              onChange={async (e) => {
+                await api.settings.setMany({ values: { 'tax.enabled': e.target.checked } })
+                await qc.invalidateQueries({ queryKey: ['settings'] })
+              }}
+            />
+            Enable tax / GST on invoices
+          </label>
+        </TabsContent>
+
         <TabsContent value="master">
           <MasterDataPanel />
+        </TabsContent>
+
+        <TabsContent value="backup">
+          <BackupPanel />
+        </TabsContent>
+
+        <TabsContent value="maintenance">
+          <MaintenancePanel />
+        </TabsContent>
+
+        <TabsContent value="audit">
+          <AuditPanel />
         </TabsContent>
 
         <TabsContent value="locale" className="max-w-xl space-y-3">
@@ -250,15 +329,149 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="users" className="max-w-2xl space-y-4">
+          <div className="space-y-3 rounded-lg border bg-white p-4">
+            <h3 className="font-semibold">Security</h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Auto-lock minutes</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={autoLockMinutes}
+                  onChange={(e) => setAutoLockMinutes(Number(e.target.value) || 0)}
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm pt-6">
+                <input
+                  type="checkbox"
+                  checked={lockOnMinimise}
+                  onChange={(e) => setLockOnMinimise(e.target.checked)}
+                />
+                Lock when window is minimised
+              </label>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={autoUpdates}
+                onChange={(e) => setAutoUpdates(e.target.checked)}
+              />
+              Automatic updates (stable channel only)
+            </label>
+            <Button
+              onClick={async () => {
+                await api.settings.setMany({
+                  values: {
+                    'security.autoLockMinutes': autoLockMinutes,
+                    'security.lockOnMinimise': lockOnMinimise,
+                    'updates.automatic': autoUpdates,
+                  },
+                })
+                toast({ title: 'Security settings saved', variant: 'success' })
+              }}
+            >
+              Save security settings
+            </Button>
+            <div className="border-t pt-3">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  const r = await api.auth.generateRecoveryCode()
+                  setRecoveryShown(r.recoveryCode)
+                  toast({
+                    title: 'Recovery code generated — copy it now',
+                    description: 'It will not be shown again.',
+                    variant: 'success',
+                  })
+                }}
+              >
+                Generate recovery code
+              </Button>
+              {recoveryShown ? (
+                <p className="mt-2 rounded bg-amber-50 p-2 font-mono text-sm">{recoveryShown}</p>
+              ) : null}
+              <p className="mt-2 text-xs text-muted-foreground">
+                Without a recovery code, the only way to recover a lost owner password is a backup.
+              </p>
+            </div>
+            <div className="border-t pt-3">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  const status = (await api.updates.check()) as {
+                    updateAvailable?: boolean
+                    availableVersion?: string | null
+                    lastError?: string | null
+                  }
+                  if (status.lastError) {
+                    toast({
+                      title: 'Update check',
+                      description: status.lastError,
+                      variant: 'error',
+                    })
+                  } else if (status.updateAvailable) {
+                    toast({
+                      title: `Update ${status.availableVersion} available`,
+                      description: 'It will install when you quit, after a backup.',
+                      variant: 'success',
+                    })
+                  } else {
+                    toast({ title: 'You are on the latest stable version', variant: 'success' })
+                  }
+                }}
+              >
+                Check for updates
+              </Button>
+            </div>
+          </div>
           <div className="rounded-lg border bg-white p-4">
             <h3 className="font-semibold">Existing users</h3>
             <ul className="mt-3 divide-y text-sm">
               {(usersQuery.data?.items ?? []).map((u) => (
-                <li key={u.id} className="flex justify-between py-2">
+                <li key={u.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                   <span>
-                    {u.displayName} <span className="text-muted-foreground">(@{u.username})</span>
+                    {u.displayName}{' '}
+                    <span className="text-muted-foreground">
+                      (@{u.username}) · {u.role}
+                      {!u.isActive ? ' · inactive' : ''}
+                    </span>
                   </span>
-                  <span className="capitalize text-muted-foreground">{u.role}</span>
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        await api.auth.setUserActive({ userId: u.id, isActive: !u.isActive })
+                        await qc.invalidateQueries({ queryKey: ['users'] })
+                      }}
+                    >
+                      {u.isActive ? 'Deactivate' : 'Activate'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        const pwd = window.prompt('New password (min 8 characters)')
+                        if (!pwd) return
+                        await api.auth.resetPassword({ userId: u.id, newPassword: pwd })
+                        toast({ title: 'Password reset', variant: 'success' })
+                      }}
+                    >
+                      Reset password
+                    </Button>
+                    {u.hasPin ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          await api.auth.clearPin({ userId: u.id })
+                          await qc.invalidateQueries({ queryKey: ['users'] })
+                        }}
+                      >
+                        Clear PIN
+                      </Button>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -276,12 +489,19 @@ export function SettingsPage() {
               onChange={(v) => setNewUser({ ...newUser, displayName: v })}
             />
             <div className="space-y-1.5">
-              <Label>Password</Label>
+              <Label>Password (min 8)</Label>
               <Input
                 type="password"
                 value={newUser.password}
-                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                onChange={(e) => {
+                  const password = e.target.value
+                  setNewUser({ ...newUser, password })
+                  void api.auth.passwordStrength(password).then((r) => setPasswordStrength(r.label))
+                }}
               />
+              {passwordStrength ? (
+                <p className="text-xs text-muted-foreground">Strength: {passwordStrength}</p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label>Role</Label>

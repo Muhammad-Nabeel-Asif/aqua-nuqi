@@ -43,7 +43,8 @@ Updating or reinstalling the app does **not** delete this folder.
 
 ## How to update later
 
-When you receive a new download link (or the same permanent link above):
+From version 1.0 the app can also offer **Restart to update** by itself (stable
+releases only). You can still update manually:
 
 1. Download **Aqua-Nuqi-Setup.exe** again.
 2. Double-click it and install **over** the old version.
@@ -51,6 +52,19 @@ When you receive a new download link (or the same permanent link above):
 4. Open Aqua Nuqi — your data is still there.
 
 Updating the app never removes your business data.
+
+### Portable USB copy (optional)
+
+https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Portable.exe
+
+Data for the portable build is stored in a folder named **Aqua Nuqi Portable Data**
+next to the exe. It is **not** shared with the installed version.
+
+### Uninstall
+
+If you uninstall from Windows Settings → Apps, your business data is kept by default.
+You will be asked whether to also delete it — choose **No** unless you have a verified
+backup elsewhere.
 
 ---
 

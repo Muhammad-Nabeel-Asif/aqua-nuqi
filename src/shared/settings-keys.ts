@@ -40,7 +40,16 @@ export const SETTING_DEFAULTS = {
   'backup.keepDaily': 14,
   'backup.keepWeekly': 8,
   'backup.secondaryFolder': '',
+  /** Hours after which the freshness chip turns red. */
+  'backup.freshnessHours': 24,
+  'backup.encryptionEnabled': false,
   'security.autoLockMinutes': 15,
+  'security.lockOnMinimise': false,
+  /** Keep forever when 0; otherwise archive+delete entries older than N years. */
+  'audit.retentionYears': 0,
+  /** In-app auto-update (stable channel only). */
+  'updates.automatic': true,
+  'onboarding.tourCompleted': false,
   'inventory.lowStockThreshold': 0,
   'deliveries.missedDaysThreshold': 10,
   /** calendar | fixed_26 | working_days — shown on payroll screen; affects absence maths. */
@@ -50,7 +59,14 @@ export const SETTING_DEFAULTS = {
 export type SettingKey = keyof typeof SETTING_DEFAULTS
 export type SettingValue<K extends SettingKey> = (typeof SETTING_DEFAULTS)[K]
 
-export const OWNER_ONLY_SETTING_PREFIXES = ['business.', 'backup.', 'security.', 'tax.'] as const
+export const OWNER_ONLY_SETTING_PREFIXES = [
+  'business.',
+  'backup.',
+  'security.',
+  'tax.',
+  'updates.',
+  'audit.',
+] as const
 
 export function isOwnerOnlySetting(key: string): boolean {
   return OWNER_ONLY_SETTING_PREFIXES.some((p) => key.startsWith(p))

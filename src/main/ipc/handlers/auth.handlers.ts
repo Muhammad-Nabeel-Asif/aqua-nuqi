@@ -2,8 +2,14 @@ import { getAppContext } from '@main/app-context'
 import {
   changePasswordInput,
   changePasswordOutput,
+  clearPinInput,
+  clearPinOutput,
   createUserInput,
   createUserOutput,
+  forceLogoutInput,
+  forceLogoutOutput,
+  generateRecoveryCodeInput,
+  generateRecoveryCodeOutput,
   listUsersInput,
   listUsersOutput,
   lockSessionInput,
@@ -12,12 +18,22 @@ import {
   loginOutput,
   logoutInput,
   logoutOutput,
+  passwordStrengthInput,
+  passwordStrengthOutput,
+  resetOwnerWithRecoveryInput,
+  resetOwnerWithRecoveryOutput,
+  resetPasswordInput,
+  resetPasswordOutput,
   sessionGetInput,
   sessionGetOutput,
   setPinInput,
   setPinOutput,
+  setUserActiveInput,
+  setUserActiveOutput,
   unlockInput,
   unlockOutput,
+  updateUserInput,
+  updateUserOutput,
 } from '@shared/contracts'
 import { defineHandler } from '../router'
 
@@ -103,6 +119,64 @@ export function registerAuthHandlers(): void {
   })
 
   defineHandler({
+    channel: 'auth:updateUser',
+    input: updateUserInput,
+    output: updateUserOutput,
+    roles: ['owner'],
+    handler: (input) => {
+      const user = getAppContext().auth.updateUser(input.userId, {
+        displayName: input.displayName,
+        role: input.role,
+      })
+      return { user }
+    },
+  })
+
+  defineHandler({
+    channel: 'auth:setUserActive',
+    input: setUserActiveInput,
+    output: setUserActiveOutput,
+    roles: ['owner'],
+    handler: (input) => {
+      const user = getAppContext().auth.setUserActive(input.userId, input.isActive)
+      return { user }
+    },
+  })
+
+  defineHandler({
+    channel: 'auth:resetPassword',
+    input: resetPasswordInput,
+    output: resetPasswordOutput,
+    roles: ['owner'],
+    handler: async (input) => {
+      await getAppContext().auth.resetPassword(input.userId, input.newPassword)
+      return { ok: true as const }
+    },
+  })
+
+  defineHandler({
+    channel: 'auth:clearPin',
+    input: clearPinInput,
+    output: clearPinOutput,
+    roles: ['owner'],
+    handler: async (input) => {
+      await getAppContext().auth.clearPin(input.userId)
+      return { ok: true as const }
+    },
+  })
+
+  defineHandler({
+    channel: 'auth:forceLogout',
+    input: forceLogoutInput,
+    output: forceLogoutOutput,
+    roles: ['owner'],
+    handler: (input) => {
+      getAppContext().auth.forceLogout(input.userId)
+      return { ok: true as const }
+    },
+  })
+
+  defineHandler({
     channel: 'auth:changePassword',
     input: changePasswordInput,
     output: changePasswordOutput,
@@ -126,5 +200,35 @@ export function registerAuthHandlers(): void {
       await getAppContext().auth.setPin(ctx.userId!, input.pin, input.password)
       return { ok: true as const }
     },
+  })
+
+  defineHandler({
+    channel: 'auth:generateRecoveryCode',
+    input: generateRecoveryCodeInput,
+    output: generateRecoveryCodeOutput,
+    roles: ['owner'],
+    handler: async () => {
+      const recoveryCode = await getAppContext().auth.generateRecoveryCode()
+      return { recoveryCode }
+    },
+  })
+
+  defineHandler({
+    channel: 'auth:resetOwnerWithRecovery',
+    input: resetOwnerWithRecoveryInput,
+    output: resetOwnerWithRecoveryOutput,
+    roles: 'public',
+    handler: async (input) => {
+      const user = await getAppContext().auth.resetOwnerWithRecovery(input)
+      return { user }
+    },
+  })
+
+  defineHandler({
+    channel: 'auth:passwordStrength',
+    input: passwordStrengthInput,
+    output: passwordStrengthOutput,
+    roles: 'public',
+    handler: (input) => getAppContext().auth.passwordStrength(input.password),
   })
 }

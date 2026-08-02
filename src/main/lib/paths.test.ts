@@ -70,6 +70,10 @@ describe('frozen identity', () => {
     expect(() => assertUserDataPath(canonical)).not.toThrow()
     expect(() => assertUserDataPath('/tmp/appData/aqua-nuqi')).toThrow(AppError)
   })
+
+  it('allows the portable data folder basename', () => {
+    expect(() => assertUserDataPath('/tmp/stick/Aqua Nuqi Portable Data')).not.toThrow()
+  })
 })
 
 describe('db path safety', () => {

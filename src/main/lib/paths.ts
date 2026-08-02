@@ -10,6 +10,7 @@ import {
   PRODUCT_NAME,
 } from '@shared/constants'
 import { AppError } from '@shared/errors'
+import { isAllowedUserDataBasename, PORTABLE_DATA_FOLDER } from './portable'
 
 /**
  * Resolve package.json in both layouts:
@@ -93,13 +94,16 @@ export function assertAppIdentity(
   }
 }
 
-/** userData folder basename must stay PRODUCT_NAME on every platform. */
+/**
+ * userData folder basename must stay PRODUCT_NAME (installed) or the clearly
+ * labelled portable data folder (portable builds only).
+ */
 export function assertUserDataPath(userData: string): void {
   const base = path.basename(path.resolve(userData))
-  if (base !== PRODUCT_NAME) {
+  if (!isAllowedUserDataBasename(base)) {
     throw new AppError(
       'FATAL_PATH',
-      `userData folder must be "${PRODUCT_NAME}" (frozen). Found "${base}".`,
+      `userData folder must be "${PRODUCT_NAME}" or "${PORTABLE_DATA_FOLDER}". Found "${base}".`,
     )
   }
 }

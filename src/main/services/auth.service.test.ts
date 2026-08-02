@@ -44,4 +44,36 @@ describe('authService', () => {
       code: 'UNAUTHORIZED',
     } satisfies Partial<AppError>)
   })
+
+  it('throttles after five failed logins and refuses to deactivate the last owner', async () => {
+    const db = getDb()
+    const auth = createAuthService(db, createAuditService(db))
+    const owner = await auth.createUser({
+      username: 'owner',
+      displayName: 'Owner',
+      password: 'secret12',
+      role: 'owner',
+    })
+
+    for (let i = 0; i < 5; i++) {
+      await expect(auth.login('owner', 'wrong')).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    }
+    await expect(auth.login('owner', 'wrong')).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+
+    expect(() => auth.setUserActive(owner.id, false)).toThrow(AppError)
+    expect(() => auth.setUserActive(owner.id, false)).toThrow(/at least one active owner/i)
+  })
+
+  it('rejects passwords shorter than 8 characters', async () => {
+    const db = getDb()
+    const auth = createAuthService(db, createAuditService(db))
+    await expect(
+      auth.createUser({
+        username: 'short',
+        displayName: 'Short',
+        password: 'short',
+        role: 'operator',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+  })
 })

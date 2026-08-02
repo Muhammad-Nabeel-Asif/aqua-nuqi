@@ -1,6 +1,6 @@
 {
   "name": "aqua-nuqi",
-  "version": "0.10.0",
+  "version": "1.0.0",
   "description": "Offline water-plant management for Aqua Nuqi",
   "main": "./out/main/index.js",
   "author": "Muhammad Nabeel Asif <nabeel.asif362@gmail.com>",
@@ -50,6 +50,7 @@
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.38.3",
     "electron-log": "^5.2.4",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

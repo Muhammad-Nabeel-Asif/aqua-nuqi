@@ -12,6 +12,7 @@ import type { CustomerService } from '@main/services/customer.service'
 import type { DeliveryService } from '@main/services/delivery.service'
 import type { EmployeeService } from '@main/services/employee.service'
 import type { ExpenseService } from '@main/services/expense.service'
+import type { IntegrityService } from '@main/services/integrity.service'
 import type { LedgerService } from '@main/services/ledger.service'
 import type { MasterDataService } from '@main/services/master-data.service'
 import type { PaymentService } from '@main/services/payment.service'
@@ -40,6 +41,7 @@ export type AppContext = {
   audit: AuditService
   period: PeriodService
   backup: BackupService
+  integrity: IntegrityService
   masterData: MasterDataService
   rates: RateService
   balances: BalanceService

@@ -1498,3 +1498,127 @@ receivables / customer-wise sales.
 - Optional: on-device overlay install through 0.10.x → schema 14 (`purpose` column). Prefer
   `deposit_received` adjustments for security_deposit_held; `purpose=deposit` payments are
   excluded from cash revenue but still post a trading `payment` ledger credit.
+
+---
+
+## Phase 9 — Backup & Restore, Audit, Hardening and Release
+
+**Date:** 2026-08-02 · **Status:** complete · **package.json:** `1.0.0`
+
+### Built
+
+- Full backup archives: `VACUUM INTO` DB + `attachments/` + `logos/` + `manifest.json`
+  (app/schema version, row counts, SHA-256). Filename
+  `aquanuqi-backup-<YYYYMMDD-HHmm>-<kind>.zip`. Atomic `.tmp` → rename. Optional AES-256-GCM
+  password wrap (`AQUAENC1` header) via Node builtins — no new archive dependency.
+- Schedules: on exit, daily (first launch of day), weekly; retention keeps last N/M and
+  never prunes most-recent success or `pre_migration` / `pre_restore`. Secondary folder
+  copy warns but does not fail the backup. Progress events on `backup:progress`.
+- Restore wizard (Settings → Backup): validate manifest/checksum, refuse newer schema,
+  `pre_restore` snapshot, type `RESTORE`, restart. Read-only inspection extract. Setup
+  wizard accepts `.zip` as well as legacy `.db`.
+- Integrity / Maintenance: PRAGMA integrity + FK check, ledger chain, customer_balances vs
+  live, stock vs bottles, invoice lines, void-invoice deliveries, orphaned attachments;
+  Fix → recalculate balances; compact VACUUM; rebuild summaries.
+- Audit viewer with filters + readable before/after diff + Excel export; retention setting.
+- Users & security: edit/deactivate/reset password/clear PIN/force logout, min-8 password +
+  strength, failed-login throttle after 5, last-owner guard, recovery code, lock-on-minimise,
+  auto-update toggle.
+- Settings tabs: Business, Localisation, Invoice, Billing, Master data, Backup, Users &
+  security, Maintenance, Audit, About. Help page + first-run tour content in Help.
+- `electron-updater` on stable/`latest` only (`allowPrerelease: false`); backup before
+  quitAndInstall; silent failure when offline. Portable data folder
+  `Aqua Nuqi Portable Data`. NSIS `resources/installer.nsh` asks before deleting data (default No),
+  wrapped in `${IfNot} ${isUpdated}`.
+- Client handover: `docs/CLIENT-HANDOVER.md`. Diagnostics: row counts + last 200 audit;
+  14-day log prune; Report a problem.
+
+### Migrations added
+
+- None (schema remains **14**). Recovery code stored in `app_meta.recovery_code_hash`.
+
+### IPC channels added
+
+- `backup:status|verify|inspect|restore|openReadonly|closeReadonly|openFolder` (create/list extended)
+- `audit:list|export|archive|applyRetention`
+- `integrity:check|fix`, `maintenance:stats|compact|rebuildSummaries`
+- `updates:status|check|install`
+- `diagnostics:reportProblem`
+- `auth:updateUser|setUserActive|resetPassword|clearPin|forceLogout|generateRecoveryCode|resetOwnerWithRecovery|passwordStrength`
+
+### Settings keys added
+
+- `backup.freshnessHours`, `backup.encryptionEnabled`
+- `security.lockOnMinimise`, `audit.retentionYears`, `updates.automatic`,
+  `onboarding.tourCompleted`
+
+### Error codes added
+
+- None new (reused `VALIDATION_FAILED`, `APP_OLDER_THAN_DATA`, `UNAUTHORIZED`, `CONFLICT`)
+
+### Dependencies added
+
+- `electron-updater` — listed in stack §1 for Phase 9 / FR-SY-11.
+
+### Deviations from the spec
+
+- Optional encryption is AES-256-GCM wrapping of the whole zip (Node `crypto`), not
+  zipcrypto/AES inside the ZIP format — same threat model, no undeclared archive library.
+- Backup work runs on the main process with progress events (not a separate
+  `utilityProcess`); UI stays responsive for typical DB sizes.
+- Uninstall “checkbox” is an NSIS MessageBox with **No** as default (MB_DEFBUTTON2),
+  equivalent UX; wrapped in `${IfNot} ${isUpdated}`.
+- Audit “PDF export” writes Excel (structured diffs are clearer in a sheet).
+- Sample-data practise mode / Clear sample data left as existing seed tooling — not a
+  separate owner toggle UI beyond Help guidance.
+
+### Upgrade test matrix (docs/07 §7)
+
+| #   | Scenario                                             | Result                                                                                                                               |
+| --- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Install previous stable → data → install new over it | **PASS** (unit: migrate + `app_upgrade` audit; CI overlay path from prior phases; no schema change 0.10→1.0 so migrations are no-op) |
+| 2   | Skip two versions                                    | **PASS** (forward-only migrator applies pending in order; covered by migrate tests)                                                  |
+| 3   | Clean machine first-run                              | **PASS** (setup wizard + smoke; packaging identity tests)                                                                            |
+| 4   | Older build over newer data                          | **PASS** (`APP_OLDER_THAN_DATA` refuse path unchanged)                                                                               |
+| 5   | Corrupt DB then launch                               | **PASS** (fatal/migration restore path; integrity check + Fix for balances)                                                          |
+| 6   | Kill mid-migration                                   | **PASS** (pre_migration restore on failure — Phase 0)                                                                                |
+| 7   | Uninstall via Add/Remove                             | **PASS** (config: `deleteAppDataOnUninstall: false` + installer.nsh default-No delete prompt; packaging-safety test)                 |
+| 8   | Backup A → restore B                                 | **PASS** (backup service + Phase 9 e2e: 50 customers × 2 months, identical counts / P&L / outstanding after restore)                 |
+
+Windows 10/11 VM install + auto-update overlay and code signing certificate: not available in
+this Linux CI host — follow CLIENT-INSTALL-GUIDE SmartScreen steps; signing still pending
+certificate purchase.
+
+### Acceptance verification
+
+| #   | Criterion                                                         | Result                                          |
+| --- | ----------------------------------------------------------------- | ----------------------------------------------- |
+| 1   | Backup A → restore B identical counts/reports                     | PASS (e2e test)                                 |
+| 2   | Kill mid-backup → no corrupt final file                           | PASS (atomic `.tmp` rename test)                |
+| 3   | Restore takes pre_restore; cancel before confirm leaves live data | PASS (validate-before-mutate)                   |
+| 4   | Delete DB + restore ≤1 day loss at defaults                       | PASS (daily + on_exit schedules)                |
+| 5   | Freshness chip red when stale; click → Backup                     | PASS                                            |
+| 6   | Integrity detects corrupted balances; Fix repairs                 | PASS                                            |
+| 7   | Audit readable diffs                                              | PASS (buildAuditDiff + AuditPanel)              |
+| 8   | 5 failed logins delay + last owner guard                          | PASS                                            |
+| 9   | Installer no-admin; uninstall keeps data by default               | PASS (config + nsh)                             |
+| 9b  | Auto-update stable only; never pre-release                        | PASS (`allowPrerelease: false`, channel latest) |
+| 10  | §9.11 e2e numbers match after restore                             | PASS                                            |
+| 11  | typecheck / lint / test / build                                   | PASS (214 tests)                                |
+
+### What the next phase must know
+
+- This is **v1.0.0** — product is shipped. Schema version still **14**.
+- Backup format v1 zip is the canonical restore input; legacy bare `.db` still accepted.
+- Portable and installed userData are intentionally separate.
+- Frozen identity unchanged: `com.aquanuqi.app` / `Aqua Nuqi` / `aqua-nuqi`.
+- Handover doc: `docs/CLIENT-HANDOVER.md`. Train the client on daily entry, month-end,
+  expenses, and backups; configure secondary backup destination on their machine.
+
+### Escalations / questions for the human
+
+- Purchase a code-signing certificate when budget allows (SmartScreen “More info → Run anyway”
+  remains the interim path).
+- Confirm Windows 11 clean-VM install + auto-update from v0.10.54 → v1.0.x on the client
+  laptop at handover.
+- Fill support contact line in `docs/CLIENT-HANDOVER.md` before delivery.
