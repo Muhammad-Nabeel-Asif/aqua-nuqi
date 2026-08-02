@@ -15,10 +15,15 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "composite": true,
-    "baseUrl": ".",
+    // Vite builds the renderer; tsc only typechecks it. Without this, the
+    // declaration emit that `composite` implies would try to write
+    // src/preload/index.d.ts over the input file of the same name.
+    "noEmit": true,
+    // No `baseUrl`: deprecated in TS 6, removed in TS 7. Since TS 4.1 `paths`
+    // resolve relative to this file, so `./` prefixes are all that is needed.
     "paths": {
-      "@renderer/*": ["src/renderer/src/*"],
-      "@shared/*": ["src/shared/*"]
+      "@renderer/*": ["./src/renderer/src/*"],
+      "@shared/*": ["./src/shared/*"]
     }
   },
   "include": [

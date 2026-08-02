@@ -14,10 +14,12 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "composite": true,
-    "baseUrl": ".",
+    // No `baseUrl`: it is deprecated in TS 6 and removed in 7. Since TS 4.1
+    // `paths` resolve relative to this file, so `./` prefixes are all that is
+    // needed. Nothing imports bare `src/...`, only the aliases below.
     "paths": {
-      "@main/*": ["src/main/*"],
-      "@shared/*": ["src/shared/*"]
+      "@main/*": ["./src/main/*"],
+      "@shared/*": ["./src/shared/*"]
     },
     "outDir": "./out"
   },
