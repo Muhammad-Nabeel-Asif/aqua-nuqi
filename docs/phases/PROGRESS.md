@@ -1503,7 +1503,7 @@ receivables / customer-wise sales.
 
 ## Phase 9 — Backup & Restore, Audit, Hardening and Release
 
-**Date:** 2026-08-02 · **Status:** complete · **package.json:** `1.0.0` · **stable:** pending (review-fixes release after push)
+**Date:** 2026-08-02 · **Status:** complete · **package.json:** `1.0.0` · **stable:** [v1.0.64](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v1.0.64)
 
 ### Built
 
@@ -1626,14 +1626,15 @@ certificate purchase.
 
 ### Release
 
-- Prior stable **[v1.0.61](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v1.0.61)** (pre review-fixes close-out).
-- **Post review-fixes stable:** recorded below after workflow completes (`package.json` `1.0.0`,
-  schema **14**).
+- Stable **[v1.0.64](https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/tag/v1.0.64)** published after Phase 9
+  review-fixes close-out (`package.json` `1.0.0`, CI patch = run number; schema **14**).
+  Earlier stable v1.0.61 remains available as a prior tag.
 - Assets: `Aqua-Nuqi-Setup.exe`, `Aqua-Nuqi-Portable.exe`, `Aqua-Nuqi.AppImage`,
   `Aqua-Nuqi.deb`, `latest.yml`, `latest-linux.yml`.
 - **Windows:** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Setup.exe
 - **Portable:** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi-Portable.exe
 - **Ubuntu:** https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/releases/latest/download/Aqua-Nuqi.AppImage
+- Workflow: https://github.com/Muhammad-Nabeel-Asif/aqua-nuqi/actions/runs/30733352155
 
 ### Review fixes (2026-08-02)
 
@@ -1679,3 +1680,7 @@ Addressed Phase 9 re-review findings (Backup/Audit live crash + high/medium corr
 - **Inspect limitation (Medium):** labelled in UI; sample-data mode kept as documented deviation.
 - Regression tests added/updated for each of the above; integrity ledger/orphan-invoice +
   `buildAuditDiff` money-field coverage.
+
+**Phase 9 closed** with stable **v1.0.64**. Residual human checks at handover: Windows 11 clean
+install + auto-update from prior stable, code-signing certificate when purchased, and support
+contact line in `docs/CLIENT-HANDOVER.md`.
