@@ -1365,17 +1365,20 @@ damaged / lost / scrapped reasons.
   for operator/viewer (no profit, expense, salary, or recurring-expense money).
 - Report hub `/reports` + individual screens; Money reports (P&L, collection, expenses,
   cost-per-bottle) behind `RequireOwner`. PDF/Excel via Phase 4 `exportTable` / `exportExcel`
-  with filter headers.
+  with filter headers. Customer statement **batch** screen at `/reports/customer-statements`.
 - Customer detail overview: last-6-month consumption trend chart.
 - Unit tests (`report.service.test.ts`) with a fixed July-2026 fixture and hand-calculated
   expected paisa totals covering AC1–AC7 plus voids, deposits, walk-ins, salary-once, cache,
-  operator strip, and <2s performance on the fixture.
+  operator strip, custom/MTD accrual bounds, write-offs, schedule-matched missed deliveries,
+  bottle-loss start-of-range, and a ~1000×3yr cold-report perf harness.
 
 ### Migrations added
 
 - `drizzle/0012_report_indexes.sql` — `idx_invoices_issue_date`,
   `idx_invoices_period_status`, `idx_customer_adjustments_date`, `idx_stock_reason_date`
   (schema version **13**).
+- `drizzle/0013_payment_purpose.sql` — `payments.purpose` (`payment` | `deposit`); backfills
+  rows whose notes start with `[deposit]` (schema version **14**).
 
 ### Summary tables for performance
 
@@ -1390,10 +1393,21 @@ In-memory `reportCache` is process-local only — discarded on restart; not pers
 ### Canonical revenue formulas (implemented)
 
 ```
+# Full calendar month/quarter/year windows (from=periodStart first month, to=periodEnd last):
 revenue_accrual(from,to) = Σ invoice_total (status issued|partially_paid|paid,
                            period in months of range, or ad-hoc by issue_date)
                          + Σ walk-in delivery.amount (status=recorded)
-revenue_cash(from,to)    = Σ payments.amount (status=active, not notes LIKE '[deposit]%')
+                         − Σ write_off adjustments (active, adjustment_date in range)
+
+# Custom / MTD (partial) windows:
+revenue_accrual(from,to) = Σ delivery.amount (recorded, non-walk-in, delivery_date in range)
+                         + Σ walk-in delivery.amount in range
+                         + Σ invoice.charges_total (issue_date in range)
+                         − Σ invoice.discount_total (issue_date in range)
+                         − Σ write_off adjustments (adjustment_date in range)
+
+revenue_cash(from,to)    = Σ payments.amount (status=active, purpose='payment',
+                           notes not LIKE '[deposit]%')
                          + Σ walk-in delivery.cash_collected
 expenses_total           = Σ expenses.amount (status=active)  — includes Salaries +
                            Employee Advance once (Phase 6 netting)
@@ -1401,8 +1415,10 @@ net_profit               = revenue − expenses_total
 cost_per_bottle          = expenses_total / Σ delivery.quantity (recorded)
 ```
 
-Deposits (adjustments + `[deposit]`-tagged payments) are listed under P&L “Excluded” and
-never enter net revenue. Walk-ins are in revenue, never in receivables / customer-wise sales.
+Deposits (`purpose='deposit'` payments and `deposit_*` adjustments) are listed under P&L
+“Excluded” and never enter net revenue. Notes that mention “deposit” without
+`purpose='deposit'` are rejected at record time. Walk-ins are in revenue, never in
+receivables / customer-wise sales.
 
 ### IPC channels added
 
@@ -1418,42 +1434,62 @@ never enter net revenue. Walk-ins are in revenue, never in receivables / custome
 
 ### Deviations from the spec
 
-- No persisted report summary table (not needed under 2s on fixture; indexes suffice).
+- No persisted report summary table (not needed under 2s on large harness; indexes suffice).
 - Cash-basis P&L collapses other-charges / discounts lines to 0 (cash is collections only);
-  accrual shows the full water / charges / discounts breakdown.
-- Dashboard “missed scheduled” counts weekday-schedule customers with no recorded entry today
-  (simpler than full Phase 2 missed-delivery reasons).
+  accrual shows the full water / charges / discounts+write-offs breakdown.
+- Dashboard “missed scheduled” uses `scheduleMatchesDate` (weekdays + interval_days) with no
+  recorded entry on `asOf` — not the full Phase 2 missed-delivery reason set.
 
 ### Acceptance verification (hand-calc fixture, July 2026)
 
 | #   | Check                               | Expected (paisa)                            | Result |
 | --- | ----------------------------------- | ------------------------------------------- | ------ |
-| 1   | Dashboard MTD accrual = P&L accrual | 106_000                                     | PASS   |
+| 1   | Dashboard MTD accrual = P&L accrual | 106_000 (month-end; mid-month delivery-MTD) | PASS   |
 | 2   | Accrual vs cash                     | 106_000 vs 61_000                           | PASS   |
 | 3   | Deposits + advances don’t distort   | profit −2_394_000; salary-related 1_000_000 | PASS   |
 | 4   | Salaries once; expenses = list sum  | 2_500_000                                   | PASS   |
 | 5   | Receivables buckets sum = total     | B only 25_000 after A’s deposit credit      | PASS   |
 | 6   | Dashboard bottles = bottles-out     | 2                                           | PASS   |
 | 7   | Cost/bottle = expenses ÷ bottles    | round(2_500_000/18) = 138_889               | PASS   |
-| 8   | PDF/Excel export with filters       | via `exportTable`/`exportExcel`             | wired  |
+| 8   | PDF/Excel export with filters       | Excel writes filter rows; batch statements  | PASS   |
 | 9   | Operator no profit/expense          | `dashboardForRole` + RequireOwner routes    | PASS   |
-| 10  | <2s on fixture                      | cache + indexes                             | PASS   |
-| 11  | typecheck / lint / test / build     | all green (196 tests)                       | PASS   |
+| 10  | <2s on ~1000 cust × 3yr harness     | cold P&L/dashboard/sales                    | PASS   |
+| 11  | typecheck / lint / test / build     | all green (202 tests)                       | PASS   |
 
 ### What the next phase must know
 
-- Schema version **13** after `0012_report_indexes`.
+- Schema version **14** after `0013_payment_purpose`.
 - No new rebuildable summary table from Phase 8. Phase 9 integrity should still rebuild
   `customer_balances` (existing). If a future report is slow, prefer a monthly totals table
   maintained on invoice/payment/expense write with `rebuildReportTotals()`.
 - P&L and dashboard money channels are **owner-only**; do not expose them to operator.
-- Deposit exclusion convention: invoice_total never includes deposits; cash excludes
-  payments whose notes start with `[deposit]`.
+- Deposit exclusion: `payments.purpose = 'deposit'` (notes auto-prefixed `[deposit]`); cash
+  revenue / collection / cash-book exclude those rows. Prefer adjustments for deposit_received
+  when updating `security_deposit_held`.
+- Accrual: full calendar windows use invoice period membership; custom/MTD uses delivery dates
+  (+ charges/discounts by issue_date) so mid-month profit is not inflated.
 - Walk-in revenue is delivery-based (no invoice / no payment row).
 - **Next phase is Phase 9 (Backup, restore, settings polish, integrity).**
+
+### Review fixes (2026-08-02)
+
+- Accrual custom/MTD: delivery-date water + issue_date charges/discounts (full months keep §J
+  period membership); dashboard MTD aligned.
+- `payments.purpose` + UI deposit checkbox; reject notes that mention deposit without purpose;
+  cash filters pushed into SQL.
+- Write-offs reduce P&L `discountsAndWriteOffs` / net revenue.
+- Missed scheduled uses exported `scheduleMatchesDate` (weekdays + interval_days).
+- Excel `exportExcel` writes title + filter rows; report pages pass filters; customer statement
+  batch page on the hub.
+- Bottle-loss `totalOwnedStart` = balances as of day before `from`; week/no-delivery day math
+  uses `addBusinessDays` / `previousEquivalentRange` from expense.service.
+- IPC: `bottlesOut` / `stockMovements` / nested dashboard & trip DTOs no longer `z.any()`;
+  `resolveRange` uses shared contracts.
+- Trip variance action list formats cash with `paisaToDecimalString`.
+- Large-seed cold perf test (~1000 customers × 36 months) asserts <2s.
 
 ### Escalations / questions for the human
 
 - Confirm whether cash P&L should attempt to attribute collections to water vs charges
   (currently total collections only).
-- Optional: on-device overlay install 0.9.x → 0.10.0 (schema 12→13 indexes only).
+- Optional: on-device overlay install through 0.10.x → schema 14 (`purpose` column).

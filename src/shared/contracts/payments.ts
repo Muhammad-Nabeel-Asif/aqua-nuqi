@@ -12,6 +12,9 @@ export const paymentMethodSchema = z.enum([
   'other',
 ])
 
+export const paymentPurposeSchema = z.enum(['payment', 'deposit'])
+export type PaymentPurpose = z.infer<typeof paymentPurposeSchema>
+
 export const paymentAllocationDto = z.object({
   id: z.number().int(),
   paymentId: z.number().int(),
@@ -31,6 +34,7 @@ export const paymentDto = z.object({
   paymentDate: businessDate,
   amount: z.number().int(),
   method: paymentMethodSchema,
+  purpose: paymentPurposeSchema,
   referenceNo: z.string().nullable(),
   receivedByEmployeeId: z.number().int().nullable(),
   notes: z.string().nullable(),
@@ -48,6 +52,7 @@ export const recordPaymentInput = z.object({
   date: businessDate,
   amount: z.number().int().positive(),
   method: paymentMethodSchema,
+  purpose: paymentPurposeSchema.optional().default('payment'),
   referenceNo: z.string().optional().nullable(),
   receivedByEmployeeId: z.number().int().positive().optional().nullable(),
   notes: z.string().optional().nullable(),

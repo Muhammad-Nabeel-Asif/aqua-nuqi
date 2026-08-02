@@ -12,12 +12,18 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
   sales, receivables ageing, collections, expenses, cost-per-bottle, bottle loss, trip variance,
   and stock movement reports. Dashboard answers bottles/cash/revenue/profit/receivables/stock in
   one glance; operators see no profit, expense, or salary figures. Report hub at `/reports` with
-  PDF/Excel export (filters in header). In-memory `reportCache` invalidated via audit write
-  counter. Migration `0012_report_indexes`. Unit tests against a fixed hand-calculated fixture
-  (voids, deposits, advances, walk-ins, salaries-once).
+  PDF/Excel export (filters in header). Customer statement batch at `/reports/customer-statements`.
+  In-memory `reportCache` invalidated via audit write counter. Migrations `0012_report_indexes`,
+  `0013_payment_purpose` (`payments.purpose`). Unit tests against a fixed hand-calculated fixture
+  (voids, deposits, advances, walk-ins, salaries-once, custom/MTD accrual, write-offs, schedule
+  match, ~1000×3yr cold perf).
 
 ### Fixed
 
+- Phase 8 review: custom/MTD accrual uses delivery dates (full months keep invoice period
+  membership); `payments.purpose` + deposit checkbox; write-offs reduce P&L net revenue; missed
+  scheduled uses `scheduleMatchesDate`; Excel export writes filter headers; bottle-loss start =
+  day before range; IPC contracts drop `z.any()`; trip variance cash formatted as Rs.
 - Phase 7 review: trip close writes off filled/empty shortfalls (`van→scrap` lost) so missing
   bottles leave van stock and `totalOwned`; `bottle_variance` uses schema formula
   (loaded − returned − delivered); delivery/opening stock updates append opposite movements

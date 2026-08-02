@@ -69,7 +69,8 @@ function computeAmount(opts: {
   return opts.quantity * opts.rate
 }
 
-function scheduleMatchesDate(
+/** True when the customer's schedule expects a delivery on `date`. */
+export function scheduleMatchesDate(
   schedule: { mode: string; weekdays: string | null; intervalDays: number | null },
   date: string,
   lastDeliveryDate: string | null,

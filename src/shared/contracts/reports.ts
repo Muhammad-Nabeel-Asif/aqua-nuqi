@@ -1,4 +1,11 @@
 import { z } from 'zod'
+import { categoryTotalDto, monthTotalDto, vendorTotalDto } from './expenses'
+import {
+  employeeVarianceSummaryOutput,
+  inventoryBottlesOutOutput,
+  listStockMovementsOutput,
+} from './inventory'
+import { receivableRowDto } from './payments'
 
 const businessDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const period = z.string().regex(/^\d{4}-\d{2}$/)
@@ -16,6 +23,13 @@ export const reportRangeInput = z.object({
   to: businessDate.optional(),
 })
 export type ReportRangeInput = z.infer<typeof reportRangeInput>
+
+export const resolveReportRangeOutput = z.object({
+  from: businessDate,
+  to: businessDate,
+  label: z.string(),
+})
+export type ResolveReportRangeOutput = z.infer<typeof resolveReportRangeOutput>
 
 export const dateRangeInput = z.object({
   from: businessDate,
@@ -207,9 +221,14 @@ export const receivablesAgeingInput = z.object({
 })
 export const receivablesAgeingOutput = z.object({
   asOf: businessDate,
-  outstanding: z.array(z.any()),
-  inCredit: z.array(z.any()),
-  bucketTotals: z.record(z.string(), z.number()),
+  outstanding: z.array(receivableRowDto),
+  inCredit: z.array(receivableRowDto),
+  bucketTotals: z.object({
+    current: z.number().int(),
+    '1-30': z.number().int(),
+    '31-60': z.number().int(),
+    '60+': z.number().int(),
+  }),
   totalOutstanding: z.number().int(),
   totalCredit: z.number().int(),
   byArea: z.array(
@@ -217,7 +236,12 @@ export const receivablesAgeingOutput = z.object({
       areaName: z.string(),
       total: z.number().int(),
       count: z.number().int(),
-      buckets: z.record(z.string(), z.number()),
+      buckets: z.object({
+        current: z.number().int(),
+        '1-30': z.number().int(),
+        '31-60': z.number().int(),
+        '60+': z.number().int(),
+      }),
     }),
   ),
 })
@@ -245,10 +269,10 @@ export const expenseReportInput = dateRangeInput
 export const expenseReportOutput = z.object({
   from: businessDate,
   to: businessDate,
-  byCategory: z.array(z.any()),
+  byCategory: z.array(categoryTotalDto),
   total: z.number().int(),
-  byMonth: z.array(z.any()),
-  topVendors: z.array(z.any()),
+  byMonth: z.array(monthTotalDto),
+  topVendors: z.array(vendorTotalDto),
 })
 
 export const costPerBottleInput = dateRangeInput
@@ -275,6 +299,7 @@ export const bottlesOutReportInput = z.object({
   shortfallOnly: z.boolean().optional(),
   noReturnDays: z.number().int().optional(),
 })
+export const bottlesOutReportOutput = inventoryBottlesOutOutput
 
 export const bottleLossReportInput = dateRangeInput
 export const bottleLossReportOutput = z.object({
@@ -299,9 +324,25 @@ export const tripVarianceReportInput = dateRangeInput
 export const tripVarianceReportOutput = z.object({
   from: businessDate,
   to: businessDate,
-  trips: z.array(z.any()),
-  byEmployee: z.array(z.any()),
-  byMonth: z.array(z.any()),
+  trips: z.array(
+    z.object({
+      tripId: z.number().int(),
+      tripDate: businessDate,
+      employeeId: z.number().int().nullable(),
+      employeeName: z.string().nullable().optional(),
+      cashVariance: z.number().int(),
+      bottleVariance: z.number().int(),
+    }),
+  ),
+  byEmployee: employeeVarianceSummaryOutput.shape.items,
+  byMonth: z.array(
+    z.object({
+      period: period,
+      cashVariance: z.number().int(),
+      bottleVariance: z.number().int(),
+      trips: z.number().int(),
+    }),
+  ),
   totals: z.object({
     cashVariance: z.number().int(),
     bottleVariance: z.number().int(),
@@ -313,6 +354,7 @@ export const stockMovementRegisterInput = dateRangeInput.extend({
   productId: z.number().int().optional(),
   reason: z.string().optional(),
 })
+export const stockMovementRegisterOutput = listStockMovementsOutput
 
 export const dashboardInput = z.object({
   asOf: businessDate.optional(),
@@ -361,10 +403,41 @@ export const dashboardOutput = z.object({
     dailyBottlesThisMonth: z.array(z.object({ date: businessDate, bottles: z.number().int() })),
   }),
   actions: z.object({
-    topOverdue: z.array(z.any()),
-    noDeliveryDays: z.array(z.any()),
-    recurringNotRecorded: z.array(z.any()),
-    tripVariancesThisWeek: z.array(z.any()),
+    topOverdue: z.array(
+      z.object({
+        customerId: z.number().int(),
+        code: z.string(),
+        name: z.string(),
+        balance: z.number().int(),
+        daysOverdue: z.number().int(),
+      }),
+    ),
+    noDeliveryDays: z.array(
+      z.object({
+        customerId: z.number().int(),
+        code: z.string(),
+        name: z.string(),
+        daysSince: z.number().int().nullable(),
+        lastDeliveryDate: businessDate.nullable(),
+      }),
+    ),
+    recurringNotRecorded: z.array(
+      z.object({
+        id: z.number().int(),
+        name: z.string(),
+        amount: z.number().int(),
+        vendorName: z.string().nullable(),
+      }),
+    ),
+    tripVariancesThisWeek: z.array(
+      z.object({
+        tripId: z.number().int(),
+        tripDate: businessDate,
+        employeeName: z.string().nullable(),
+        cashVariance: z.number().int(),
+        bottleVariance: z.number().int(),
+      }),
+    ),
     backupStale: z.boolean(),
     backupLastSuccessAt: z.string().nullable(),
   }),

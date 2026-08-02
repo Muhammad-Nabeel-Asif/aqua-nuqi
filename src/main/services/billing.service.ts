@@ -1167,7 +1167,7 @@ export function createBillingService(
     return rows.reduce((s, r) => s + r.invoiceTotal, 0)
   }
 
-  /** Cash revenue — active payments in period, excluding deposit-tagged notes. */
+  /** Cash revenue — active trading payments in period (deposits are liabilities). */
   function revenueCash(period: string): number {
     assertPeriod(period)
     const pStart = periodStart(period)
@@ -1178,12 +1178,13 @@ export function createBillingService(
       .where(
         and(
           eq(payments.status, 'active'),
+          eq(payments.purpose, 'payment'),
           gte(payments.paymentDate, pStart),
           lte(payments.paymentDate, pEnd),
+          sql`(${payments.notes} IS NULL OR ${payments.notes} NOT LIKE '[deposit]%')`,
         ),
       )
       .all()
-      .filter((p) => !p.notes?.startsWith('[deposit]'))
     return rows.reduce((s, r) => s + r.amount, 0)
   }
 

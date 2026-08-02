@@ -174,6 +174,8 @@ export const exportExcelInput = z.object({
   title: z.string().min(1),
   columns: z.array(exportTableColumnSchema).min(1),
   rows: z.array(z.record(z.union([z.string(), z.number(), z.null()]))),
+  /** Applied filters written above the table so exported sheets are self-explanatory. */
+  filters: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
   sheetName: z.string().optional(),
   fileName: z.string().optional(),
   openAfter: z.boolean().optional(),

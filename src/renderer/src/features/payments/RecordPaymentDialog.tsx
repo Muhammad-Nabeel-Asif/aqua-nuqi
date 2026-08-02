@@ -35,6 +35,7 @@ export function RecordPaymentDialog({
   const [method, setMethod] = useState<(typeof METHODS)[number]>('cash')
   const [referenceNo, setReferenceNo] = useState('')
   const [notes, setNotes] = useState('')
+  const [isDeposit, setIsDeposit] = useState(false)
   const [busy, setBusy] = useState(false)
 
   return (
@@ -64,6 +65,14 @@ export function RecordPaymentDialog({
             ))}
           </select>
         </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={isDeposit}
+            onChange={(e) => setIsDeposit(e.target.checked)}
+          />
+          Security deposit (liability — not revenue)
+        </label>
         <div>
           <Label>Reference</Label>
           <Input value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} />
@@ -87,6 +96,7 @@ export function RecordPaymentDialog({
                     date,
                     amount: Number(toPaisa(amount)),
                     method,
+                    purpose: isDeposit ? 'deposit' : 'payment',
                     referenceNo: referenceNo || null,
                     notes: notes || null,
                   })

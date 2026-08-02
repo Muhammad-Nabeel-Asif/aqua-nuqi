@@ -18,6 +18,7 @@ import { Button } from '@renderer/components/ui/button'
 import { api } from '@renderer/lib/api'
 import { useSessionStore } from '@renderer/stores/session'
 import { todayBusinessDate } from '@shared/date'
+import { paisaToDecimalString } from '@shared/money'
 
 export function DashboardPage() {
   const role = useSessionStore((s) => s.user?.role)
@@ -245,7 +246,7 @@ export function DashboardPage() {
           items={d.actions.tripVariancesThisWeek.map((t) => ({
             key: t.tripId,
             primary: t.employeeName ?? `Trip #${t.tripId}`,
-            secondary: `${t.tripDate} · cash ${t.cashVariance} · bottles ${t.bottleVariance}`,
+            secondary: `${t.tripDate} · cash Rs ${paisaToDecimalString(t.cashVariance)} · bottles ${t.bottleVariance}`,
             to: '/inventory/trips',
           }))}
         />

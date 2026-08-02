@@ -715,8 +715,12 @@ invoice.invoice_total = deliveries_total + charges_total − discount_total + ta
 
 revenue_accrual(period)  = Σ invoices.invoice_total  where status IN ('issued','partially_paid','paid')
                            (drafts excluded; deposits excluded by construction — not in invoice_total)
-revenue_cash(period)     = Σ payments.amount where status='active' and payment_date in period
-                           (excluding deposit receipts)
+                           − Σ write_off adjustments in the period
+                           For **custom / MTD** (partial) date ranges: use Σ delivery.amount in range
+                           (+ invoice charges/discounts by issue_date) instead of full-period invoice
+                           membership — see Phase 8 PROGRESS.
+revenue_cash(period)     = Σ payments.amount where status='active', purpose='payment',
+                           and payment_date in period (deposit-purpose receipts excluded)
 expenses_total(period)   = Σ expenses.amount where status='active' and expense_date in period
                            (includes payroll-generated salary expenses)
 net_profit(period)       = revenue(period) − expenses_total(period)

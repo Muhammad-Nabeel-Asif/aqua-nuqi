@@ -1,4 +1,3 @@
-import { z } from 'zod'
 import { getAppContext } from '@main/app-context'
 import { resolveReportRange } from '@main/services/report.service'
 import {
@@ -7,6 +6,7 @@ import {
   bottleLossReportInput,
   bottleLossReportOutput,
   bottlesOutReportInput,
+  bottlesOutReportOutput,
   collectionReportInput,
   collectionReportOutput,
   costPerBottleInput,
@@ -29,9 +29,12 @@ import {
   profitLossOutput,
   receivablesAgeingInput,
   receivablesAgeingOutput,
+  reportRangeInput,
+  resolveReportRangeOutput,
   salesSummaryInput,
   salesSummaryOutput,
   stockMovementRegisterInput,
+  stockMovementRegisterOutput,
   tripVarianceReportInput,
   tripVarianceReportOutput,
 } from '@shared/contracts'
@@ -154,7 +157,7 @@ export function registerReportHandlers(): void {
   defineHandler({
     channel: 'reports:bottlesOut',
     input: bottlesOutReportInput,
-    output: z.any(),
+    output: bottlesOutReportOutput,
     roles: ['owner', 'operator', 'viewer'],
     handler: (input) => reports().bottlesOutReport(input),
   })
@@ -178,25 +181,15 @@ export function registerReportHandlers(): void {
   defineHandler({
     channel: 'reports:stockMovements',
     input: stockMovementRegisterInput,
-    output: z.any(),
+    output: stockMovementRegisterOutput,
     roles: ['owner', 'operator', 'viewer'],
     handler: (input) => reports().stockMovementRegister(input),
   })
 
   defineHandler({
     channel: 'reports:resolveRange',
-    input: z.object({
-      kind: z.enum(['month', 'quarter', 'year', 'custom']),
-      period: z.string().optional(),
-      year: z.number().int().optional(),
-      from: z.string().optional(),
-      to: z.string().optional(),
-    }),
-    output: z.object({
-      from: z.string(),
-      to: z.string(),
-      label: z.string(),
-    }),
+    input: reportRangeInput,
+    output: resolveReportRangeOutput,
     roles: 'authenticated',
     handler: (input) => resolveReportRange(input),
   })

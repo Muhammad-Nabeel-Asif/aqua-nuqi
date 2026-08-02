@@ -9,6 +9,7 @@ import {
 } from '@main/db/schema'
 import { cachedReport } from '@main/lib/report-cache'
 import {
+  addBusinessDays,
   assertBusinessDate,
   assertPeriod,
   periodEnd,
@@ -16,7 +17,8 @@ import {
   previousPeriod,
   todayBusinessDate,
 } from '@shared/date'
-import type { ExpenseService } from './expense.service'
+import { scheduleMatchesDate } from './delivery.service'
+import { previousEquivalentRange, type ExpenseService } from './expense.service'
 import type { ReceivablesService } from './receivables.service'
 import type { StockService } from './stock.service'
 import type { TripService } from './trip.service'
@@ -175,23 +177,42 @@ function shiftRangeYears(from: string, to: string, years: number): DateRange {
   }
 }
 
-function previousEquivalentRange(from: string, to: string): DateRange {
-  // Same-length window ending the day before `from`.
-  const fromDate = new Date(`${from}T00:00:00`)
-  const toDate = new Date(`${to}T00:00:00`)
-  const days = Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000) + 1
-  const prevTo = new Date(fromDate)
-  prevTo.setDate(prevTo.getDate() - 1)
-  const prevFrom = new Date(prevTo)
-  prevFrom.setDate(prevFrom.getDate() - (days - 1))
-  const fmt = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  return { from: fmt(prevFrom), to: fmt(prevTo) }
-}
-
 function pctChange(current: number, previous: number): number | null {
   if (previous === 0) return current === 0 ? 0 : null
   return Math.round(((current - previous) / Math.abs(previous)) * 1000) / 10
+}
+
+/** True when [from,to] covers complete calendar month(s) end-to-end (preset month/quarter/year). */
+function isFullPeriodAlignedRange(from: string, to: string): boolean {
+  const months = monthsBetween(from, to)
+  if (months.length === 0) return false
+  return from === periodStart(months[0]!) && to === periodEnd(months[months.length - 1]!)
+}
+
+/** Calendar days from `from` to `to` (0 when equal), using YYYY-MM-DD helpers only. */
+function calendarDaysBetween(from: string, to: string): number {
+  assertBusinessDate(from)
+  assertBusinessDate(to)
+  if (to < from) return -calendarDaysBetween(to, from)
+  let n = 0
+  let cur = from
+  while (cur < to) {
+    cur = addBusinessDays(cur, 1)
+    n += 1
+    if (n > 100_000) break
+  }
+  return n
+}
+
+/** ISO weekday Mon=1 … Sun=7 for a business date. */
+function isoWeekday(date: string): number {
+  assertBusinessDate(date)
+  const d = new Date(`${date}T12:00:00`)
+  return d.getDay() === 0 ? 7 : d.getDay()
+}
+
+function startOfIsoWeek(date: string): string {
+  return addBusinessDays(date, -(isoWeekday(date) - 1))
 }
 
 export function createReportService(
@@ -206,41 +227,96 @@ export function createReportService(
 ) {
   // ─── primitives (also used by tests / other reports) ─────────────────────
 
-  /** Accrual water + charges net of discounts for issued invoices overlapping the range via period or issue_date. */
+  function writeOffsInRange(range: DateRange): number {
+    const row = raw
+      .prepare(
+        `SELECT coalesce(sum(amount), 0) AS total
+         FROM customer_adjustments
+         WHERE status = 'active'
+           AND kind = 'write_off'
+           AND adjustment_date >= ? AND adjustment_date <= ?`,
+      )
+      .get(range.from, range.to) as { total: number }
+    return Number(row.total)
+  }
+
+  /**
+   * Accrual breakdown for a date range.
+   * - Full calendar month/quarter/year windows: invoice period membership (§J) + walk-ins.
+   * - Custom / MTD (partial) windows: recorded delivery amounts in-range + invoice charges/discounts
+   *   by issue_date in-range (avoids counting a full-month invoice against a mid-month slice).
+   * Write-offs always reduce discountsAndWriteOffs / netRevenue by adjustment_date.
+   */
   function accrualInvoiceBreakdown(range: DateRange): {
     waterSales: number
     otherCharges: number
     discountsAndWriteOffs: number
     netRevenue: number
   } {
-    const months = monthsBetween(range.from, range.to)
-    const periodPlaceholders = months.map(() => '?').join(',')
-    // Prefer period membership (canonical §J). Also include ad-hoc invoices with null period by issue_date.
-    const row = raw
+    const writeOffs = writeOffsInRange(range)
+    const walk = walkInSales(range)
+
+    if (isFullPeriodAlignedRange(range.from, range.to)) {
+      const months = monthsBetween(range.from, range.to)
+      const periodPlaceholders = months.map(() => '?').join(',')
+      const row = raw
+        .prepare(
+          `SELECT
+             coalesce(sum(deliveries_total), 0) AS water,
+             coalesce(sum(charges_total), 0) AS charges,
+             coalesce(sum(discount_total), 0) AS discounts,
+             coalesce(sum(invoice_total), 0) AS net
+           FROM invoices
+           WHERE status IN ('issued','partially_paid','paid')
+             AND (
+               (period IS NOT NULL AND period IN (${periodPlaceholders || "''"}))
+               OR (period IS NULL AND issue_date >= ? AND issue_date <= ?)
+             )`,
+        )
+        .get(...(months.length ? months : ['__none__']), range.from, range.to) as {
+        water: number
+        charges: number
+        discounts: number
+        net: number
+      }
+      const discountsAndWriteOffs = Number(row.discounts) + writeOffs
+      return {
+        waterSales: Number(row.water),
+        otherCharges: Number(row.charges),
+        discountsAndWriteOffs,
+        netRevenue: Number(row.net) - writeOffs,
+      }
+    }
+
+    // Partial / custom / MTD: delivery-date accrual for water; charges/discounts by issue_date.
+    const deliv = raw
+      .prepare(
+        `SELECT coalesce(sum(d.amount), 0) AS water
+         FROM deliveries d
+         JOIN customers c ON c.id = d.customer_id
+         WHERE d.status = 'recorded'
+           AND c.customer_type != 'walk_in'
+           AND d.delivery_date >= ? AND d.delivery_date <= ?`,
+      )
+      .get(range.from, range.to) as { water: number }
+    const invExtra = raw
       .prepare(
         `SELECT
-           coalesce(sum(deliveries_total), 0) AS water,
            coalesce(sum(charges_total), 0) AS charges,
-           coalesce(sum(discount_total), 0) AS discounts,
-           coalesce(sum(invoice_total), 0) AS net
+           coalesce(sum(discount_total), 0) AS discounts
          FROM invoices
          WHERE status IN ('issued','partially_paid','paid')
-           AND (
-             (period IS NOT NULL AND period IN (${periodPlaceholders || "''"}))
-             OR (period IS NULL AND issue_date >= ? AND issue_date <= ?)
-           )`,
+           AND issue_date >= ? AND issue_date <= ?`,
       )
-      .get(...(months.length ? months : ['__none__']), range.from, range.to) as {
-      water: number
-      charges: number
-      discounts: number
-      net: number
-    }
+      .get(range.from, range.to) as { charges: number; discounts: number }
+    const waterSales = Number(deliv.water) + walk.amount
+    const otherCharges = Number(invExtra.charges)
+    const discountsAndWriteOffs = Number(invExtra.discounts) + writeOffs
     return {
-      waterSales: Number(row.water),
-      otherCharges: Number(row.charges),
-      discountsAndWriteOffs: Number(row.discounts),
-      netRevenue: Number(row.net),
+      waterSales,
+      otherCharges,
+      discountsAndWriteOffs,
+      netRevenue: waterSales + otherCharges - discountsAndWriteOffs,
     }
   }
 
@@ -266,37 +342,32 @@ export function createReportService(
     }
   }
 
-  /** Active payments in range, excluding deposit-tagged notes (liability, not income). */
+  /** Active trading payments in range (purpose=payment); deposits are liabilities. */
   function cashCollections(range: DateRange): number {
-    const rows = db
-      .select()
-      .from(payments)
-      .where(
-        and(
-          eq(payments.status, 'active'),
-          gte(payments.paymentDate, range.from),
-          lte(payments.paymentDate, range.to),
-        ),
+    const row = raw
+      .prepare(
+        `SELECT coalesce(sum(amount), 0) AS total
+         FROM payments
+         WHERE status = 'active'
+           AND payment_date >= ? AND payment_date <= ?
+           AND purpose = 'payment'
+           AND (notes IS NULL OR notes NOT LIKE '[deposit]%')`,
       )
-      .all()
-      .filter((p) => !p.notes?.startsWith('[deposit]'))
-    return rows.reduce((s, r) => s + r.amount, 0)
+      .get(range.from, range.to) as { total: number }
+    return Number(row.total)
   }
 
   function depositTaggedPayments(range: DateRange): number {
-    const rows = db
-      .select()
-      .from(payments)
-      .where(
-        and(
-          eq(payments.status, 'active'),
-          gte(payments.paymentDate, range.from),
-          lte(payments.paymentDate, range.to),
-        ),
+    const row = raw
+      .prepare(
+        `SELECT coalesce(sum(amount), 0) AS total
+         FROM payments
+         WHERE status = 'active'
+           AND payment_date >= ? AND payment_date <= ?
+           AND (purpose = 'deposit' OR notes LIKE '[deposit]%')`,
       )
-      .all()
-      .filter((p) => p.notes?.startsWith('[deposit]'))
-    return rows.reduce((s, r) => s + r.amount, 0)
+      .get(range.from, range.to) as { total: number }
+    return Number(row.total)
   }
 
   function depositAdjustments(range: DateRange): { received: number; refunded: number } {
@@ -337,13 +408,17 @@ export function createReportService(
   }
 
   /**
-   * Canonical accrual revenue for a date range:
-   * invoice totals (issued+) + walk-in sales. Deposits never included.
+   * Canonical accrual revenue for a date range.
+   * Full-period windows: invoice totals + walk-ins (walk-ins not on invoices).
+   * Partial windows: delivery-based net already includes walk-ins.
+   * Deposits never included; write-offs reduce net.
    */
   function revenueAccrual(range: DateRange): number {
     const inv = accrualInvoiceBreakdown(range)
-    const walk = walkInSales(range)
-    return inv.netRevenue + walk.amount
+    if (isFullPeriodAlignedRange(range.from, range.to)) {
+      return inv.netRevenue + walkInSales(range).amount
+    }
+    return inv.netRevenue
   }
 
   /**
@@ -373,10 +448,11 @@ export function createReportService(
 
       if (basis === 'accrual') {
         const inv = accrualInvoiceBreakdown(range)
-        waterSales = inv.waterSales + walk.amount
+        const full = isFullPeriodAlignedRange(range.from, range.to)
+        waterSales = full ? inv.waterSales + walk.amount : inv.waterSales
         otherCharges = inv.otherCharges
         discountsAndWriteOffs = inv.discountsAndWriteOffs
-        netRevenue = inv.netRevenue + walk.amount
+        netRevenue = full ? inv.netRevenue + walk.amount : inv.netRevenue
       } else {
         // Cash basis: total received; breakdown collapses to collections.
         waterSales = cashCollections(range) + walk.cashCollected
@@ -893,10 +969,11 @@ export function createReportService(
             eq(payments.status, 'active'),
             gte(payments.paymentDate, input.from),
             lte(payments.paymentDate, input.to),
+            eq(payments.purpose, 'payment'),
+            sql`(${payments.notes} IS NULL OR ${payments.notes} NOT LIKE '[deposit]%')`,
           ),
         )
         .all()
-        .filter((p) => !p.notes?.startsWith('[deposit]'))
 
       const byMethod = new Map<string, number>()
       const byDay = new Map<string, number>()
@@ -1023,8 +1100,8 @@ export function createReportService(
         )
         .all(input.from, input.to) as Array<{ kind: string; qty: number }>
 
-      const startBal = deps.stock.getBalances(input.from)
-      // getBalances(asOf) is as-of end of that day; for start use day before
+      // getBalances(asOf) is as-of end of that day — start of range = end of day before `from`.
+      const startBal = deps.stock.getBalances(addBusinessDays(input.from, -1))
       const endBal = deps.stock.getBalances(input.to)
 
       const scrapped = scrapRows.reduce((s, r) => s + Number(r.qty), 0)
@@ -1153,24 +1230,36 @@ export function createReportService(
         )
         .get(asOf) as { bottles: number; customers: number; cash: number }
 
-      // Scheduled customers with no entry today (simple: active with weekday schedule matching today)
-      const missedScheduled = Number(
-        (
-          raw
-            .prepare(
-              `SELECT count(*) AS n FROM customers c
-               JOIN customer_schedules s ON s.customer_id = c.id
-               WHERE c.deleted_at IS NULL AND c.status = 'active'
-                 AND c.customer_type != 'walk_in'
-                 AND s.mode = 'weekdays'
-                 AND NOT EXISTS (
-                   SELECT 1 FROM deliveries d
-                   WHERE d.customer_id = c.id AND d.delivery_date = ? AND d.status = 'recorded'
-                 )`,
-            )
-            .get(asOf) as { n: number }
-        ).n,
-      )
+      // Scheduled for asOf (weekdays / interval_days) with no recorded entry that day.
+      const scheduleCandidates = raw
+        .prepare(
+          `SELECT c.id AS customer_id, s.mode, s.weekdays, s.interval_days,
+                  cb.last_delivery_date
+           FROM customers c
+           JOIN customer_schedules s ON s.customer_id = c.id AND s.deleted_at IS NULL
+           LEFT JOIN customer_balances cb ON cb.customer_id = c.id
+           WHERE c.deleted_at IS NULL AND c.status = 'active'
+             AND c.customer_type != 'walk_in'
+             AND s.mode IN ('weekdays', 'interval_days')
+             AND NOT EXISTS (
+               SELECT 1 FROM deliveries d
+               WHERE d.customer_id = c.id AND d.delivery_date = ? AND d.status = 'recorded'
+             )`,
+        )
+        .all(asOf) as Array<{
+        customer_id: number
+        mode: string
+        weekdays: string | null
+        interval_days: number | null
+        last_delivery_date: string | null
+      }>
+      const missedScheduled = scheduleCandidates.filter((c) =>
+        scheduleMatchesDate(
+          { mode: c.mode, weekdays: c.weekdays, intervalDays: c.interval_days },
+          asOf,
+          c.last_delivery_date,
+        ),
+      ).length
 
       const bottles = bottlesDelivered(monthRange)
       const revA = revenueAccrual(monthRange)
@@ -1249,12 +1338,9 @@ export function createReportService(
         )
         .all()
         .map((r) => {
-          let daysSince: number | null = null
-          if (r.lastDeliveryDate) {
-            const a = new Date(`${r.lastDeliveryDate}T00:00:00`)
-            const b = new Date(`${asOf}T00:00:00`)
-            daysSince = Math.round((b.getTime() - a.getTime()) / 86_400_000)
-          }
+          const daysSince = r.lastDeliveryDate
+            ? calendarDaysBetween(r.lastDeliveryDate, asOf)
+            : null
           return {
             customerId: r.customerId,
             code: r.code,
@@ -1276,17 +1362,11 @@ export function createReportService(
           vendorName: r.vendorName,
         }))
 
-      // Week window Mon–Sun containing asOf
-      const asOfDate = new Date(`${asOf}T00:00:00`)
-      const dow = (asOfDate.getDay() + 6) % 7 // Mon=0
-      const weekStart = new Date(asOfDate)
-      weekStart.setDate(weekStart.getDate() - dow)
-      const weekEnd = new Date(weekStart)
-      weekEnd.setDate(weekEnd.getDate() + 6)
-      const fmt = (d: Date) =>
-        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      // Week window Mon–Sun containing asOf (YYYY-MM-DD arithmetic)
+      const weekStart = startOfIsoWeek(asOf)
+      const weekEnd = addBusinessDays(weekStart, 6)
       const weekTrips = deps.trips
-        .list({ from: fmt(weekStart), to: fmt(weekEnd), status: 'closed' })
+        .list({ from: weekStart, to: weekEnd, status: 'closed' })
         .items.filter((t) => t.cashVariance !== 0 || t.bottleVariance !== 0)
         .slice(0, 5)
         .map((t) => ({

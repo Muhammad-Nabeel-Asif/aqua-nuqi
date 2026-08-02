@@ -63,7 +63,7 @@ import { createVehicleService } from './vehicle.service'
  * Bottles delivered = 10 + 5 + 3 = 18
  * Cost/bottle = floor(2_500_000 / 18) = 138_889 (Math.round)
  * Bottles with customers = A: 10−8 = 2; B: 0; walk-in ignored in balances typically
- * Receivables outstanding = 20_000 + 25_000 = 45_000
+ * Receivables outstanding = B only 25_000 (A is in credit after deposit adjustment)
  */
 
 const RATE_A = Number(toPaisa(60))
@@ -79,7 +79,7 @@ const EXPECT = {
   salaryRelated: 1_000_000,
   bottlesDelivered: 18,
   costPerBottle: Math.round(2_500_000 / 18),
-  outstanding: 45_000,
+  outstanding: 25_000,
   bottlesWithCustomers: 2,
   depositExcludedFromAccrual: 100_000, // Rs 1000
   depositPaymentExcluded: 50_000, // Rs 500
@@ -244,14 +244,15 @@ describe('report Phase 8 acceptance', () => {
       owner.id,
     )
 
-    // Deposit-tagged payment (must not enter cash revenue)
+    // Deposit purpose payment (must not enter cash revenue)
     payments.recordPayment(
       {
         customerId: a.id,
         date: '2026-07-21',
         amount: Number(toPaisa(500)),
         method: 'cash',
-        notes: '[deposit] extra bottle security',
+        purpose: 'deposit',
+        notes: 'extra bottle security',
       },
       owner.id,
     )
@@ -461,6 +462,204 @@ describe('report Phase 8 acceptance', () => {
       reports.costPerBottle(july)
       reports.salesSummary({ ...july, groupBy: 'day' })
     }
+    expect(Date.now() - t0).toBeLessThan(2000)
+  })
+
+  it('custom/MTD accrual uses delivery dates, not full-month invoice membership', async () => {
+    const { reports } = await seedFixture()
+    // Custom Jul 15–31 must NOT pull the full July invoice (A days 1–10, B 1–5, walk-in Jul 12).
+    const partial = reports.profitAndLoss({ from: '2026-07-15', to: '2026-07-31' }, 'accrual', {
+      compare: false,
+    })
+    expect(partial.revenue.netRevenue).toBe(0)
+
+    // Mid-month dashboard MTD = delivery amounts through asOf (A:5 + B:5 = 55_000; no walk-in yet)
+    const dashMid = reports.dashboard('2026-07-05')
+    expect(dashMid.month.revenueAccrual).toBe(30_000 + 25_000)
+    const plMid = reports.profitAndLoss({ from: '2026-07-01', to: '2026-07-05' }, 'accrual', {
+      compare: false,
+    })
+    expect(dashMid.month.revenueAccrual).toBe(plMid.revenue.netRevenue)
+
+    // Full-month preset still uses period membership
+    const full = reports.profitAndLoss(july, 'accrual', { compare: false })
+    expect(full.revenue.netRevenue).toBe(EXPECT.accrualRevenue)
+  })
+
+  it('rejects untagged deposit wording; purpose=deposit excluded from cash', async () => {
+    const { reports, payments, customerA, owner } = await seedFixture()
+    expect(() =>
+      payments.recordPayment(
+        {
+          customerId: customerA.id,
+          date: '2026-07-22',
+          amount: Number(toPaisa(100)),
+          method: 'cash',
+          notes: 'bottle security deposit',
+        },
+        owner.id,
+      ),
+    ).toThrow(/purpose to "deposit"/)
+
+    const before = reports.profitAndLoss(july, 'cash', { compare: false }).revenue.netRevenue
+    payments.recordPayment(
+      {
+        customerId: customerA.id,
+        date: '2026-07-22',
+        amount: Number(toPaisa(100)),
+        method: 'cash',
+        purpose: 'deposit',
+        notes: 'bottle security deposit',
+      },
+      owner.id,
+    )
+    const after = reports.profitAndLoss(july, 'cash', { compare: false })
+    expect(after.revenue.netRevenue).toBe(before)
+    expect(after.excluded.depositPaymentsTagged).toBe(EXPECT.depositPaymentExcluded + 10_000)
+  })
+
+  it('write-offs reduce P&L discountsAndWriteOffs and net revenue', async () => {
+    const { reports, adjustments, customerB, owner } = await seedFixture()
+    const before = reports.profitAndLoss(july, 'accrual', { compare: false })
+    adjustments.create(
+      {
+        customerId: customerB.id,
+        adjustmentDate: '2026-07-25',
+        kind: 'write_off',
+        amount: Number(toPaisa(100)),
+        description: 'Bad debt',
+      },
+      owner.id,
+    )
+    const after = reports.profitAndLoss(july, 'accrual', { compare: false })
+    expect(after.revenue.discountsAndWriteOffs).toBe(before.revenue.discountsAndWriteOffs + 10_000)
+    expect(after.revenue.netRevenue).toBe(before.revenue.netRevenue - 10_000)
+  })
+
+  it('missedScheduled only counts customers whose schedule matches asOf', async () => {
+    const { reports, customers, owner } = await setup()
+    // Monday 2026-07-06
+    const satOnly = customers.create(
+      {
+        name: 'Sat Only',
+        rate: RATE_A,
+        joinedOn: '2026-06-01',
+        schedule: { mode: 'weekdays', weekdays: '6', intervalDays: null, defaultQty: 1 },
+      },
+      owner.id,
+    )
+    const monWed = customers.create(
+      {
+        name: 'Mon Wed',
+        rate: RATE_A,
+        joinedOn: '2026-06-01',
+        schedule: { mode: 'weekdays', weekdays: '1,3', intervalDays: null, defaultQty: 1 },
+      },
+      owner.id,
+    )
+    void satOnly
+    const dash = reports.dashboard('2026-07-06')
+    // Saturday-only customer must NOT count as missed on Monday; Mon/Wed does.
+    expect(dash.today.missedScheduled).toBe(1)
+    void monWed
+  })
+
+  it('bottle loss start owned is end of day before from', async () => {
+    const { reports, stock, owner } = await setup()
+    stock.recordOpeningStock({
+      date: '2026-06-30',
+      bottleState: 'filled',
+      quantity: 50,
+      userId: owner.id,
+    })
+    stock.recordDamage({
+      date: '2026-07-01',
+      quantity: 2,
+      bottleState: 'filled',
+      fromLocation: 'plant',
+      reason: 'scrapped',
+      notes: 'cracked',
+      userId: owner.id,
+    })
+    const loss = reports.bottleLossReport({ from: '2026-07-01', to: '2026-07-31' })
+    expect(loss.totalOwnedStart).toBe(50)
+    expect(loss.scrapped).toBe(2)
+    expect(loss.totalOwnedEnd).toBe(48)
+    expect(loss.netChangeOwned).toBe(-2)
+  })
+
+  it('performance AC10: cold P&L/dashboard/sales under 2s on ~1000 customers × 3yr', async () => {
+    const { reports, raw } = await setup()
+    const product = raw.prepare(`SELECT id FROM products LIMIT 1`).get() as { id: number }
+    const now = '2026-08-01T00:00:00.000Z'
+    const insertCust = raw.prepare(
+      `INSERT INTO customers (uuid, code, name, customer_type, billing_mode, status, security_deposit_held, opening_balance, opening_bottles, joined_on, created_at, updated_at)
+       VALUES (?, ?, ?, 'residential', 'per_bottle', 'active', 0, 0, 0, '2023-01-01', ?, ?)`,
+    )
+    const insertBal = raw.prepare(
+      `INSERT INTO customer_balances (customer_id, balance, bottles_with_customer, updated_at)
+       VALUES (?, 0, 0, ?)`,
+    )
+    const insertRate = raw.prepare(
+      `INSERT INTO customer_rates (uuid, customer_id, product_id, rate, effective_from, created_at)
+       VALUES (?, ?, ?, 6000, '2023-01-01', ?)`,
+    )
+    const insertDel = raw.prepare(
+      `INSERT INTO deliveries (uuid, customer_id, product_id, delivery_date, quantity, empties_collected, rate, amount, cash_collected, is_free, status, slot_key, created_at, updated_at, created_by)
+       VALUES (?, ?, ?, ?, 1, 1, 6000, 6000, 0, 0, 'recorded', '', ?, ?, 1)`,
+    )
+    const insertInv = raw.prepare(
+      `INSERT INTO invoices (uuid, invoice_no, customer_id, period, period_start, period_end, issue_date, due_date, status, deliveries_qty, deliveries_total, charges_total, discount_total, tax_total, invoice_total, opening_balance, total_payable, paid_total, closing_balance, bottles_with_customer_at_issue, created_at, updated_at, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'issued', 12, 72000, 0, 0, 0, 72000, 0, 72000, 0, 72000, 0, ?, ?, 1)`,
+    )
+
+    raw.exec('BEGIN')
+    try {
+      for (let i = 1; i <= 1000; i++) {
+        const info = insertCust.run(
+          `perf-c-${i}`,
+          `P${String(i).padStart(4, '0')}`,
+          `Perf ${i}`,
+          now,
+          now,
+        )
+        const id = Number(info.lastInsertRowid)
+        insertBal.run(id, now)
+        insertRate.run(`perf-r-${i}`, id, product.id, now)
+        for (let ym = 0; ym < 36; ym++) {
+          const y = 2023 + Math.floor(ym / 12)
+          const m = (ym % 12) + 1
+          const period = `${y}-${String(m).padStart(2, '0')}`
+          const date = `${period}-15`
+          insertDel.run(`perf-d-${i}-${period}`, id, product.id, date, now, now)
+          if (i % 10 === 0) {
+            insertInv.run(
+              `perf-i-${i}-${period}`,
+              `PERF-${i}-${period}`,
+              id,
+              period,
+              `${period}-01`,
+              date,
+              date,
+              date,
+              now,
+              now,
+            )
+          }
+        }
+      }
+      raw.exec('COMMIT')
+    } catch (e) {
+      raw.exec('ROLLBACK')
+      throw e
+    }
+
+    clearReportCache()
+    const range = { from: '2025-01-01', to: '2025-12-31' }
+    const t0 = Date.now()
+    reports.profitAndLoss(range, 'accrual', { compare: false })
+    reports.dashboard('2025-12-15')
+    reports.salesSummary({ ...range, groupBy: 'month' })
     expect(Date.now() - t0).toBeLessThan(2000)
   })
 })

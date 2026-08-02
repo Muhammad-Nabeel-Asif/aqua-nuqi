@@ -1146,10 +1146,11 @@ export function createExpenseService(
           eq(payments.paymentDate, input.date),
           eq(payments.method, 'cash'),
           eq(payments.status, 'active'),
+          eq(payments.purpose, 'payment'),
+          sql`(${payments.notes} IS NULL OR ${payments.notes} NOT LIKE '[deposit]%')`,
         ),
       )
       .all()
-      .filter((p) => !p.notes?.startsWith('[deposit]'))
     const cashExpenses = db
       .select()
       .from(expenses)

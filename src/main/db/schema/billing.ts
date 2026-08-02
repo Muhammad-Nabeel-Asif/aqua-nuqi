@@ -93,6 +93,8 @@ export const payments = sqliteTable(
     referenceNo: text('reference_no'),
     receivedByEmployeeId: integer('received_by_employee_id').references(() => employees.id),
     notes: text('notes'),
+    /** payment = trading receipt; deposit = security deposit liability (excluded from cash revenue). */
+    purpose: text('purpose').notNull().default('payment'),
     status: text('status').notNull().default('active'),
     voidReason: text('void_reason'),
     createdAt: text('created_at').notNull(),
@@ -104,6 +106,7 @@ export const payments = sqliteTable(
       'payments_method_check',
       sql`${t.method} IN ('cash','bank_transfer','jazzcash','easypaisa','cheque','online','other')`,
     ),
+    purposeCheck: check('payments_purpose_check', sql`${t.purpose} IN ('payment','deposit')`),
     statusCheck: check('payments_status_check', sql`${t.status} IN ('active','void')`),
     customerIdx: index('idx_payments_customer').on(t.customerId, t.paymentDate),
     dateIdx: index('idx_payments_date').on(t.paymentDate),

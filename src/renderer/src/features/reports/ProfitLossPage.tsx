@@ -87,6 +87,7 @@ export function ProfitLossPage() {
           title,
           fileName,
           openAfter: true,
+          filters,
           columns,
           rows: exportRows,
         })

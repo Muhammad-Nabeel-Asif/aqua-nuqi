@@ -92,6 +92,13 @@
       "when": 1785604000000,
       "tag": "0012_report_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1785605000000,
+      "tag": "0013_payment_purpose",
+      "breakpoints": true
     }
   ]
 }

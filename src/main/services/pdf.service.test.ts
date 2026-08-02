@@ -327,9 +327,23 @@ describe('pdfService', () => {
         { key: 'qty', header: 'Qty' },
       ],
       rows: [{ code: 'A', qty: 1 }],
+      filters: [
+        { label: 'From', value: '2026-07-01' },
+        { label: 'To', value: '2026-07-31' },
+      ],
     })
     expect(xlsx.path.endsWith('.xlsx')).toBe(true)
     expect(fs.existsSync(xlsx.path)).toBe(true)
+    const XLSX = await import('xlsx')
+    const wb = XLSX.readFile(xlsx.path)
+    const sheet = wb.Sheets[wb.SheetNames[0]!]!
+    const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1 })
+    expect(aoa[0]?.[0]).toBe('Demo excel')
+    expect(String(aoa[1]?.[0])).toContain('From: 2026-07-01')
+    expect(String(aoa[2]?.[0])).toContain('To: 2026-07-31')
+    // Header row after blank separator
+    expect(aoa[4]).toEqual(['Code', 'Qty'])
+    expect(aoa[5]).toEqual(['A', 1])
   })
 
   it('buildInvoicePayload includes logo, phones, address, amountInWords (WYSIWYG)', async () => {

@@ -752,7 +752,12 @@ export function createPdfService(
     const XLSX = await import('xlsx')
     const headers = input.columns.map((c) => c.header)
     const keys = input.columns.map((c) => c.key)
-    const aoa: (string | number | null)[][] = [headers]
+    const aoa: (string | number | null)[][] = [[input.title]]
+    for (const f of input.filters ?? []) {
+      aoa.push([`${f.label}: ${f.value}`])
+    }
+    aoa.push([]) // blank separator under title/filters
+    aoa.push(headers)
     for (const row of input.rows) {
       aoa.push(keys.map((k) => (row[k] === undefined ? null : row[k]!)))
     }

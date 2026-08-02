@@ -21,6 +21,7 @@ const groups: Array<{ title: string; items: ReportItem[] }> = [
       { label: 'Profit & Loss', path: 'profit-loss', ownerOnly: true },
       { label: 'Receivables ageing', path: 'receivables-ageing' },
       { label: 'Collection', path: 'collection', ownerOnly: true },
+      { label: 'Customer statements', path: 'customer-statements' },
       { label: 'Expense report', path: 'expenses', ownerOnly: true },
       { label: 'Cost per bottle', path: 'cost-per-bottle', ownerOnly: true },
     ],

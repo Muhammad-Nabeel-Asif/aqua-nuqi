@@ -31,6 +31,7 @@ import { CollectionReportPage } from './features/reports/CollectionReportPage'
 import { CostPerBottlePage } from './features/reports/CostPerBottlePage'
 import { CustomerActivityPage } from './features/reports/CustomerActivityPage'
 import { CustomerSalesPage } from './features/reports/CustomerSalesPage'
+import { CustomerStatementsPage } from './features/reports/CustomerStatementsPage'
 import { EmployeeDeliveryReportPage } from './features/reports/EmployeeDeliveryReportPage'
 import { ExpenseReportPage } from './features/reports/ExpenseReportPage'
 import { ProfitLossPage } from './features/reports/ProfitLossPage'
@@ -180,6 +181,7 @@ export const router = createHashRouter([
         ),
       },
       { path: 'reports/receivables-ageing', element: <ReceivablesAgeingReportPage /> },
+      { path: 'reports/customer-statements', element: <CustomerStatementsPage /> },
       {
         path: 'reports/collection',
         element: (

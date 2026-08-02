@@ -20,6 +20,8 @@ import type { PeriodService } from './period.service'
 export type PaymentMethod =
   'cash' | 'bank_transfer' | 'jazzcash' | 'easypaisa' | 'cheque' | 'online' | 'other'
 
+export type PaymentPurpose = 'payment' | 'deposit'
+
 export type PaymentAllocationDto = {
   id: number
   paymentId: number
@@ -39,6 +41,7 @@ export type PaymentDto = {
   paymentDate: string
   amount: number
   method: PaymentMethod
+  purpose: PaymentPurpose
   referenceNo: string | null
   receivedByEmployeeId: number | null
   notes: string | null
@@ -55,11 +58,25 @@ export type RecordPaymentInput = {
   date: string
   amount: number
   method: PaymentMethod
+  /** deposit = security deposit liability; excluded from cash revenue / collection reports. */
+  purpose?: PaymentPurpose
   referenceNo?: string | null
   receivedByEmployeeId?: number | null
   notes?: string | null
   /** Manual allocations; if omitted, FIFO to oldest unpaid issued invoices */
   allocations?: Array<{ invoiceId: number; amount: number }>
+}
+
+/** Notes that mention deposit without purpose=deposit are rejected. */
+function notesImplyDeposit(notes: string | null | undefined): boolean {
+  if (!notes) return false
+  return /\bdeposit\b/i.test(notes)
+}
+
+function normalizeDepositNotes(notes: string | null | undefined): string {
+  const trimmed = (notes ?? '').trim()
+  if (trimmed.startsWith('[deposit]')) return trimmed
+  return trimmed ? `[deposit] ${trimmed}` : '[deposit]'
 }
 
 export function createPaymentService(
@@ -117,6 +134,7 @@ export function createPaymentService(
       paymentDate: row.paymentDate,
       amount: row.amount,
       method: row.method as PaymentMethod,
+      purpose: (row.purpose === 'deposit' ? 'deposit' : 'payment') as PaymentPurpose,
       referenceNo: row.referenceNo,
       receivedByEmployeeId: row.receivedByEmployeeId,
       notes: row.notes,
@@ -163,6 +181,15 @@ export function createPaymentService(
     const customer = db.select().from(customers).where(eq(customers.id, input.customerId)).get()
     if (!customer) throw new AppError('NOT_FOUND', 'Customer not found')
 
+    const purpose: PaymentPurpose = input.purpose === 'deposit' ? 'deposit' : 'payment'
+    if (purpose === 'payment' && notesImplyDeposit(input.notes)) {
+      throw new AppError(
+        'VALIDATION_FAILED',
+        'Notes mention a deposit — set purpose to "deposit" (security deposits are liabilities, not revenue)',
+      )
+    }
+    const notes = purpose === 'deposit' ? normalizeDepositNotes(input.notes) : (input.notes ?? null)
+
     let paymentId = 0
     db.transaction((tx) => {
       const receiptNo = allocateReceiptNo(tx)
@@ -176,9 +203,10 @@ export function createPaymentService(
           paymentDate: input.date,
           amount: input.amount,
           method: input.method,
+          purpose,
           referenceNo: input.referenceNo ?? null,
           receivedByEmployeeId: input.receivedByEmployeeId ?? null,
-          notes: input.notes ?? null,
+          notes,
           status: 'active',
           createdAt: now,
           createdBy: userId,
@@ -193,7 +221,7 @@ export function createPaymentService(
         type: 'payment',
         debit: 0,
         credit: input.amount,
-        description: `Payment ${receiptNo}`,
+        description: purpose === 'deposit' ? `Deposit ${receiptNo}` : `Payment ${receiptNo}`,
         refTable: 'payments',
         refId: row.id,
         createdBy: userId,
@@ -202,35 +230,38 @@ export function createPaymentService(
       let remaining = input.amount
       const plan: Array<{ invoiceId: number; amount: number }> = []
 
-      if (input.allocations?.length) {
-        for (const a of input.allocations) {
-          if (a.amount <= 0) continue
-          plan.push({ invoiceId: a.invoiceId, amount: a.amount })
-          remaining -= a.amount
+      // Deposit receipts are liabilities — do not allocate to invoices.
+      if (purpose === 'payment') {
+        if (input.allocations?.length) {
+          for (const a of input.allocations) {
+            if (a.amount <= 0) continue
+            plan.push({ invoiceId: a.invoiceId, amount: a.amount })
+            remaining -= a.amount
+          }
+          if (remaining < 0) {
+            throw new AppError('VALIDATION_FAILED', 'Allocations exceed payment amount')
+          }
+        } else {
+          for (const inv of unpaidInvoicesFifo(input.customerId, tx)) {
+            if (remaining <= 0) break
+            const apply = Math.min(remaining, inv.due)
+            plan.push({ invoiceId: inv.id, amount: apply })
+            remaining -= apply
+          }
         }
-        if (remaining < 0) {
-          throw new AppError('VALIDATION_FAILED', 'Allocations exceed payment amount')
-        }
-      } else {
-        for (const inv of unpaidInvoicesFifo(input.customerId, tx)) {
-          if (remaining <= 0) break
-          const apply = Math.min(remaining, inv.due)
-          plan.push({ invoiceId: inv.id, amount: apply })
-          remaining -= apply
-        }
-      }
 
-      for (const a of plan) {
-        tx.insert(paymentAllocations)
-          .values({
-            paymentId: row.id,
-            invoiceId: a.invoiceId,
-            amount: a.amount,
-            status: 'active',
-          })
-          .run()
-        const inv = tx.select().from(invoices).where(eq(invoices.id, a.invoiceId)).get()!
-        billing.updateInvoicePaid(tx, a.invoiceId, inv.paidTotal + a.amount)
+        for (const a of plan) {
+          tx.insert(paymentAllocations)
+            .values({
+              paymentId: row.id,
+              invoiceId: a.invoiceId,
+              amount: a.amount,
+              status: 'active',
+            })
+            .run()
+          const inv = tx.select().from(invoices).where(eq(invoices.id, a.invoiceId)).get()!
+          billing.updateInvoicePaid(tx, a.invoiceId, inv.paidTotal + a.amount)
+        }
       }
 
       // Unallocated remainder stays as customer credit via the ledger credit already posted.
@@ -250,8 +281,8 @@ export function createPaymentService(
           action: 'create',
           entityTable: 'payments',
           entityId: row.id,
-          summary: `Payment ${receiptNo} of ${input.amount} from ${customer.code}`,
-          after: { paymentId: row.id, amount: input.amount, method: input.method },
+          summary: `${purpose === 'deposit' ? 'Deposit' : 'Payment'} ${receiptNo} of ${input.amount} from ${customer.code}`,
+          after: { paymentId: row.id, amount: input.amount, method: input.method, purpose },
         },
         tx,
       )

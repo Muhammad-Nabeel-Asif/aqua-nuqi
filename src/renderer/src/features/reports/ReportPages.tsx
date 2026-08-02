@@ -96,14 +96,7 @@ export function ReportListPage({
         rows,
       }
       if (kind === 'pdf') await api.pdf.exportTable(input)
-      else
-        await api.pdf.exportExcel({
-          title,
-          fileName: input.fileName,
-          openAfter: true,
-          columns,
-          rows,
-        })
+      else await api.pdf.exportExcel(input)
       toast({ title: `${kind.toUpperCase()} exported`, variant: 'success' })
     } catch (error) {
       toast({
@@ -113,12 +106,10 @@ export function ReportListPage({
       })
     }
   }
-  const chartData = source
-    .slice(0, 24)
-    .map((row) => ({
-      name: String(row.bucket ?? row.period ?? row.date ?? ''),
-      value: Number(row.value ?? row.revenue ?? row.total ?? row.bottles ?? 0) / 100,
-    }))
+  const chartData = source.slice(0, 24).map((row) => ({
+    name: String(row.bucket ?? row.period ?? row.date ?? ''),
+    value: Number(row.value ?? row.revenue ?? row.total ?? row.bottles ?? 0) / 100,
+  }))
   const isProfitLoss = report === 'profitAndLoss'
   return (
     <ReportShell
