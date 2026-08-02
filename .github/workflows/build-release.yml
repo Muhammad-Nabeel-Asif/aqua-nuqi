@@ -30,8 +30,8 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -53,11 +53,11 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # needed for commit-based release notes
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -88,14 +88,14 @@ jobs:
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: node scripts/release-notes.mjs "$APP_VERSION" > RELEASE_NOTES.md
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Aqua-Nuqi-Windows
           path: release/*.exe
           if-no-files-found: error
 
       - name: Create draft release (Windows assets)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ env.APP_VERSION }}
           name: Aqua Nuqi v${{ env.APP_VERSION }}
@@ -117,8 +117,8 @@ jobs:
     needs: build-windows
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -129,7 +129,7 @@ jobs:
       - run: npm ci
       - run: npm run dist:linux
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Aqua-Nuqi-Linux
           path: |
