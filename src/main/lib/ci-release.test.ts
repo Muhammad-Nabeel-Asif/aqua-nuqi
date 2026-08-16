@@ -76,6 +76,7 @@ describe('CI release safety (Phase 0B review)', () => {
     const linux = yml.slice(yml.indexOf('build-linux:'))
     expect(linux).toMatch(/npm run test:smoke:linux/)
     expect(linux).toMatch(/xvfb-run/)
+    expect(linux).toMatch(/continue-on-error:\s*true/)
   })
 
   it('Windows job smokes the portable exe with isolated userData; PR CI does not', () => {

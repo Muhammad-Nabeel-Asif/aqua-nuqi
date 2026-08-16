@@ -1,13 +1,17 @@
 /**
- * Launch a Linux AppImage with an isolated AQUA_NUQI_USER_DATA tree and assert
- * first-run setup is shown. Never touches ~/.config/Aqua Nuqi.
+ * Launch the Linux packaged app with an isolated AQUA_NUQI_USER_DATA tree and
+ * assert first-run setup is shown. Never touches ~/.config/Aqua Nuqi.
+ *
+ * GitHub-hosted runners often lack FUSE, so Playwright cannot launch the
+ * AppImage directly. This checks that an AppImage was built, then launches
+ * release/linux-unpacked (the real Electron binary).
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron } from '@playwright/test'
 
-function findAppImage(): string {
+function requireAppImage(): void {
   const release = path.join(process.cwd(), 'release')
   if (!fs.existsSync(release)) {
     throw new Error('release/ is missing — run npm run dist:linux first')
@@ -16,7 +20,24 @@ function findAppImage(): string {
   if (matches.length === 0) {
     throw new Error('No AppImage found under release/')
   }
-  return path.join(release, matches[0]!)
+}
+
+function findUnpackedLinux(): string {
+  const dir = path.join(process.cwd(), 'release', 'linux-unpacked')
+  if (!fs.existsSync(dir)) {
+    throw new Error(`Packaged Linux dir missing: ${dir}`)
+  }
+  const candidates = ['aqua-nuqi', 'Aqua Nuqi']
+  for (const name of candidates) {
+    const exe = path.join(dir, name)
+    if (fs.existsSync(exe)) return exe
+  }
+  const files = fs.readdirSync(dir).filter((name) => {
+    const st = fs.statSync(path.join(dir, name))
+    return st.isFile() && (st.mode & 0o111) !== 0 && !name.endsWith('.so')
+  })
+  if (files[0]) return path.join(dir, files[0])
+  throw new Error(`No executable in ${dir}: ${fs.readdirSync(dir).join(', ')}`)
 }
 
 function envRecord(): Record<string, string> {
@@ -30,8 +51,9 @@ function envRecord(): Record<string, string> {
 }
 
 async function main(): Promise<void> {
-  const appImage = findAppImage()
-  fs.chmodSync(appImage, 0o755)
+  requireAppImage()
+  const exe = findUnpackedLinux()
+  fs.chmodSync(exe, 0o755)
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aqua-smoke-linux-'))
   const userData = path.join(root, 'Aqua Nuqi')
   fs.mkdirSync(userData, { recursive: true })
@@ -41,10 +63,10 @@ async function main(): Promise<void> {
   env.CI = '1'
 
   const app = await electron.launch({
-    executablePath: appImage,
+    executablePath: exe,
     args: ['--no-sandbox'],
     env,
-    timeout: 60_000,
+    timeout: 90_000,
   })
 
   try {
@@ -56,7 +78,7 @@ async function main(): Promise<void> {
     if (!hash.includes('#/setup') && !body.includes('Set up a new business')) {
       throw new Error(`Expected first-run setup, hash=${hash} body=${body.slice(0, 400)}`)
     }
-    console.log('✓ AppImage launched with isolated userData; first-run setup visible')
+    console.log('✓ Packaged Linux app launched with isolated userData; first-run setup visible')
   } finally {
     await app.close()
     fs.rmSync(root, { recursive: true, force: true })
