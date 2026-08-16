@@ -148,7 +148,12 @@ export function RecurringExpensesPanel({ categories, onRecordDue }: Props) {
             Define rent, electricity, etc. — due items appear above for one-click confirm.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
+        <Button
+          variant="outline"
+          size="sm"
+          data-testid="recurring-manage"
+          onClick={() => setOpen((v) => !v)}
+        >
           {open ? 'Hide' : 'Manage'}
         </Button>
       </div>
@@ -158,12 +163,18 @@ export function RecurringExpensesPanel({ categories, onRecordDue }: Props) {
           <div className="mb-4 grid grid-cols-2 items-end gap-2 md:grid-cols-7">
             <div>
               <label className="mb-1 block text-xs text-slate-600">Name</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Rent" />
+              <Input
+                data-testid="recurring-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Rent"
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs text-slate-600">Category</label>
               <select
                 className="flex h-10 w-full rounded-md border bg-white px-2 text-sm"
+                data-testid="recurring-category"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : '')}
               >
@@ -179,6 +190,7 @@ export function RecurringExpensesPanel({ categories, onRecordDue }: Props) {
               <label className="mb-1 block text-xs text-slate-600">Amount (Rs)</label>
               <Input
                 inputMode="decimal"
+                data-testid="recurring-amount"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
@@ -212,7 +224,12 @@ export function RecurringExpensesPanel({ categories, onRecordDue }: Props) {
                 onChange={(e) => setNextDueDate(e.target.value)}
               />
             </div>
-            <Button disabled={busy} onClick={() => void create()} className="h-10">
+            <Button
+              disabled={busy}
+              data-testid="recurring-add"
+              onClick={() => void create()}
+              className="h-10"
+            >
               {busy ? '…' : 'Add'}
             </Button>
           </div>

@@ -37,6 +37,7 @@
     "electron.vite.config.ts",
     "drizzle.config.ts",
     "vitest.config.ts",
+    "vitest.renderer.config.ts",
     "scripts/**/*.ts",
     "src/main/**/*",
     "src/preload/**/*",

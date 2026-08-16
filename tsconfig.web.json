@@ -28,6 +28,7 @@
   },
   "include": [
     "src/renderer/src/**/*",
+    "src/renderer/src/**/*.test.tsx",
     "src/renderer/index.html",
     "src/shared/**/*",
     "src/preload/index.d.ts"

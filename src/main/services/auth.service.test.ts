@@ -159,4 +159,42 @@ describe('authService', () => {
     const entries = audit.list({ search: 'Forced logout', limit: 20 })
     expect(entries.items.some((e) => e.summary.includes('driver'))).toBe(true)
   })
+
+  it('lock/unlock with password and PIN; recovery code resets the owner', async () => {
+    const db = getDb()
+    const auth = createAuthService(db, createAuditService(db))
+    await auth.createUser({
+      username: 'owner',
+      displayName: 'Owner',
+      password: 'secret12',
+      role: 'owner',
+    })
+    await auth.login('owner', 'secret12')
+    expect(auth.getSession().locked).toBe(false)
+
+    auth.lock()
+    expect(auth.getSession().locked).toBe(true)
+    await expect(auth.unlock({ password: 'wrongpass' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    })
+    await auth.unlock({ password: 'secret12' })
+    expect(auth.getSession().locked).toBe(false)
+
+    await auth.setPin(auth.getSession().user!.id, '1234', 'secret12')
+    auth.lock()
+    await auth.unlock({ pin: '1234' })
+    expect(auth.getSession().locked).toBe(false)
+
+    const code = await auth.generateRecoveryCode()
+    expect(code).toMatch(/^[A-Z0-9]{4}(-[A-Z0-9]{4}){3}$/)
+    const reset = await auth.resetOwnerWithRecovery({
+      username: 'owner',
+      recoveryCode: code,
+      newPassword: 'newsecret',
+    })
+    expect(reset.username).toBe('owner')
+    await expect(auth.login('owner', 'secret12')).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    const user = await auth.login('owner', 'newsecret')
+    expect(user.username).toBe('owner')
+  })
 })

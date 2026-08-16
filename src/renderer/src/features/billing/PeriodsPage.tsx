@@ -48,6 +48,7 @@ export function PeriodsPage() {
                   {!p.closed ? (
                     <Button
                       size="sm"
+                      data-testid={`period-close-${p.period}`}
                       onClick={() =>
                         void (async () => {
                           try {
@@ -70,6 +71,7 @@ export function PeriodsPage() {
                     <Button
                       size="sm"
                       variant="outline"
+                      data-testid={`period-reopen-${p.period}`}
                       onClick={() =>
                         void (async () => {
                           const reason = await promptDialog({

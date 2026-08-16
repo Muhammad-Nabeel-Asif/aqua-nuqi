@@ -63,9 +63,30 @@ describe('CI release safety (Phase 0B review)', () => {
     expect(qualityBlock).toMatch(/npm run lint/)
     expect(qualityBlock).toMatch(/npm run test/)
     expect(qualityBlock).toMatch(/npm run build/)
+    expect(qualityBlock).toMatch(/npm run test:e2e/)
 
     const check = readCheckWorkflow()
     expect(check).toMatch(/npm run build/)
+    expect(check).toMatch(/npm run test:e2e/)
+    expect(check).toMatch(/xvfb-run/)
+  })
+
+  it('Linux job smokes the AppImage with isolated userData', () => {
+    const yml = readWorkflow()
+    const linux = yml.slice(yml.indexOf('build-linux:'))
+    expect(linux).toMatch(/npm run test:smoke:linux/)
+    expect(linux).toMatch(/xvfb-run/)
+  })
+
+  it('Windows job smokes the portable exe with isolated userData; PR CI does not', () => {
+    const yml = readWorkflow()
+    const windows = yml.slice(yml.indexOf('build-windows:'), yml.indexOf('build-linux:'))
+    expect(windows).toMatch(/npm run dist:win/)
+    expect(windows).toMatch(/npm run test:smoke:win/)
+
+    const check = readCheckWorkflow()
+    expect(check).not.toMatch(/test:smoke:win/)
+    expect(check).not.toMatch(/test:smoke:linux/)
   })
 
   it('Linux artifact upload hard-fails if .deb is missing', () => {

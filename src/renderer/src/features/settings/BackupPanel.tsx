@@ -433,7 +433,7 @@ export function BackupPanel() {
 
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => void saveSettings()}>Save settings</Button>
-        <Button onClick={() => void backupNow()} disabled={busy}>
+        <Button data-testid="backup-now" onClick={() => void backupNow()} disabled={busy}>
           Backup now
         </Button>
         <Button variant="outline" onClick={() => void api.backup.openFolder()}>

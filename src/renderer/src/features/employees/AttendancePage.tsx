@@ -155,6 +155,7 @@ export function AttendancePage() {
           <Input
             className="w-40"
             type="month"
+            data-testid="attendance-period"
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
           />
@@ -189,6 +190,7 @@ export function AttendancePage() {
             size="sm"
             variant="outline"
             disabled={closed}
+            data-testid="attendance-present-month"
             onClick={() => void markPresent({ period })}
           >
             Present month
@@ -243,6 +245,7 @@ export function AttendancePage() {
                           <button
                             type="button"
                             disabled={closed}
+                            data-testid={`att-${cell.date}`}
                             title={`${cell.date}: ${status ? (ATTENDANCE_LABEL[status] ?? status) : 'not set'}`}
                             onMouseDown={(e) => {
                               if (closed || e.button !== 0) return

@@ -28,3 +28,7 @@ jobs:
       - run: npm run lint
       - run: npm run test
       - run: npm run build
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Playwright Electron E2E
+        run: xvfb-run --auto-servernum npm run test:e2e

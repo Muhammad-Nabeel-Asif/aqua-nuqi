@@ -74,7 +74,11 @@ export function PaymentsPage() {
             ? `${q.data.total} payments · total ${formatMoney(q.data.totalAmount as Paisa)}`
             : 'Loading…'
         }
-        actions={<Button onClick={() => setPickerOpen(true)}>Record payment</Button>}
+        actions={
+          <Button data-testid="record-payment" onClick={() => setPickerOpen(true)}>
+            Record payment
+          </Button>
+        }
       />
 
       <div className="mb-4 flex flex-wrap gap-3">
@@ -313,6 +317,7 @@ function CustomerPickDialog({
         <h2 className="text-lg font-semibold">Record payment — pick customer</h2>
         <Input
           autoFocus
+          data-testid="payment-customer-search"
           placeholder="Search name, code, phone…"
           value={q}
           onChange={(e) => setQ(e.target.value)}

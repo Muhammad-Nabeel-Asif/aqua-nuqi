@@ -1,20 +1,11 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { app, dialog } from 'electron'
-import { getAppContext, setAppContext } from '@main/app-context'
-import { closeDatabase, getDb, getRawDb } from '@main/db/client'
-import {
-  getBundledSchemaVersion,
-  resolveMigrationsFolder,
-  runBootMigrations,
-} from '@main/db/migrate'
+import { dialog } from 'electron'
+import { getAppContext } from '@main/app-context'
+import { bootstrapApp } from '@main/bootstrap'
+import { closeDatabase } from '@main/db/client'
 import { readPathConfig, writePathConfig } from '@main/lib/paths'
-import { createAuditService } from '@main/services/audit.service'
-import { createAuthService } from '@main/services/auth.service'
-import { createBackupService, getSessionEncryptionPassword } from '@main/services/backup.service'
-import { createPeriodService } from '@main/services/period.service'
-import { createSettingsService } from '@main/services/settings.service'
 import {
   pickFileInput,
   pickFileOutput,
@@ -29,7 +20,7 @@ import {
 } from '@shared/contracts'
 import { AppError } from '@shared/errors'
 import { assertSetupRequired } from '../access'
-import { defineHandler, setRouterAuth } from '../router'
+import { defineHandler } from '../router'
 
 export function registerSetupHandlers(): void {
   defineHandler({
@@ -131,68 +122,28 @@ export function registerSetupHandlers(): void {
         }
       }
 
-      const migrationsFolder = resolveMigrationsFolder(app.getAppPath(), process.resourcesPath)
-      const outcome = runBootMigrations({
-        paths: ctx.paths,
-        migrationsFolder,
-        appVersion: ctx.appVersion,
-      })
-
-      if (outcome.kind === 'refused_downgrade') {
+      // Rebind the full service graph to the restored DB. A partial rebuild left
+      // customers/deliveries/etc. holding the closed connection.
+      const result = bootstrapApp()
+      if (!result.ok) {
+        if (result.fatal.type === 'app_older_than_data') {
+          throw new AppError(
+            'APP_OLDER_THAN_DATA',
+            `This version of Aqua Nuqi is older than your data (schema ${result.fatal.schemaVersion}).`,
+            result.fatal,
+          )
+        }
         throw new AppError(
-          'APP_OLDER_THAN_DATA',
-          `This version of Aqua Nuqi is older than your data (schema ${outcome.schemaVersion}).`,
-          outcome,
+          'INTERNAL',
+          'Restore succeeded but the app failed to reopen the database',
         )
       }
 
-      const db = getDb()
-      const raw = getRawDb()
-      const audit = createAuditService(db)
-      const auth = createAuthService(db, audit)
-      const settings = createSettingsService(db, audit)
-      const period = createPeriodService(db, audit)
-      const backup = createBackupService({
-        db,
-        raw,
-        getBackupFolder: () => (settings.get('backup.folder') as string) || ctx.paths.backupsDir,
-        getSecondaryFolder: () => String(settings.get('backup.secondaryFolder') || ''),
-        getUserData: () => ctx.paths.userData,
-        getDbPath: () => ctx.paths.dbPath,
-        getAppVersion: () => ctx.appVersion,
-        getKeepDaily: () => Number(settings.get('backup.keepDaily') || 14),
-        getKeepWeekly: () => Number(settings.get('backup.keepWeekly') || 8),
-        isEncryptionEnabled: () => Boolean(settings.get('backup.encryptionEnabled')),
-        getEncryptionPassword: () => getSessionEncryptionPassword(),
-      })
-
-      audit.record({
+      getAppContext().audit.record({
         action: 'restore',
         summary: `Restored database from ${input.backupFilePath}`,
         after: { backupFilePath: input.backupFilePath },
       })
-
-      const schemaVersion =
-        outcome.kind === 'migrated'
-          ? outcome.to
-          : outcome.kind === 'fresh' || outcome.kind === 'up_to_date'
-            ? outcome.schemaVersion
-            : getBundledSchemaVersion(migrationsFolder)
-
-      setAppContext({
-        ...ctx,
-        db,
-        raw,
-        auth,
-        settings,
-        audit,
-        period,
-        backup,
-        schemaVersion,
-        setupRequired: !auth.hasAnyUser(),
-        bootFatal: null,
-      })
-      setRouterAuth(auth)
 
       return { ok: true as const }
     },

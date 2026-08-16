@@ -189,6 +189,7 @@ export function MonthMatrixPage() {
         <Input
           type="month"
           className="w-40"
+          data-testid="matrix-period"
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
         />
@@ -316,6 +317,7 @@ export function MonthMatrixPage() {
                         <DeliveryQtyCell
                           value={cell?.quantity ?? null}
                           disabled={locked}
+                          testId={`matrix-${vRow.index}-${day}`}
                           autoFocus={focus != null && focus.row === vRow.index && focus.day === day}
                           className="h-7 w-10 text-xs"
                           onSave={(v) => saveCell(row.customerId, day, v)}

@@ -125,7 +125,12 @@ export function GenerateBillsPage() {
       <div className="mb-4 grid gap-4 rounded-lg border bg-white p-4 md:grid-cols-4">
         <div>
           <Label>Period</Label>
-          <Input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} />
+          <Input
+            type="month"
+            data-testid="billing-period"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+          />
         </div>
         <div>
           <Label>Filter</Label>
@@ -190,7 +195,7 @@ export function GenerateBillsPage() {
         <Button variant="outline" size="sm" onClick={() => toggleAll(false)}>
           Clear
         </Button>
-        <Button disabled={busy} onClick={() => void generate()}>
+        <Button disabled={busy} data-testid="generate-bills-submit" onClick={() => void generate()}>
           Generate selected
         </Button>
         <Button
@@ -208,6 +213,7 @@ export function GenerateBillsPage() {
         {result && (
           <Button
             variant="outline"
+            data-testid="issue-invoices"
             onClick={() =>
               void (async () => {
                 const r = await api.invoices.issueAll(result.invoiceIds)

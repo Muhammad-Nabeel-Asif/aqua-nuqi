@@ -40,6 +40,10 @@ jobs:
       - run: npm run lint
       - run: npm run test
       - run: npm run build
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Playwright Electron E2E
+        run: xvfb-run --auto-servernum npm run test:e2e
 
   # ---------------------------------------------------------------
   # Windows: builds the installer AND creates a DRAFT release.
@@ -80,6 +84,8 @@ jobs:
       - run: npm ci
       - name: Build Windows installer
         run: npm run dist:win
+      - name: Packaged portable smoke
+        run: npm run test:smoke:win
 
       - name: Generate release notes
         id: notes
@@ -128,6 +134,10 @@ jobs:
 
       - run: npm ci
       - run: npm run dist:linux
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Packaged AppImage smoke
+        run: xvfb-run --auto-servernum npm run test:smoke:linux
 
       - uses: actions/upload-artifact@v7
         with:

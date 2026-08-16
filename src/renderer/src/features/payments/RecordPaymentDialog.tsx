@@ -49,7 +49,12 @@ export function RecordPaymentDialog({
         </div>
         <div>
           <Label>Amount (Rs)</Label>
-          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <Input
+            type="number"
+            data-testid="payment-amount"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
         </div>
         <div>
           <Label>Method</Label>
@@ -87,7 +92,8 @@ export function RecordPaymentDialog({
           </Button>
           <Button
             disabled={busy}
-            onClick={() =>
+            data-testid="payment-submit"
+            onClick={() => {
               void (async () => {
                 setBusy(true)
                 try {
@@ -112,7 +118,7 @@ export function RecordPaymentDialog({
                   setBusy(false)
                 }
               })()
-            }
+            }}
           >
             Save
           </Button>

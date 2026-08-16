@@ -13,6 +13,8 @@ type Props = {
   /** Optional row index for keyboard timing / focus polling (daily entry). */
   rowIndex?: number
   col?: 'qty' | 'empties'
+  /** Stable selector for E2E (matrix cells pass this; daily entry uses col+rowIndex). */
+  testId?: string
   onSave: (value: number | null) => Promise<void>
   onMove: (dir: 'up' | 'down' | 'left' | 'right' | 'enter') => void
   onOpenDetail?: () => void
@@ -30,6 +32,7 @@ export function DeliveryQtyCell({
   className,
   rowIndex,
   col,
+  testId,
   onSave,
   onMove,
   onOpenDetail,
@@ -186,6 +189,7 @@ export function DeliveryQtyCell({
         value={draft}
         data-delivery-cell={col ?? 'qty'}
         data-row-index={rowIndex != null ? String(rowIndex) : undefined}
+        data-testid={testId ?? (rowIndex != null && col ? `daily-${col}-${rowIndex}` : undefined)}
         placeholder={placeholder != null && value == null ? String(placeholder) : undefined}
         onChange={(e) => {
           setEditing(true)

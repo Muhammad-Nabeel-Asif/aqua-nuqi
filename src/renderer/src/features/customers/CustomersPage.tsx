@@ -167,7 +167,11 @@ export function CustomersPage() {
       <PageHeader
         title="Customers"
         subtitle={`${query.data?.total ?? 0} customers`}
-        actions={<Button onClick={() => setFormOpen(true)}>New customer</Button>}
+        actions={
+          <Button data-testid="customer-new" onClick={() => setFormOpen(true)}>
+            New customer
+          </Button>
+        }
       />
       <div className="mb-4 flex flex-wrap gap-2">
         <Input

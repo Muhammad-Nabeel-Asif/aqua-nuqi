@@ -82,6 +82,12 @@ module.exports = {
       },
     },
     {
+      files: ['e2e/**/*.ts', 'scripts/smoke-packaged-linux.ts', 'scripts/smoke-packaged-win.ts'],
+      rules: {
+        'no-restricted-imports': 'off',
+      },
+    },
+    {
       files: ['src/renderer/**/*.{ts,tsx}'],
       rules: {
         'no-restricted-imports': [

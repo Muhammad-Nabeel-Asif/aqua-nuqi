@@ -17,33 +17,39 @@ import { isPortableBuild, resolvePortableUserData } from './lib/portable'
 import { showFatalWindow } from './windows/fatal-window'
 import { createMainWindow } from './windows/main-window'
 
-// Single instance
+function resolveUserDataPath(): string {
+  const portableData = resolvePortableUserData()
+  const envUserData = process.env.AQUA_NUQI_USER_DATA?.trim()
+  if (envUserData) {
+    // Explicit override (scripts / E2E / local experiments). Basename must still pass assert.
+    return path.resolve(envUserData)
+  }
+  if (portableData) {
+    // Portable builds keep data beside the exe in a clearly labelled folder —
+    // never shared with the installed version's Roaming\Aqua Nuqi data.
+    return portableData
+  }
+  if (!app.isPackaged) {
+    // `npm run dev` — keep seed/reset data out of the packaged AppImage/Setup folder.
+    return resolveDevUserData()
+  }
+  return resolveCanonicalUserData(app.getPath('appData'))
+}
+
+// Force identity before ready — Linux otherwise uses package.json name (aqua-nuqi)
+// for userData instead of PRODUCT_NAME ("Aqua Nuqi").
+app.setName(PRODUCT_NAME)
+app.setPath('userData', resolveUserDataPath())
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_ID)
+}
+
+// Lock after userData is set so AQUA_NUQI_USER_DATA / portable / dev profiles do not
+// collide with each other (or with a running `npm run dev` while E2E uses a temp dir).
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
-  // Force identity before ready — Linux otherwise uses package.json name (aqua-nuqi)
-  // for userData instead of PRODUCT_NAME ("Aqua Nuqi").
-  app.setName(PRODUCT_NAME)
-  const portableData = resolvePortableUserData()
-  const envUserData = process.env.AQUA_NUQI_USER_DATA?.trim()
-  if (envUserData) {
-    // Explicit override (scripts / local experiments). Basename must still pass assert.
-    app.setPath('userData', path.resolve(envUserData))
-  } else if (portableData) {
-    // Portable builds keep data beside the exe in a clearly labelled folder —
-    // never shared with the installed version's Roaming\Aqua Nuqi data.
-    app.setPath('userData', portableData)
-  } else if (!app.isPackaged) {
-    // `npm run dev` — keep seed/reset data out of the packaged AppImage/Setup folder.
-    app.setPath('userData', resolveDevUserData())
-  } else {
-    app.setPath('userData', resolveCanonicalUserData(app.getPath('appData')))
-  }
-  if (process.platform === 'win32') {
-    app.setAppUserModelId(APP_ID)
-  }
-
   app.on('second-instance', () => {
     const win = BrowserWindow.getAllWindows()[0]
     if (win) {

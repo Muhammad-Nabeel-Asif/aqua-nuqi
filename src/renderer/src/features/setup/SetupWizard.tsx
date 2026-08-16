@@ -147,6 +147,7 @@ export function SetupWizard() {
             <Button
               className="w-full"
               variant="outline"
+              data-testid="setup-saved-recovery"
               onClick={() => {
                 const { user } = useSessionStore.getState()
                 useSessionStore.getState().setSession({
@@ -177,12 +178,17 @@ export function SetupWizard() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
-            <Button className="h-12 justify-start" onClick={() => setPath('new')}>
+            <Button
+              className="h-12 justify-start"
+              data-testid="setup-new-business"
+              onClick={() => setPath('new')}
+            >
               Set up a new business
             </Button>
             <Button
               variant="outline"
               className="h-12 justify-start"
+              data-testid="setup-restore-backup"
               onClick={() => setPath('restore')}
             >
               Restore from a backup
@@ -281,6 +287,7 @@ export function SetupWizard() {
                 <Label>Password (min 8 characters)</Label>
                 <Input
                   type="password"
+                  data-testid="setup-owner-password"
                   value={ownerPassword}
                   onChange={(e) => setOwnerPassword(e.target.value)}
                 />
@@ -289,6 +296,7 @@ export function SetupWizard() {
                 <Label>Confirm password</Label>
                 <Input
                   type="password"
+                  data-testid="setup-owner-password2"
                   value={ownerPassword2}
                   onChange={(e) => setOwnerPassword2(e.target.value)}
                 />
@@ -310,6 +318,7 @@ export function SetupWizard() {
             </Button>
             {step < steps.length - 1 ? (
               <Button
+                data-testid="setup-continue"
                 onClick={() => {
                   if (step === 0 && !businessName.trim()) {
                     setError('Business name is required')
@@ -322,7 +331,7 @@ export function SetupWizard() {
                 Continue
               </Button>
             ) : (
-              <Button disabled={busy} onClick={() => void finishNew()}>
+              <Button disabled={busy} data-testid="setup-finish" onClick={() => void finishNew()}>
                 Finish and sign in
               </Button>
             )}

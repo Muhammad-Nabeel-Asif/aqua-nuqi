@@ -158,6 +158,7 @@ export function LoginPage() {
                 <Label htmlFor="username">Username</Label>
                 <Input
                   id="username"
+                  data-testid="login-username"
                   autoFocus
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -168,20 +169,26 @@ export function LoginPage() {
                 <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
+                  data-testid="login-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
                 />
               </div>
-              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              {error ? (
+                <p className="text-sm text-destructive" data-testid="login-error">
+                  {error}
+                </p>
+              ) : null}
               <div className="flex flex-col gap-3">
-                <Button type="submit" className="w-full" disabled={busy}>
+                <Button type="submit" className="w-full" disabled={busy} data-testid="login-submit">
                   {t('action.login')}
                 </Button>
                 <p className="text-center">
                   <button
                     type="button"
+                    data-testid="login-recovery-toggle"
                     className="text-xs text-sky-800 underline"
                     onClick={() => {
                       setRecoveryMode(true)

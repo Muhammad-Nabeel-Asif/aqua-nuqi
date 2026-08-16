@@ -1,3 +1,4 @@
+import { BrowserWindow } from 'electron'
 import { getAppContext } from '@main/app-context'
 import {
   changePasswordInput,
@@ -84,6 +85,9 @@ export function registerAuthHandlers(): void {
     roles: 'authenticated',
     handler: () => {
       getAppContext().auth.lock()
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('auth:locked', {})
+      }
       return { ok: true as const }
     },
   })

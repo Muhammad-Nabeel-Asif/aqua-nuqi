@@ -178,7 +178,12 @@ export function CustomerFormDialog({
         </div>
         <Section title="Identity">
           <Field label="Code" value={code} onChange={setCode} disabled={editing} />
-          <Field label="Name" value={form.name} onChange={(v) => set('name', v)} />
+          <Field
+            label="Name"
+            testId="customer-name"
+            value={form.name}
+            onChange={(v) => set('name', v)}
+          />
           <Select
             label="Type"
             value={form.customerType}
@@ -253,6 +258,7 @@ export function CustomerFormDialog({
             !editing ? (
               <Field
                 label="Rate (Rs)"
+                testId="customer-rate"
                 value={form.rate}
                 onChange={(v) => set('rate', v)}
                 type="number"
@@ -377,7 +383,9 @@ export function CustomerFormDialog({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => void save()}>Save customer</Button>
+          <Button data-testid="customer-save" onClick={() => void save()}>
+            Save customer
+          </Button>
         </div>
       </div>
     </div>
@@ -398,6 +406,7 @@ function Field({
   type = 'text',
   disabled,
   hint,
+  testId,
 }: {
   label: string
   value: string | number | null | undefined
@@ -405,12 +414,14 @@ function Field({
   type?: string
   disabled?: boolean
   hint?: string
+  testId?: string
 }) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
       <Input
         type={type}
+        data-testid={testId}
         value={value ?? ''}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}

@@ -18,6 +18,26 @@ PC that holds real client data you care about.
 | Remove Aqua Nuqi completely (Ubuntu)  | [§6 Complete uninstall](#6-ubuntu--complete-uninstall-one-shot)                  |
 | Clear **only** `npm run dev` data     | `npm run db:reset` ([§5](#5-wipe--reset))                                        |
 
+## Tests
+
+```bash
+npm test                 # Vitest: main/services via Electron ABI, then renderer (jsdom) via Node
+npm run test:e2e         # Playwright Electron (builds first; needs xvfb on Linux CI)
+npm run test:e2e:headed  # Same, with a visible window (run npm run build first if you skip test:e2e)
+npm run test:smoke:linux # After dist:linux — AppImage + isolated AQUA_NUQI_USER_DATA
+npm run test:smoke:win   # After dist:win — Aqua-Nuqi-Portable.exe + isolated AQUA_NUQI_USER_DATA (Windows only; not a PR gate)
+```
+
+`npm test` still runs service tests with `ELECTRON_RUN_AS_NODE=1 electron … vitest` so `better-sqlite3` / argon2 match Electron’s ABI. Renderer Testing Library tests then run with Node + jsdom (Electron cannot `require()` current jsdom).
+
+Playwright covers first-run, login, daily qty, **month-matrix keyboard entry**, billing, payments, period lock, backup/restore, roles, session lock, CSV import, attendance, and recurring expenses. Keep `npm run timed:daily-entry` as a **manual** timing check — it is not a CI gate.
+
+Linux E2E uses the same native libs Electron already needs. If `better-sqlite3` ABI errors appear after switching between `npm test` and `npm run dist:*`, use `rebuild:electron` / `rebuild:node`.
+
+Every automated run uses a unique temp `…/Aqua Nuqi` folder via `AQUA_NUQI_USER_DATA`. It never writes to `~/.config/Aqua Nuqi/` or `<repo>/.tmp/Aqua Nuqi/`.
+
+---
+
 |                     | `npm run dev`            | AppImage / `.deb` / Setup.exe                                      |
 | ------------------- | ------------------------ | ------------------------------------------------------------------ |
 | Seed demo customers | Yes — Settings → About   | No (production blocks it)                                          |

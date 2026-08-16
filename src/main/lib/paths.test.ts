@@ -81,6 +81,12 @@ describe('frozen identity', () => {
   it('allows the portable data folder basename', () => {
     expect(() => assertUserDataPath('/tmp/stick/Aqua Nuqi Portable Data')).not.toThrow()
   })
+
+  it('rejects install-dir and resources basenames while allowing Aqua Nuqi', () => {
+    expect(() => assertUserDataPath('/opt/Aqua Nuqi/resources')).toThrow(AppError)
+    expect(() => assertUserDataPath('/opt/Aqua Nuqi/install')).toThrow(AppError)
+    expect(() => assertUserDataPath('/home/user/.config/Aqua Nuqi')).not.toThrow()
+  })
 })
 
 describe('db path safety', () => {
@@ -128,5 +134,15 @@ describe('db path safety', () => {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true })
     }
+  })
+})
+
+describe('main process boot order', () => {
+  it('sets userData before requesting the single-instance lock', () => {
+    const src = fs.readFileSync(path.join(process.cwd(), 'src/main/index.ts'), 'utf8')
+    const setPath = src.indexOf("app.setPath('userData'")
+    const lock = src.indexOf('requestSingleInstanceLock')
+    expect(setPath).toBeGreaterThan(-1)
+    expect(lock).toBeGreaterThan(setPath)
   })
 })

@@ -6,6 +6,14 @@ describe('qtyCellMayTakeFocus', () => {
     expect(qtyCellMayTakeFocus({ tagName: 'INPUT' }, { tagName: 'INPUT' })).toBe(false)
   })
 
+  it('allows moving focus from another qty cell', () => {
+    const otherQty = {
+      tagName: 'INPUT',
+      getAttribute: (name: string) => (name === 'data-delivery-cell' ? 'qty' : null),
+    }
+    expect(qtyCellMayTakeFocus(otherQty, { tagName: 'INPUT' })).toBe(true)
+  })
+
   it('allows focus when nothing else is editing', () => {
     const cell = { tagName: 'INPUT' }
     expect(qtyCellMayTakeFocus(null, cell)).toBe(true)

@@ -310,6 +310,7 @@ export function DailyEntryPage() {
             <Input
               type="date"
               className="w-40"
+              data-testid="daily-date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
             />

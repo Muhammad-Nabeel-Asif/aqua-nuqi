@@ -65,13 +65,19 @@ export function LockOverlay() {
             <Label htmlFor="unlock-password">Password</Label>
             <Input
               id="unlock-password"
+              data-testid="lock-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoFocus
             />
           </div>
-          <Button type="submit" className="w-full" disabled={busy || !password}>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={busy || !password}
+            data-testid="lock-submit"
+          >
             {t('action.unlock')}
           </Button>
         </form>
