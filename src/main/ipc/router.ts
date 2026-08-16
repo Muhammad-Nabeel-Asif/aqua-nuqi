@@ -4,6 +4,7 @@ import { log } from '@main/lib/logger'
 import type { AuthService } from '@main/services/auth.service'
 import type { Role } from '@shared/constants'
 import { AppError, isAppError, type AppErrorPayload } from '@shared/errors'
+import { zodErrorMessage } from '@shared/validation-message'
 import { resolveHandlerAccess } from './access'
 
 export type HandlerContext = {
@@ -43,7 +44,11 @@ export function defineHandler<TInput extends ZodTypeAny, TOutput extends ZodType
     try {
       const parsed = args.input.safeParse(payload ?? {})
       if (!parsed.success) {
-        throw new AppError('VALIDATION_FAILED', 'Invalid request', parsed.error.flatten())
+        throw new AppError(
+          'VALIDATION_FAILED',
+          zodErrorMessage(parsed.error),
+          parsed.error.flatten(),
+        )
       }
 
       const access = resolveHandlerAccess(args.roles, authServiceRef?.getSession() ?? null)

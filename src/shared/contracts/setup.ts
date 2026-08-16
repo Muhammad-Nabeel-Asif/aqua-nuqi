@@ -22,7 +22,10 @@ export const setupCompleteInput = z.object({
   ownerDisplayName: z.string().min(1).max(120),
   ownerPassword: z.string().min(8).max(200),
 })
-export const setupCompleteOutput = z.object({ user: userDto })
+export const setupCompleteOutput = z.object({
+  user: userDto,
+  recoveryCode: z.string(),
+})
 export type SetupCompleteInput = z.infer<typeof setupCompleteInput>
 
 export const setupRestoreInput = z.object({

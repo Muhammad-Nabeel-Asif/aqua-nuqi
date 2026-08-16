@@ -113,6 +113,7 @@ export function BottlesOutPage() {
                 </td>
                 <td className="px-3 py-2">
                   {r.phonePrimary ?? '—'}
+                  {r.whatsappNumber ? ' ' : null}
                   {r.whatsappNumber && (
                     <a
                       className="ml-2 text-sky-700"

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { promptDialog } from '@renderer/components/ConfirmDialog'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
 import { toast } from '@renderer/components/Toast'
@@ -53,7 +53,12 @@ export function ExpenseCategoriesPage() {
       toast({ title: 'System categories cannot be renamed', variant: 'error' })
       return
     }
-    const next = window.prompt('New name', c.name)
+    const next = await promptDialog({
+      title: 'Rename category',
+      label: 'Name',
+      defaultValue: c.name,
+      confirmLabel: 'Rename',
+    })
     if (!next?.trim() || next.trim() === c.name) return
     try {
       await api.expenseCategories.update({ id: c.id, name: next.trim() })
@@ -145,12 +150,7 @@ export function ExpenseCategoriesPage() {
     <div>
       <PageHeader
         title="Expense categories"
-        subtitle="Seed list is a placeholder — adjust once the client confirms their real categories"
-        actions={
-          <Button variant="outline" asChild>
-            <Link to="/expenses">Back to expenses</Link>
-          </Button>
-        }
+        subtitle="Rename these to match how this plant talks about costs"
       />
 
       <div className="mb-6 flex flex-wrap items-end gap-2 rounded-lg border bg-slate-50 p-3">
@@ -256,8 +256,9 @@ export function ExpenseCategoriesPage() {
                   </td>
                   <td className="px-3 py-2 font-medium">
                     {c.name}
+                    {c.isSystem ? ' ' : null}
                     {c.isSystem && (
-                      <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] uppercase text-slate-700">
+                      <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] uppercase text-slate-700">
                         System
                       </span>
                     )}

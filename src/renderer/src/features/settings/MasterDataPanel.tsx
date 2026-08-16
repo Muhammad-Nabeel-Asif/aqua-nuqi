@@ -5,6 +5,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { api } from '@renderer/lib/api'
+import { PRODUCT_KIND_LABEL, plainLabel } from '@renderer/lib/plain-labels'
 import type { AreaDto, ProductDto, RouteDto } from '@shared/contracts'
 import { toPaisa } from '@shared/money'
 
@@ -210,7 +211,7 @@ export function MasterDataPanel() {
               <Row
                 key={item.id}
                 title={`${item.name}${item.isDefault ? ' (default)' : ''}`}
-                subtitle={`${item.sizeLiters ?? '—'} L · Rs ${(item.defaultRate / 100).toFixed(0)} · ${item.kind}`}
+                subtitle={`${item.sizeLiters ?? '—'} L · Rs ${(item.defaultRate / 100).toFixed(0)} · ${plainLabel(PRODUCT_KIND_LABEL, item.kind)}`}
                 onEdit={() => startEdit(item)}
                 onToggle={() => void toggle(item)}
                 active={item.isActive}
@@ -286,7 +287,7 @@ export function MasterDataPanel() {
                   ['returnable_bottle', 'packaged_water', 'equipment', 'rental', 'service'] as const
                 ).map((k) => (
                   <option key={k} value={k}>
-                    {k}
+                    {plainLabel(PRODUCT_KIND_LABEL, k)}
                   </option>
                 ))}
               </select>

@@ -16,16 +16,17 @@ import {
   CircleHelp,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AppLogo } from '@renderer/brand'
 import { api } from '@renderer/lib/api'
+import { backupChipFromStatus } from '@renderer/lib/backup-chip'
 import { t } from '@renderer/lib/i18n'
+import { pushNavHistory } from '@renderer/lib/nav-history'
 import { cn } from '@renderer/lib/utils'
 import { useSessionStore } from '@renderer/stores/session'
 import { useUiStore } from '@renderer/stores/ui'
 import { CommandPalette } from './CommandPalette'
 import { LockOverlay } from './LockOverlay'
-import { OnboardingTour } from './OnboardingTour'
 import { Button } from './ui/button'
 import { UpdateBanner } from './UpdateBanner'
 
@@ -81,7 +82,7 @@ const NAV: NavItem[] = [
   },
   { to: '/expenses', label: t('nav.expenses'), icon: Receipt, roles: ['owner'], phase: 5 },
   { to: '/employees', label: t('nav.employees'), icon: Users, roles: ['owner'], phase: 6 },
-  { to: '/payroll', label: 'Payroll', icon: Wallet, roles: ['owner'], phase: 6 },
+  { to: '/payroll', label: t('nav.payroll'), icon: Wallet, roles: ['owner'], phase: 6 },
   {
     to: '/inventory',
     label: t('nav.inventory'),
@@ -112,7 +113,12 @@ export function AppShell() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
   const setCommandOpen = useUiStore((s) => s.setCommandOpen)
   const navigate = useNavigate()
+  const location = useLocation()
   const [idleMs, setIdleMs] = useState(0)
+
+  useEffect(() => {
+    pushNavHistory(`${location.pathname}${location.search}`)
+  }, [location.pathname, location.search])
 
   const backupQuery = useQuery({
     queryKey: ['backup', 'status'],
@@ -171,20 +177,15 @@ export function AppShell() {
 
   const items = useMemo(() => NAV.filter((n) => user && n.roles.includes(user.role)), [user])
 
-  const backupChip = useMemo(() => {
-    const last = backupQuery.data?.lastSuccessAt
-    const freshnessHours = backupQuery.data?.freshnessHours ?? 24
-    if (!last) return { label: 'No backup yet', tone: 'danger' as const }
-    const ageH = (Date.now() - new Date(last).getTime()) / 3_600_000
-    // Match backup:status isStale (ageMs > threshold) — equal threshold is still fresh.
-    if (ageH <= freshnessHours)
-      return { label: `Backed up ${Math.max(1, Math.round(ageH))}h ago`, tone: 'ok' as const }
-    const days = Math.round(ageH / 24)
-    return {
-      label: days >= 1 ? `No backup for ${days} day${days === 1 ? '' : 's'}` : 'Backup overdue',
-      tone: 'danger' as const,
-    }
-  }, [backupQuery.data])
+  const backupChip = useMemo(
+    () =>
+      backupChipFromStatus({
+        lastSuccessAt: backupQuery.data?.lastSuccessAt,
+        freshnessHours: backupQuery.data?.freshnessHours,
+        nowMs: backupQuery.dataUpdatedAt || undefined,
+      }),
+    [backupQuery.data, backupQuery.dataUpdatedAt],
+  )
 
   async function logout() {
     await api.auth.logout()
@@ -284,7 +285,6 @@ export function AppShell() {
         ]}
       />
       {locked ? <LockOverlay /> : null}
-      <OnboardingTour />
       {/* keep idle tracker referenced to avoid unused lint in future */}
       <span className="hidden">{idleMs}</span>
     </div>

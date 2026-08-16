@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
+import { confirmDialog, promptDialog } from '@renderer/components/ConfirmDialog'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
@@ -8,6 +9,8 @@ import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { RecordPaymentDialog } from '@renderer/features/payments/RecordPaymentDialog'
 import { api } from '@renderer/lib/api'
+import { formatAppError } from '@renderer/lib/app-error-message'
+import { INVOICE_STATUS_LABEL } from '@renderer/lib/plain-labels'
 import {
   InvoiceTemplate,
   type InvoiceTemplateProps,
@@ -50,32 +53,38 @@ export function InvoiceDetailPage() {
   const timeline: Array<{ label: string; at: string | null }> = [
     { label: 'Created (draft)', at: inv.createdAt },
     ...(inv.status !== 'draft'
-      ? [{ label: inv.status === 'void' ? 'Was issued' : 'Issued', at: inv.issueDate }]
+      ? [{ label: inv.status === 'void' ? 'Was sent' : 'Sent', at: inv.issueDate }]
       : []),
     ...(inv.status === 'partially_paid' || inv.status === 'paid'
       ? [{ label: inv.status === 'paid' ? 'Paid in full' : 'Partially paid', at: inv.updatedAt }]
       : []),
     ...(inv.lastSharedAt ? [{ label: 'Shared', at: inv.lastSharedAt }] : []),
     ...(inv.status === 'void'
-      ? [{ label: `Voided${inv.voidReason ? `: ${inv.voidReason}` : ''}`, at: inv.updatedAt }]
+      ? [{ label: `Cancelled${inv.voidReason ? `: ${inv.voidReason}` : ''}`, at: inv.updatedAt }]
       : []),
   ]
 
   async function issue(forceClosedPeriod = false) {
     try {
       await api.invoices.issue(inv!.id, forceClosedPeriod)
-      toast({ title: 'Invoice issued', variant: 'success' })
+      toast({ title: 'Bill sent', variant: 'success' })
       await qc.invalidateQueries({ queryKey: ['invoice', id] })
+      await qc.invalidateQueries({ queryKey: ['invoices'] })
+      await qc.invalidateQueries({ queryKey: ['receivables'] })
     } catch (e) {
       if (e instanceof AppError && e.code === 'PERIOD_LOCKED' && !forceClosedPeriod) {
-        if (window.confirm(`${e.message}\n\nIssue anyway into the closed period?`)) {
-          await issue(true)
-        }
+        const ok = await confirmDialog({
+          title: 'This billing month is locked',
+          description: `${formatAppError(e)} Send this bill anyway into the locked month?`,
+          confirmLabel: 'Send anyway',
+          danger: true,
+        })
+        if (ok) await issue(true)
         return
       }
       toast({
-        title: 'Issue failed',
-        description: e instanceof Error ? e.message : 'Error',
+        title: 'Could not send this bill',
+        description: formatAppError(e),
         variant: 'error',
       })
     }
@@ -84,18 +93,24 @@ export function InvoiceDetailPage() {
   async function voidInvoice(reason: string, forceClosedPeriod = false) {
     try {
       await api.invoices.void(inv!.id, reason, forceClosedPeriod)
-      toast({ title: 'Invoice voided', variant: 'success' })
+      toast({ title: 'Bill cancelled', variant: 'success' })
       await qc.invalidateQueries({ queryKey: ['invoice', id] })
+      await qc.invalidateQueries({ queryKey: ['invoices'] })
+      await qc.invalidateQueries({ queryKey: ['receivables'] })
     } catch (e) {
       if (e instanceof AppError && e.code === 'PERIOD_LOCKED' && !forceClosedPeriod) {
-        if (window.confirm(`${e.message}\n\nVoid anyway in the closed period?`)) {
-          await voidInvoice(reason, true)
-        }
+        const ok = await confirmDialog({
+          title: 'This billing month is locked',
+          description: `${formatAppError(e)} Cancel this bill even though the month is locked?`,
+          confirmLabel: 'Cancel this bill anyway',
+          danger: true,
+        })
+        if (ok) await voidInvoice(reason, true)
         return
       }
       toast({
-        title: 'Void failed',
-        description: e instanceof Error ? e.message : 'Error',
+        title: 'Could not cancel this bill',
+        description: formatAppError(e),
         variant: 'error',
       })
     }
@@ -174,12 +189,12 @@ export function InvoiceDetailPage() {
     <div>
       <PageHeader
         title={inv.invoiceNo}
-        subtitle={`${inv.customerCode} — ${inv.customerName} · ${inv.status}${
+        subtitle={`${inv.customerCode} — ${inv.customerName} · ${INVOICE_STATUS_LABEL[inv.status] ?? inv.status}${
           inv.lastSharedAt ? ' · Shared' : ''
         }`}
         actions={
           <>
-            {inv.status === 'draft' && <Button onClick={() => void issue()}>Issue</Button>}
+            {inv.status === 'draft' && <Button onClick={() => void issue()}>Send this bill</Button>}
             {inv.status !== 'void' && inv.status !== 'draft' && (
               <Button variant="outline" onClick={() => setPayOpen(true)}>
                 Record payment
@@ -189,12 +204,21 @@ export function InvoiceDetailPage() {
               <Button
                 variant="destructive"
                 onClick={() => {
-                  const reason = window.prompt('Reason for voiding this invoice:')
-                  if (!reason?.trim()) return
-                  void voidInvoice(reason.trim())
+                  void (async () => {
+                    const reason = await promptDialog({
+                      title: 'Cancel this bill?',
+                      description:
+                        'Use only if this bill should not count. The customer and month stay the same.',
+                      label: 'Reason',
+                      confirmLabel: 'Cancel this bill',
+                      danger: true,
+                    })
+                    if (!reason?.trim()) return
+                    await voidInvoice(reason.trim())
+                  })()
                 }}
               >
-                Void
+                Cancel this bill
               </Button>
             )}
             <Button disabled={busy} onClick={() => void generatePdf(true)}>
@@ -225,9 +249,6 @@ export function InvoiceDetailPage() {
           </>
         }
       />
-      <Link className="text-sm text-sky-700" to="/billing/invoices">
-        ← Back to invoices
-      </Link>
 
       {waHint ? (
         <div className="mt-3 flex items-start justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">
@@ -247,7 +268,7 @@ export function InvoiceDetailPage() {
             Issue: <DateText value={inv.issueDate} />
           </div>
           <div>Due: {inv.dueDate ? <DateText value={inv.dueDate} /> : '—'}</div>
-          <div>Period: {inv.period ?? 'ad-hoc'}</div>
+          <div>Billing month: {inv.period ?? 'One-off'}</div>
           <div>Bottles at issue: {inv.bottlesWithCustomerAtIssue}</div>
           {inv.pdfPath ? (
             <div className="mt-2 break-all text-xs text-muted-foreground">PDF: {inv.pdfPath}</div>
@@ -371,6 +392,7 @@ export function InvoiceDetailPage() {
           onSaved={() => {
             setPayOpen(false)
             void qc.invalidateQueries({ queryKey: ['invoice', id] })
+            void qc.invalidateQueries({ queryKey: ['receivables'] })
           }}
         />
       )}

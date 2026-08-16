@@ -248,7 +248,7 @@ describe('deliveryService', () => {
         quantity: 1,
         userId: owner.id,
       }),
-    ).toThrowError(/PERIOD_LOCKED|closed/i)
+    ).toThrowError(/PERIOD_LOCKED|closed|locked/i)
   })
 
   it('invoice_id blocks edits with DELIVERY_INVOICED', async () => {

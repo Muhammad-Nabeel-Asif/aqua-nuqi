@@ -4,6 +4,28 @@ All notable changes to Aqua Nuqi. Each phase appends its entry here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Daily entry now links to the only open van even when the driver is not tagged, so closing a trip
+  no longer writes those bottles off as lost.
+- Editing a customer phone no longer voids and re-posts the security deposit or opening bottles.
+- A locked billing month no longer blocks creating a customer when openings and deposit are zero.
+- Profit & Loss no longer treats salary advances as an operating cost.
+- First-run setup keeps the wizard open and shows the recovery code before signing in.
+- Unpaid bills refresh after Send. Ageing uses today when the selected month is still in progress.
+- Leftover `window.prompt` calls (void, PIN, rename, holiday, deactivate) now use in-app dialogs.
+
+### Changed
+
+- Help uses this computer's data path, says bill the open month then lock, and talks about Given /
+  Taken instead of Qty.
+- Plant-owner wording across reports, dashboard, product/vehicle kinds, and skip reasons. Operator
+  screens say Owner only instead of silently bouncing to the dashboard. Bad hashes show a 404, not
+  a developer page.
+- Daily entry and month matrix no longer steal focus into the first qty cell. Back navigation and
+  breadcrumbs work from sub-pages. The first-run onboarding tour is removed.
+- Employee detail can edit name, phone, and photo.
+
 ### Added
 
 - **Brand identity rollout.** The official Aqua Nuqi logo now appears across every customer-facing

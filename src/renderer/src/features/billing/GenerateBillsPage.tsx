@@ -10,14 +10,15 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { api } from '@renderer/lib/api'
+import { billSkipReasonLabel } from '@renderer/lib/plain-labels'
 import type { InvoicePreviewDto } from '@shared/contracts'
-import { currentPeriod, previousPeriod } from '@shared/date'
+import { currentPeriod } from '@shared/date'
 import { AppError } from '@shared/errors'
 import { useBatchPdfExport } from './useBatchPdfExport'
 
 export function GenerateBillsPage() {
   const qc = useQueryClient()
-  const [period, setPeriod] = useState(previousPeriod(currentPeriod()))
+  const [period, setPeriod] = useState(currentPeriod())
   const [mode, setMode] = useState<'all' | 'area' | 'route'>('all')
   const [areaId, setAreaId] = useState<number | ''>('')
   const [routeId, setRouteId] = useState<number | ''>('')
@@ -106,7 +107,7 @@ export function GenerateBillsPage() {
               <Link to="/billing/invoices">Invoice list</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link to="/billing/periods">Close periods</Link>
+              <Link to="/billing/periods">Billing months</Link>
             </Button>
           </>
         }
@@ -211,21 +212,22 @@ export function GenerateBillsPage() {
               void (async () => {
                 const r = await api.invoices.issueAll(result.invoiceIds)
                 toast({
-                  title: `Issued ${r.issued}`,
+                  title: `Sent ${r.issued}`,
                   description: r.errors[0],
                   variant: r.errors.length ? 'error' : 'success',
                 })
                 await qc.invalidateQueries({ queryKey: ['invoices'] })
+                await qc.invalidateQueries({ queryKey: ['receivables'] })
               })()
             }
           >
-            Issue all generated
+            Send all generated bills
           </Button>
         )}
       </div>
 
       <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-        Close the period after billing so the numbers can&apos;t change.{' '}
+        Lock this month after billing so the numbers can&apos;t change.{' '}
         <Button
           size="sm"
           variant="outline"
@@ -311,7 +313,7 @@ export function GenerateBillsPage() {
                     <Money value={r.totalPayable} />
                   </td>
                   <td className="p-2 text-xs text-amber-700">
-                    {r.skipReason ?? r.warnings.join(', ')}
+                    {r.skipReason ? billSkipReasonLabel(r.skipReason) : r.warnings.join(', ')}
                   </td>
                 </tr>
               )

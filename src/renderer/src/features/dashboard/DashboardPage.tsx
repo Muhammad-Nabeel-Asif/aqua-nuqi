@@ -53,7 +53,7 @@ export function DashboardPage() {
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle={`Operational snapshot · ${d.asOf}`}
+        subtitle={`Today at a glance · ${d.asOf}`}
         actions={
           owner ? (
             <select
@@ -61,8 +61,8 @@ export function DashboardPage() {
               value={basis}
               onChange={(e) => setBasis(e.target.value as typeof basis)}
             >
-              <option value="accrual">Accrual (billed)</option>
-              <option value="cash">Cash (received)</option>
+              <option value="accrual">What we billed</option>
+              <option value="cash">What we collected</option>
             </select>
           ) : undefined
         }
@@ -101,7 +101,7 @@ export function DashboardPage() {
           change={d.month.pctChangeBottles}
         />
         <DashStat
-          label={owner ? `Revenue (${basis})` : 'Revenue'}
+          label={owner ? (basis === 'accrual' ? 'What we billed' : 'What we collected') : 'Revenue'}
           value={owner ? <Money value={revenue} /> : '—'}
           change={owner ? d.month.pctChangeRevenueAccrual : null}
         />
@@ -119,21 +119,21 @@ export function DashboardPage() {
       {owner && (
         <p className="mb-4 text-xs text-muted-foreground">
           {basis === 'accrual'
-            ? 'Accrual: counts money you billed this period, whether or not it was paid.'
-            : 'Cash: counts money you actually received this period.'}
+            ? 'What we billed: money on bills this month, even if it has not been paid yet.'
+            : 'What we collected: money that actually came in this month.'}
         </p>
       )}
 
       {/* Row 3 — money and assets */}
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border bg-white p-4">
-          <p className="text-xs text-muted-foreground">Outstanding receivables</p>
+          <p className="text-xs text-muted-foreground">Unpaid bills</p>
           <p className="mt-1 text-xl font-semibold tabular-nums">
             <Money value={d.assets.totalOutstanding} />
           </p>
           <AgeingBar buckets={buckets} total={bucketTotal} />
           <Link className="mt-2 inline-block text-xs text-sky-700 underline" to="/receivables">
-            Open receivables
+            Open unpaid bills
           </Link>
         </div>
         <DashStat
@@ -241,7 +241,7 @@ export function DashboardPage() {
           />
         )}
         <ActionList
-          title="Trip variances this week"
+          title="Van trip differences this week"
           link="/inventory/trips"
           items={d.actions.tripVariancesThisWeek.map((t) => ({
             key: t.tripId,
@@ -285,7 +285,7 @@ export function DashboardPage() {
                 <Link to="/billing/generate">Generate bills</Link>
               </Button>
               <Button variant="outline" asChild>
-                <Link to="/reports/profit-loss">Profit &amp; Loss</Link>
+                <Link to="/reports/profit-loss">Profit</Link>
               </Button>
             </>
           )}

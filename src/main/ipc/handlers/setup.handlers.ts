@@ -91,8 +91,9 @@ export function registerSetupHandlers(): void {
       })
 
       const loggedIn = await ctx.auth.login(input.ownerUsername, input.ownerPassword)
+      const recoveryCode = await ctx.auth.generateRecoveryCode()
       ctx.setupRequired = false
-      return { user: loggedIn }
+      return { user: loggedIn, recoveryCode }
     },
   })
 

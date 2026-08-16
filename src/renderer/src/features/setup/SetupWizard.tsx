@@ -66,7 +66,7 @@ export function SetupWizard() {
     }
     setBusy(true)
     try {
-      const { user } = await api.setup.complete({
+      const { user, recoveryCode: code } = await api.setup.complete({
         businessName,
         address,
         phone,
@@ -79,18 +79,13 @@ export function SetupWizard() {
         ownerDisplayName,
         ownerPassword,
       })
+      // Keep setupRequired true so this wizard is not unmounted before the code is shown.
       useSessionStore.getState().setSession({
         user,
         locked: false,
-        setupRequired: false,
+        setupRequired: true,
       })
-      try {
-        const r = await api.auth.generateRecoveryCode()
-        setRecoveryCode(r.recoveryCode)
-      } catch {
-        // Setup succeeded; recovery can still be generated later in Settings.
-        navigate('/')
-      }
+      setRecoveryCode(code)
     } catch (err) {
       setError(err instanceof AppError ? err.message : 'Setup failed')
     } finally {
@@ -145,7 +140,19 @@ export function SetupWizard() {
             >
               Copy code
             </Button>
-            <Button className="w-full" variant="outline" onClick={() => navigate('/')}>
+            <Button
+              className="w-full"
+              variant="outline"
+              onClick={() => {
+                const { user } = useSessionStore.getState()
+                useSessionStore.getState().setSession({
+                  user,
+                  locked: false,
+                  setupRequired: false,
+                })
+                navigate('/')
+              }}
+            >
               I have saved it — continue
             </Button>
           </CardContent>

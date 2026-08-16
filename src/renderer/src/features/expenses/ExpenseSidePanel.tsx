@@ -196,7 +196,7 @@ export function ExpenseSidePanel({ open, expense, categories, onClose, onSaved, 
             Read-only — source is <strong>{SOURCE_LABELS[expense.source] ?? expense.source}</strong>
             .
             {expense.source === 'payroll' &&
-              ' Edit from Employees → Payroll so profit is not double-counted.'}
+              ' Edit from Employees → Monthly salaries so profit is not double-counted.'}
             {expense.source === 'purchase' && ' Edit from Inventory → Purchases.'}
           </div>
         )}

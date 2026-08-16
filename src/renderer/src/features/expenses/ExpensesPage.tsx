@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { Paperclip } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { promptDialog } from '@renderer/components/ConfirmDialog'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
@@ -29,7 +30,6 @@ type SortBy = 'date' | 'amount' | 'category' | 'vendor'
 export function ExpensesPage() {
   const qc = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
-  const amountRef = useRef<HTMLInputElement>(null)
   const listParentRef = useRef<HTMLDivElement>(null)
   const deepLinkHandled = useRef(false)
 
@@ -143,10 +143,6 @@ export function ExpensesPage() {
     overscan: 12,
   })
 
-  useEffect(() => {
-    amountRef.current?.focus()
-  }, [])
-
   function applyPreset(p: DatePreset) {
     setPreset(p)
     if (p === 'custom') return
@@ -206,7 +202,6 @@ export function ExpensesPage() {
       setQaVendor('')
       toast({ title: 'Expense recorded', variant: 'success' })
       await invalidate()
-      requestAnimationFrame(() => amountRef.current?.focus())
     } catch (e) {
       toast({
         title: e instanceof AppError ? e.message : 'Could not record expense',
@@ -246,7 +241,13 @@ export function ExpensesPage() {
       toast({ title: 'System-generated expenses cannot be voided here', variant: 'error' })
       return
     }
-    const reason = window.prompt('Reason for voiding this expense?')
+    const reason = await promptDialog({
+      title: 'Cancel this expense?',
+      description: 'Use only if this expense was entered by mistake. It stays in history.',
+      label: 'Reason',
+      confirmLabel: 'Cancel expense',
+      danger: true,
+    })
     if (!reason?.trim()) return
     try {
       await api.expenses.void(e.id, reason.trim())
@@ -370,7 +371,7 @@ export function ExpensesPage() {
               <Link to="/expenses/categories">Categories</Link>
             </Button>
             <Button variant="outline" onClick={() => setShowCashBook((v) => !v)}>
-              {showCashBook ? 'Hide cash book' : 'Cash book'}
+              {showCashBook ? 'Hide daily cash count' : 'Daily cash count'}
             </Button>
             <Button variant="outline" onClick={() => void exportRows('excel')}>
               Excel
@@ -444,7 +445,6 @@ export function ExpensesPage() {
         <div>
           <label className="mb-1 block text-xs text-slate-600">Amount (Rs)</label>
           <Input
-            ref={amountRef}
             inputMode="decimal"
             value={qaAmount}
             onChange={(e) => setQaAmount(e.target.value)}
@@ -657,7 +657,7 @@ export function ExpensesPage() {
               />
               <CashStat label="Closing (calc)" value={cashQ.data.closingCash} />
               <CashStat
-                label="Variance"
+                label="Difference"
                 value={cashQ.data.variance ?? 0}
                 tone={
                   cashQ.data.variance == null
@@ -741,11 +741,14 @@ export function ExpensesPage() {
                     <span className="truncate text-slate-600">{e.description ?? '—'}</span>
                     <span className="truncate">{e.vendorName ?? '—'}</span>
                     <span className="text-xs text-slate-500">
-                      {e.paymentMethod}
+                      {e.paymentMethod.replace(/_/g, ' ')}
                       {e.source !== 'manual' && (
-                        <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] text-amber-900">
-                          {SOURCE_LABELS[e.source]}
-                        </span>
+                        <>
+                          {' '}
+                          <span className="rounded bg-amber-100 px-1 text-[10px] text-amber-900">
+                            {SOURCE_LABELS[e.source]}
+                          </span>
+                        </>
                       )}
                     </span>
                     <span className="text-right tabular-nums font-medium">

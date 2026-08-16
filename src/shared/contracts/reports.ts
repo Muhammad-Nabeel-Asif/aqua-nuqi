@@ -69,6 +69,7 @@ export const profitLossOutput = z.object({
     depositsRefunded: z.number().int(),
     depositPaymentsTagged: z.number().int(),
     customerCreditBalances: z.number().int(),
+    employeeAdvances: z.number().int(),
   }),
   expenses: z.array(
     z.object({

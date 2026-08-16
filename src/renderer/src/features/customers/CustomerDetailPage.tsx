@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { confirmDialog } from '@renderer/components/ConfirmDialog'
+import { confirmDialog, promptDialog } from '@renderer/components/ConfirmDialog'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
@@ -12,6 +12,7 @@ import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { api } from '@renderer/lib/api'
+import { CUSTOMER_STATUS_LABEL, CUSTOMER_TYPE_LABEL } from '@renderer/lib/plain-labels'
 import { todayBusinessDate, firstOfNextMonth } from '@shared/date'
 import { AppError } from '@shared/errors'
 import { toPaisa } from '@shared/money'
@@ -40,12 +41,15 @@ export function CustomerDetailPage() {
     if (customer.balance > 0) warnings.push(`outstanding balance`)
     if (customer.bottlesWithCustomer > 0)
       warnings.push(`holds ${customer.bottlesWithCustomer} bottles`)
-    const reason = window.prompt(
-      warnings.length
-        ? `This customer still has ${warnings.join(' and ')}. Enter a reason to deactivate:`
-        : 'Reason for deactivating this customer:',
-      '',
-    )
+    const reason = await promptDialog({
+      title: 'Deactivate this customer?',
+      description: warnings.length
+        ? `This customer still has ${warnings.join(' and ')}. Say why you are deactivating.`
+        : 'Say why you are deactivating this customer.',
+      label: 'Reason',
+      confirmLabel: 'Deactivate',
+      danger: true,
+    })
     if (reason == null) return
     if (!reason.trim()) {
       toast({ title: 'A reason is required', variant: 'error' })
@@ -84,9 +88,6 @@ export function CustomerDetailPage() {
           </>
         }
       />
-      <Link className="text-sm text-sky-700" to="/customers">
-        ← Back to customers
-      </Link>
       <Tabs defaultValue="overview" className="mt-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -100,7 +101,7 @@ export function CustomerDetailPage() {
             <Card title="Profile">
               <dl className="grid grid-cols-2 gap-2 text-sm">
                 <dt className="text-muted-foreground">Type</dt>
-                <dd className="capitalize">{c.customerType}</dd>
+                <dd>{CUSTOMER_TYPE_LABEL[c.customerType] ?? c.customerType}</dd>
                 <dt className="text-muted-foreground">Phone</dt>
                 <dd>
                   {c.phonePrimary ?? '—'}{' '}
@@ -133,7 +134,7 @@ export function CustomerDetailPage() {
                   {c.areaName ?? '—'} / {c.routeName ?? '—'}
                 </dd>
                 <dt className="text-muted-foreground">Status</dt>
-                <dd className="capitalize">{c.status}</dd>
+                <dd>{CUSTOMER_STATUS_LABEL[c.status] ?? c.status}</dd>
                 <dt className="text-muted-foreground">Schedule</dt>
                 <dd>
                   {c.schedule

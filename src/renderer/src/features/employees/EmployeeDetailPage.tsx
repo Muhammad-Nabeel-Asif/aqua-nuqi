@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { confirmDialog, promptDialog } from '@renderer/components/ConfirmDialog'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
@@ -10,7 +11,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { api } from '@renderer/lib/api'
-import type { SalaryType } from '@shared/contracts'
+import type { EmployeeDto, SalaryType } from '@shared/contracts'
 import { todayBusinessDate } from '@shared/date'
 import { AppError } from '@shared/errors'
 import { formatMoney, paisaToDecimalString, toPaisa, type Paisa } from '@shared/money'
@@ -42,6 +43,7 @@ export function EmployeeDetailPage() {
   })
   const [advanceOpen, setAdvanceOpen] = useState(false)
   const [salaryOpen, setSalaryOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
   const employee = employeeQ.data?.item
   if (employeeQ.isLoading) return <div className="p-8">Loading…</div>
   if (!employee) return <div className="p-8 text-red-700">Employee not found.</div>
@@ -51,9 +53,21 @@ export function EmployeeDetailPage() {
       outstandingAdvances > 0
         ? ` This employee has outstanding advances of ${formatMoney(outstandingAdvances as Paisa)}.`
         : ''
-    const leavingDate = window.prompt(`Leaving date (YYYY-MM-DD).${warning}`, todayBusinessDate())
+    const leavingDate = await promptDialog({
+      title: `Deactivate ${name}?`,
+      description: warning.trim() || 'This person will no longer appear on daily routes.',
+      label: 'Leaving date (YYYY-MM-DD)',
+      defaultValue: todayBusinessDate(),
+      confirmLabel: 'Continue',
+    })
     if (!leavingDate) return
-    if (!window.confirm(`Deactivate ${name}?${warning}`)) return
+    const ok = await confirmDialog({
+      title: `Deactivate ${name}?`,
+      description: warning.trim() || undefined,
+      confirmLabel: 'Deactivate',
+      danger: true,
+    })
+    if (!ok) return
     try {
       const result = await api.employees.setStatus({ id, status: 'inactive', leavingDate })
       toast({
@@ -77,25 +91,27 @@ export function EmployeeDetailPage() {
         title={`${employee.code} — ${employee.name}`}
         subtitle={`${employee.role} · ${employee.phone ?? 'No phone'} · ${employee.status}`}
         actions={
-          <Button
-            variant="destructive"
-            disabled={employee.status === 'inactive'}
-            onClick={() => void deactivate(employee.name, employee.outstandingAdvances)}
-          >
-            Deactivate
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              Edit name / phone
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={employee.status === 'inactive'}
+              onClick={() => void deactivate(employee.name, employee.outstandingAdvances)}
+            >
+              Deactivate
+            </Button>
+          </>
         }
       />
-      <Link className="text-sm text-sky-700" to="/employees">
-        ← Back to employees
-      </Link>
       <Tabs defaultValue="overview" className="mt-4">
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="advances">Advances</TabsTrigger>
           <TabsTrigger value="salary">Salary history</TabsTrigger>
-          <TabsTrigger value="payroll">Payroll history</TabsTrigger>
+          <TabsTrigger value="payroll">Monthly salaries</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
         </TabsList>
         <TabsContent value="overview">
@@ -104,6 +120,8 @@ export function EmployeeDetailPage() {
               <dl className="grid grid-cols-2 gap-2 text-sm">
                 <dt className="text-muted-foreground">Role</dt>
                 <dd className="capitalize">{employee.role}</dd>
+                <dt className="text-muted-foreground">Phone</dt>
+                <dd>{employee.phone ?? '—'}</dd>
                 <dt className="text-muted-foreground">CNIC</dt>
                 <dd>{employee.cnic ?? '—'}</dd>
                 <dt className="text-muted-foreground">Joining date</dt>
@@ -188,7 +206,7 @@ export function EmployeeDetailPage() {
           </Panel>
         </TabsContent>
         <TabsContent value="payroll">
-          <Panel title="Payroll history">
+          <Panel title="Monthly salaries">
             <HistoryTable
               headers={['Period', 'Status', 'Net payable', 'Paid']}
               rows={(payrollQ.data?.items ?? []).map((r) => [
@@ -226,7 +244,92 @@ export function EmployeeDetailPage() {
           }}
         />
       ) : null}
+      {editOpen ? (
+        <EditProfile
+          employee={employee}
+          onClose={() => setEditOpen(false)}
+          onSaved={async () => {
+            setEditOpen(false)
+            await qc.invalidateQueries({ queryKey: ['employee', id] })
+            await qc.invalidateQueries({ queryKey: ['employees'] })
+          }}
+        />
+      ) : null}
     </div>
+  )
+}
+
+function EditProfile({
+  employee,
+  onClose,
+  onSaved,
+}: {
+  employee: EmployeeDto
+  onClose: () => void
+  onSaved: () => void | Promise<void>
+}) {
+  const [name, setName] = useState(employee.name)
+  const [phone, setPhone] = useState(employee.phone ?? '')
+  const [busy, setBusy] = useState(false)
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault()
+    if (!name.trim()) return
+    try {
+      setBusy(true)
+      await api.employees.update({
+        id: employee.id,
+        name: name.trim(),
+        phone: phone.trim() || null,
+      })
+      toast({ title: 'Employee updated', variant: 'success' })
+      await onSaved()
+    } catch (err) {
+      toast({
+        title: err instanceof AppError ? err.message : 'Could not update employee',
+        variant: 'error',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function pickPhoto() {
+    const picked = await api.dialog.pickFile({
+      title: 'Choose a photo',
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
+    })
+    if (!picked.path) return
+    try {
+      setBusy(true)
+      await api.employees.uploadPhoto(picked.path, employee.id)
+      toast({ title: 'Photo saved', variant: 'success' })
+      await onSaved()
+    } catch (err) {
+      toast({
+        title: err instanceof AppError ? err.message : 'Could not save photo',
+        variant: 'error',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title="Edit name / phone" onClose={onClose}>
+      <form className="space-y-3" onSubmit={(e) => void save(e)}>
+        <Field label="Name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Phone">
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </Field>
+        <Button type="button" variant="outline" disabled={busy} onClick={() => void pickPhoto()}>
+          {employee.photoPath ? 'Replace photo' : 'Add photo'}
+        </Button>
+        <Actions onClose={onClose} busy={busy} label="Save" />
+      </form>
+    </Modal>
   )
 }
 

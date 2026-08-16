@@ -8,6 +8,7 @@ import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
+import { CUSTOMER_STATUS_LABEL, CUSTOMER_TYPE_LABEL } from '@renderer/lib/plain-labels'
 import type { ListCustomersInput } from '@shared/contracts'
 import { BulkRateDialog } from './BulkRateDialog'
 import { CustomerFormDialog } from './CustomerFormDialog'
@@ -192,7 +193,7 @@ export function CustomersPage() {
           onChange={(value) =>
             setStatus(value ? (value as NonNullable<ListCustomersInput['status']>) : undefined)
           }
-          options={['active', 'paused', 'inactive'].map((x) => [x, x])}
+          options={Object.entries(CUSTOMER_STATUS_LABEL).map(([code, label]) => [code, label])}
           placeholder="All statuses"
         />
         <Select
@@ -200,7 +201,7 @@ export function CustomersPage() {
           onChange={(value) =>
             setType(value ? (value as NonNullable<ListCustomersInput['customerType']>) : undefined)
           }
-          options={['residential', 'commercial', 'walk_in'].map((x) => [x, x])}
+          options={Object.entries(CUSTOMER_TYPE_LABEL).map(([code, label]) => [code, label])}
           placeholder="All types"
         />
         <label className="flex items-center gap-2 self-center text-sm">

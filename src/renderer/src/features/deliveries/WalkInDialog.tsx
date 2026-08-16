@@ -40,7 +40,7 @@ export function WalkInDialog({ open, onClose, date }: Props) {
         notes: notes || null,
       }),
     onSuccess: async () => {
-      toast({ title: 'Walk-in sale recorded', variant: 'success' })
+      toast({ title: 'Counter sale recorded', variant: 'success' })
       await qc.invalidateQueries({ queryKey: ['deliveries'] })
       setQuantity(1)
       setName('')
@@ -63,9 +63,9 @@ export function WalkInDialog({ open, onClose, date }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-semibold">Walk-in / cash sale</h2>
+        <h2 className="text-lg font-semibold">Counter sale</h2>
         <p className="text-sm text-muted-foreground">
-          Recorded against the system WALK-IN customer (not invoiced).
+          Cash sale with no customer account (not billed later).
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div>

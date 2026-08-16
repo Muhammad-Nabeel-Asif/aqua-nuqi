@@ -5,6 +5,7 @@ import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
+import { formatAppError } from '@renderer/lib/app-error-message'
 import { periodEnd, periodStart, todayBusinessDate } from '@shared/date'
 import { defaultMonthPeriod } from './reportRange'
 
@@ -34,6 +35,7 @@ export function CustomerStatementsPage() {
     () => (q.data?.items ?? []).filter((c) => c.customerType !== 'walk_in'),
     [q.data],
   )
+  const byId = useMemo(() => new Map(items.map((c) => [c.id, c])), [items])
 
   function toggle(id: number) {
     setSelected((prev) => {
@@ -58,22 +60,36 @@ export function CustomerStatementsPage() {
       return
     }
     setBusy(true)
-    let ok = 0
-    let failed = 0
+    const errors: string[] = []
+    let lastPath: string | null = null
     try {
       for (const id of selected) {
+        const label = byId.get(id)
+        const who = label ? `${label.code} ${label.name}` : `Customer ${id}`
         try {
-          await api.pdf.generateStatement(id, { from, to, openAfter: false })
-          ok += 1
-        } catch {
-          failed += 1
+          const result = await api.pdf.generateStatement(id, { from, to, openAfter: false })
+          lastPath = result.path
+        } catch (err) {
+          errors.push(`${who}: ${formatAppError(err, 'Could not create this statement')}`)
         }
       }
-      toast({
-        title: `Statements generated: ${ok}`,
-        description: failed ? `${failed} failed` : `Saved under Documents · ${from} → ${to}`,
-        variant: failed ? 'error' : 'success',
-      })
+      const ok = selected.size - errors.length
+      if (errors.length === 0 && lastPath) {
+        toast({
+          title: `Statements generated: ${ok}`,
+          description: `Saved under Documents · Statements · ${from} → ${to}`,
+          variant: 'success',
+        })
+        void api.pdf.showInFolder(lastPath).catch(() => {
+          // folder reveal is optional
+        })
+      } else {
+        toast({
+          title: ok ? `Statements generated: ${ok} · ${errors.length} failed` : 'Statements failed',
+          description: errors.slice(0, 3).join(' · '),
+          variant: 'error',
+        })
+      }
     } finally {
       setBusy(false)
     }
@@ -83,7 +99,7 @@ export function CustomerStatementsPage() {
     <div>
       <PageHeader
         title="Customer statements"
-        subtitle="Batch-print statements for selected customers (Phase 4 template)"
+        subtitle="Tick the customers, then generate PDFs for this month"
         actions={
           <Button disabled={busy || selected.size === 0} onClick={() => void generate()}>
             {busy

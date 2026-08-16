@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { promptDialog } from '@renderer/components/ConfirmDialog'
 import { Money } from '@renderer/components/Money'
 import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
@@ -79,7 +80,12 @@ export function RecurringExpensesPanel({ categories, onRecordDue }: Props) {
   }
 
   async function rename(r: RecurringExpenseDto) {
-    const next = window.prompt('Name', r.name)
+    const next = await promptDialog({
+      title: 'Rename recurring expense',
+      label: 'Name',
+      defaultValue: r.name,
+      confirmLabel: 'Rename',
+    })
     if (!next?.trim() || next.trim() === r.name) return
     try {
       await api.recurringExpenses.update({ id: r.id, name: next.trim() })
@@ -94,7 +100,12 @@ export function RecurringExpensesPanel({ categories, onRecordDue }: Props) {
   }
 
   async function editAmount(r: RecurringExpenseDto) {
-    const next = window.prompt('Expected amount (Rs)', paisaToDecimalString(r.amount))
+    const next = await promptDialog({
+      title: 'Expected amount',
+      label: 'Amount (Rs)',
+      defaultValue: paisaToDecimalString(r.amount),
+      confirmLabel: 'Update amount',
+    })
     if (next == null || !next.trim()) return
     let paisa: number
     try {

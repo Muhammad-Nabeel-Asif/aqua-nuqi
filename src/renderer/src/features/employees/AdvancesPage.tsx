@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { promptDialog } from '@renderer/components/ConfirmDialog'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
@@ -25,22 +26,34 @@ export function AdvancesPage() {
   }
 
   async function waive(id: number) {
-    const reason = window.prompt('Reason for waiving this advance:')
+    const reason = await promptDialog({
+      title: 'Write off this advance?',
+      description: 'The employee will not have to repay this amount. Say why, in a few words.',
+      label: 'Reason',
+      confirmLabel: 'Write off',
+      danger: true,
+    })
     if (!reason?.trim()) return
     try {
       await api.advances.waive(id, reason.trim())
-      toast({ title: 'Advance waived', variant: 'success' })
+      toast({ title: 'Advance written off', variant: 'success' })
       await refresh()
     } catch (err) {
       toast({
-        title: err instanceof AppError ? err.message : 'Could not waive advance',
+        title: err instanceof AppError ? err.message : 'Could not write off this advance',
         variant: 'error',
       })
     }
   }
 
   async function voidAdvance(id: number) {
-    const reason = window.prompt('Reason for voiding this advance:')
+    const reason = await promptDialog({
+      title: 'Cancel this advance?',
+      description: 'Use only if this advance was entered by mistake. It stays in history.',
+      label: 'Reason',
+      confirmLabel: 'Cancel advance',
+      danger: true,
+    })
     if (!reason?.trim()) return
     try {
       await api.advances.void(id, reason.trim())
@@ -65,7 +78,7 @@ export function AdvancesPage() {
               <Link to="/employees">Employees</Link>
             </Button>
             <Button variant="outline" asChild>
-              <Link to="/payroll">Payroll</Link>
+              <Link to="/payroll">Monthly salaries</Link>
             </Button>
           </>
         }
@@ -134,7 +147,7 @@ export function AdvancesPage() {
                     {a.status === 'outstanding' ? (
                       <div className="flex justify-end gap-2">
                         <Button size="sm" variant="outline" onClick={() => void waive(a.id)}>
-                          Waive
+                          Write off
                         </Button>
                         <Button
                           size="sm"

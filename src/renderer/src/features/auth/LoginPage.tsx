@@ -171,19 +171,23 @@ export function LoginPage() {
                 />
               </div>
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
-              <Button type="submit" className="w-full" disabled={busy}>
-                {t('action.login')}
-              </Button>
-              <button
-                type="button"
-                className="w-full text-center text-xs text-sky-800 underline"
-                onClick={() => {
-                  setRecoveryMode(true)
-                  setError(null)
-                }}
-              >
-                Forgot owner password? Use recovery code
-              </button>
+              <div className="flex flex-col gap-3">
+                <Button type="submit" className="w-full" disabled={busy}>
+                  {t('action.login')}
+                </Button>
+                <p className="text-center">
+                  <button
+                    type="button"
+                    className="text-xs text-sky-800 underline"
+                    onClick={() => {
+                      setRecoveryMode(true)
+                      setError(null)
+                    }}
+                  >
+                    Forgot owner password? Use recovery code
+                  </button>
+                </p>
+              </div>
             </form>
           )}
         </CardContent>

@@ -146,23 +146,46 @@ export function createTripService(
   }
 
   /**
-   * Find an open trip matching employee + date for auto-linking deliveries.
-   * Trips are optional — returns null when none match.
+   * Find an open trip to auto-link a delivery. Prefer employee+date, then route+date,
+   * then the only open trip that day (one van out). Ambiguous multi-van days stay unlinked.
    */
+  function findOpenTripForDelivery(opts: {
+    employeeId?: number | null
+    routeId?: number | null
+    date: string
+  }): { id: number; vehicleId: number | null } | null {
+    const open = db
+      .select({
+        id: trips.id,
+        vehicleId: trips.vehicleId,
+        employeeId: trips.employeeId,
+        routeId: trips.routeId,
+      })
+      .from(trips)
+      .where(and(eq(trips.tripDate, opts.date), eq(trips.status, 'open')))
+      .orderBy(desc(trips.id))
+      .all()
+    if (open.length === 0) return null
+    if (opts.employeeId != null) {
+      const byEmp = open.find((t) => t.employeeId === opts.employeeId)
+      if (byEmp) return { id: byEmp.id, vehicleId: byEmp.vehicleId }
+    }
+    if (opts.routeId != null) {
+      const byRoute = open.find((t) => t.routeId === opts.routeId)
+      if (byRoute) return { id: byRoute.id, vehicleId: byRoute.vehicleId }
+    }
+    if (open.length === 1) {
+      const only = open[0]!
+      return { id: only.id, vehicleId: only.vehicleId }
+    }
+    return null
+  }
+
   function findOpenTripForEmployeeDate(
     employeeId: number | null | undefined,
     date: string,
   ): { id: number; vehicleId: number | null } | null {
-    if (employeeId == null) return null
-    const row = db
-      .select({ id: trips.id, vehicleId: trips.vehicleId })
-      .from(trips)
-      .where(
-        and(eq(trips.employeeId, employeeId), eq(trips.tripDate, date), eq(trips.status, 'open')),
-      )
-      .orderBy(desc(trips.id))
-      .get()
-    return row ?? null
+    return findOpenTripForDelivery({ employeeId, date })
   }
 
   function startTrip(input: StartTripInput & { userId?: number | null }): TripDto {
@@ -526,6 +549,7 @@ export function createTripService(
     closeTrip,
     voidTrip,
     findOpenTripForEmployeeDate,
+    findOpenTripForDelivery,
     employeeVarianceSummary,
     cashVarianceForEmployeePeriod,
     linkedTotals,

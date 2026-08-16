@@ -384,4 +384,17 @@ describe('pdfService', () => {
     expect(payload.amountInWords.length).toBeGreaterThan(5)
     expect(payload.amountInWords).toMatch(/Rupees/i)
   })
+
+  it('generates a customer statement PDF into Documents/Statements', async () => {
+    const { customers, pdf, owner } = await setup()
+    const c = customers.create({ name: 'Ali House', rate: Number(toPaisa(80)) }, owner.id)
+    const result = await pdf.generateStatementPdf(
+      c.id,
+      { from: '2026-08-01', to: '2026-08-31' },
+      { userId: owner.id },
+    )
+    expect(fs.existsSync(result.path)).toBe(true)
+    expect(result.path).toMatch(/Statements/)
+    expect(result.path).toMatch(/STMT-/)
+  })
 })

@@ -44,6 +44,7 @@ export type ProfitLossResult = {
     depositsRefunded: number
     depositPaymentsTagged: number
     customerCreditBalances: number
+    employeeAdvances: number
   }
   expenses: Array<{
     categoryId: number
@@ -146,8 +147,8 @@ export type DashboardSnapshot = {
 }
 
 const ACCRUAL_EXPLANATION =
-  'Accrual: counts money you billed this period, whether or not it was paid.'
-const CASH_EXPLANATION = 'Cash: counts money you actually received this period.'
+  'What we billed: money on bills this month, even if it has not been paid yet.'
+const CASH_EXPLANATION = 'What we collected: money that actually came in this month.'
 
 function monthsBetween(from: string, to: string): string[] {
   assertBusinessDate(from)
@@ -392,7 +393,10 @@ export function createReportService(
   }
 
   function expensesTotal(range: DateRange): number {
-    return deps.expenses.summaryByCategory(range.from, range.to).total
+    const summary = deps.expenses.summaryByCategory(range.from, range.to)
+    return summary.items
+      .filter((i) => i.categoryName !== 'Employee Advance')
+      .reduce((s, i) => s + i.total, 0)
   }
 
   function bottlesDelivered(range: DateRange): number {
@@ -472,7 +476,12 @@ export function createReportService(
       }))
       // Largest first
       expenseRows.sort((a, b) => b.total - a.total)
-      const totalExp = catSummary.total
+      const advanceTotal = expenseRows
+        .filter((e) => e.isEmployeeAdvance)
+        .reduce((s, e) => s + e.total, 0)
+      const totalExp = expenseRows
+        .filter((e) => !e.isEmployeeAdvance)
+        .reduce((s, e) => s + e.total, 0)
       const netProfit = netRevenue - totalExp
       const marginPercent =
         netRevenue === 0 ? null : Math.round((netProfit / netRevenue) * 1000) / 10
@@ -531,8 +540,9 @@ export function createReportService(
           depositsRefunded: deposits.refunded,
           depositPaymentsTagged: depositPay,
           customerCreditBalances,
+          employeeAdvances: advanceTotal,
         },
-        expenses: expenseRows,
+        expenses: expenseRows.filter((e) => !e.isEmployeeAdvance),
         totalExpenses: totalExp,
         netProfit,
         marginPercent,

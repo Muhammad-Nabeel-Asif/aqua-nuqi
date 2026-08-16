@@ -27,7 +27,7 @@ export function MonthMatrixPage() {
   const [routeId, setRouteId] = useState('')
   const [areaId, setAreaId] = useState('')
   const [search, setSearch] = useState('')
-  const [focus, setFocus] = useState({ row: 0, day: 1 })
+  const [focus, setFocus] = useState<{ row: number; day: number } | null>(null)
   const [detail, setDetail] = useState<{
     deliveryId?: number | null
     customerId: number
@@ -162,7 +162,7 @@ export function MonthMatrixPage() {
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col">
       <PageHeader
-        title="Month matrix"
+        title="Month grid"
         subtitle={`${periodStart(period)} → ${periodEnd(period)}`}
         actions={
           <>
@@ -316,7 +316,7 @@ export function MonthMatrixPage() {
                         <DeliveryQtyCell
                           value={cell?.quantity ?? null}
                           disabled={locked}
-                          autoFocus={focus.row === vRow.index && focus.day === day}
+                          autoFocus={focus != null && focus.row === vRow.index && focus.day === day}
                           className="h-7 w-10 text-xs"
                           onSave={(v) => saveCell(row.customerId, day, v)}
                           onMove={(dir) => {

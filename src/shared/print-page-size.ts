@@ -49,3 +49,13 @@ export const PDF_EMPTY_HEADER_TEMPLATE = '<div></div>'
 export function pdfPageNumbersEnabled(pageSize: PageSizeSpec): boolean {
   return pageSize === 'A4' || pageSize === 'Letter'
 }
+
+/**
+ * Hash passed to `BrowserWindow.loadFile({ hash })` (no leading `#`).
+ * Keep the leading slash so HashRouter matches `/print/:template`.
+ * Packaged builds used to strip it (`#print/...`), which 404s the print window.
+ */
+export function printWindowHash(hashPath: string): string {
+  const trimmed = hashPath.replace(/^#/, '')
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+}

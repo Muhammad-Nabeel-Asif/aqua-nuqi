@@ -25,7 +25,7 @@ export function DailyEntryPage() {
   const [employeeId, setEmployeeId] = useState('')
   const [search, setSearch] = useState('')
   const [showCash, setShowCash] = useState(false)
-  const [focus, setFocus] = useState<{ row: number; col: FocusCol }>({ row: 0, col: 'qty' })
+  const [focus, setFocus] = useState<{ row: number; col: FocusCol } | null>(null)
   const [detail, setDetail] = useState<{
     deliveryId?: number | null
     customerId: number
@@ -235,23 +235,23 @@ export function DailyEntryPage() {
 
   const periodClosed = listQuery.data?.periodClosed
 
-  const focusKey = useMemo(() => `${focus.row}:${focus.col}`, [focus])
+  const focusKey = useMemo(() => (focus ? `${focus.row}:${focus.col}` : 'none'), [focus])
 
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col">
       <PageHeader
         title="Daily entry"
-        subtitle="Keyboard: type qty → Enter next row · Tab empties · Esc cancel"
+        subtitle="Bottles given vs bottles taken back. Click a cell to type — arrows work after that."
         actions={
           <>
             <Button variant="outline" asChild>
-              <Link to="/deliveries/matrix">Month matrix</Link>
+              <Link to="/deliveries/matrix">Month grid</Link>
             </Button>
             <Button variant="outline" asChild>
               <Link to="/deliveries/bottles-out">Bottles out</Link>
             </Button>
             <Button variant="outline" onClick={() => setWalkIn(true)}>
-              Walk-in sale
+              Counter sale
             </Button>
             <Button variant="outline" disabled={periodClosed} onClick={() => copyPrev.mutate()}>
               Copy previous day
@@ -426,8 +426,18 @@ export function DailyEntryPage() {
           <div className="sticky left-0 bg-slate-50 px-2 py-2">Customer</div>
           <div className="px-2 py-2">Route</div>
           <div className="px-2 py-2 text-right">Rate</div>
-          <div className="px-2 py-2 text-center">Qty</div>
-          <div className="px-2 py-2 text-center">Empties</div>
+          <div
+            className="px-2 py-2 text-center"
+            title="Filled bottles you gave the customer today (this is what you bill)"
+          >
+            Given
+          </div>
+          <div
+            className="px-2 py-2 text-center"
+            title="Empty bottles you took back today (not billed; updates bottles sitting with them). Leave blank to copy Given."
+          >
+            Taken back
+          </div>
           <div className="px-2 py-2 text-right">Amount</div>
           {showCash && <div className="px-2 py-2 text-right">Cash</div>}
           <div className="px-2 py-2" />
@@ -475,7 +485,7 @@ export function DailyEntryPage() {
                     value={displayQty}
                     placeholder={copy ? null : row.suggestedQty}
                     disabled={row.locked}
-                    autoFocus={focus.row === vRow.index && focus.col === 'qty'}
+                    autoFocus={focus != null && focus.row === vRow.index && focus.col === 'qty'}
                     rowIndex={vRow.index}
                     col="qty"
                     onSave={async (v) => {
@@ -499,7 +509,7 @@ export function DailyEntryPage() {
                     key={`${row.customerId}-emp-${focusKey}`}
                     value={displayEmpties}
                     disabled={row.locked}
-                    autoFocus={focus.row === vRow.index && focus.col === 'empties'}
+                    autoFocus={focus != null && focus.row === vRow.index && focus.col === 'empties'}
                     rowIndex={vRow.index}
                     col="empties"
                     onSave={async (v) => {

@@ -26,7 +26,7 @@ export function MaintenancePanel() {
       const r = await api.integrity.check()
       setReport(r)
       toast({
-        title: r.issues.length === 0 ? 'Integrity OK' : `${r.issues.length} issue(s) found`,
+        title: r.issues.length === 0 ? 'Data looks fine' : `${r.issues.length} issue(s) found`,
         variant: r.issues.some((i) => i.severity === 'error') ? 'error' : 'success',
       })
     } catch (err) {
@@ -52,7 +52,7 @@ export function MaintenancePanel() {
       await qc.invalidateQueries({ queryKey: ['maintenance'] })
     } catch (err) {
       toast({
-        title: 'Compact failed',
+        title: 'Could not shrink unused space',
         description: err instanceof AppError ? err.message : 'Error',
         variant: 'error',
       })
@@ -84,7 +84,7 @@ export function MaintenancePanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
-        Run integrity checks after unusual crashes or if numbers look wrong. Safe fixes recalculate
+        Run a data check after unusual crashes or if numbers look wrong. Safe fixes recalculate
         summary tables from the ledger.
       </p>
       <div className="grid gap-3 rounded border p-3 text-sm md:grid-cols-3">
@@ -106,13 +106,13 @@ export function MaintenancePanel() {
 
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => void runCheck()} disabled={busy}>
-          Run integrity check
+          Run data check
         </Button>
         <Button variant="outline" onClick={() => void rebuild()} disabled={busy}>
           Rebuild summaries
         </Button>
         <Button variant="outline" onClick={() => void compact()} disabled={busy}>
-          Compact database
+          Shrink unused space
         </Button>
       </div>
 

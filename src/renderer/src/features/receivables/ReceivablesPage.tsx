@@ -65,7 +65,7 @@ export function ReceivablesPage() {
   return (
     <div>
       <PageHeader
-        title="Receivables"
+        title="Unpaid bills"
         subtitle={data ? `As of ${data.asOf}` : 'Loading…'}
         actions={
           <>

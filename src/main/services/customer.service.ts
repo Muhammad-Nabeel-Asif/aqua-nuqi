@@ -518,8 +518,10 @@ export function createCustomerService(
     const openingBottles = input.openingBottles ?? 0
     const openingAsOf = input.openingAsOf ?? null
 
-    if (openingAsOf) {
-      period.guardPeriodOpen(openingAsOf)
+    const depositHeld = input.securityDepositHeld ?? 0
+    const hasOpeningFigures = openingBalance !== 0 || openingBottles > 0 || depositHeld > 0
+    if (hasOpeningFigures) {
+      period.guardPeriodOpen(openingAsOf ?? input.joinedOn ?? todayBusinessDate())
     }
 
     const now = nowIsoUtc()
@@ -607,7 +609,6 @@ export function createCustomerService(
         }
       }
 
-      const depositHeld = input.securityDepositHeld ?? 0
       if (depositHeld > 0) {
         const depositDate = openingAsOf ?? input.joinedOn ?? todayBusinessDate()
         syncDepositLedger(row.id, depositHeld, depositDate, userId, tx)
@@ -810,10 +811,14 @@ export function createCustomerService(
 
       if (openingsEditable) {
         const openingsChanged =
-          input.openingBalance !== undefined ||
-          input.openingBottles !== undefined ||
-          input.openingAsOf !== undefined
-        const depositChanged = input.securityDepositHeld !== undefined
+          (input.openingBalance !== undefined &&
+            input.openingBalance !== existing.openingBalance) ||
+          (input.openingBottles !== undefined &&
+            input.openingBottles !== existing.openingBottles) ||
+          (input.openingAsOf !== undefined && input.openingAsOf !== existing.openingAsOf)
+        const depositChanged =
+          input.securityDepositHeld !== undefined &&
+          input.securityDepositHeld !== existing.securityDepositHeld
 
         if (openingsChanged) {
           replaceOpeningLedger(existing.id, nextOpeningBalance, nextOpeningAsOf, userId, tx)

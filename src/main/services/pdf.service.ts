@@ -296,16 +296,22 @@ export function createPdfService(
     pageSize: PageSizeSpec,
     opts?: { landscape?: boolean; margins?: RenderMargins },
   ): Promise<string> {
-    const buf = await renderer.renderPdf({
-      jobId: newUuid(),
-      template,
-      payload,
-      pageSize,
-      accentColour: settings.get('invoice.accentColour') || BRAND_COLOURS.accent,
-      landscape: opts?.landscape,
-      margins: opts?.margins,
-      footerBusinessName: settings.get('business.name') || BRAND_NAME,
-    })
+    let buf: Buffer
+    try {
+      buf = await renderer.renderPdf({
+        jobId: newUuid(),
+        template,
+        payload,
+        pageSize,
+        accentColour: settings.get('invoice.accentColour') || BRAND_COLOURS.accent,
+        landscape: opts?.landscape,
+        margins: opts?.margins,
+        footerBusinessName: settings.get('business.name') || BRAND_NAME,
+      })
+    } catch (err: unknown) {
+      const reason = err instanceof Error ? err.message : 'Unknown error'
+      throw new AppError('INTERNAL', `Could not create the PDF. ${reason}`)
+    }
     fs.mkdirSync(path.dirname(destPath), { recursive: true })
     fs.writeFileSync(destPath, buf)
     return destPath
@@ -602,7 +608,14 @@ export function createPdfService(
     opts: { openAfter?: boolean; userId?: number | null } = {},
   ): Promise<{ path: string }> {
     const customer = customersSvc.getById(customerId)
-    const entries = ledger.getLedger(customerId, range)
+    const entries = ledger.getLedger(customerId, range).map((e) => ({
+      entryDate: e.entryDate,
+      entryType: e.entryType,
+      description: e.description,
+      debit: e.debit,
+      credit: e.credit,
+      balanceAfter: e.balanceAfter,
+    }))
     const opening =
       entries.length > 0
         ? entries[0]!.balanceAfter - entries[0]!.debit + entries[0]!.credit

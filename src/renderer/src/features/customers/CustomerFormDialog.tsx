@@ -4,6 +4,12 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { api } from '@renderer/lib/api'
+import { formatAppError } from '@renderer/lib/app-error-message'
+import {
+  BILLING_MODE_LABEL,
+  CUSTOMER_STATUS_LABEL,
+  CUSTOMER_TYPE_LABEL,
+} from '@renderer/lib/plain-labels'
 import type { AreaDto, CreateCustomerInput, CustomerDto, RouteDto } from '@shared/contracts'
 import { todayBusinessDate } from '@shared/date'
 import { toPaisa } from '@shared/money'
@@ -152,7 +158,7 @@ export function CustomerFormDialog({
     } catch (e) {
       toast({
         title: 'Could not save customer',
-        description: e instanceof Error ? e.message : 'Error',
+        description: formatAppError(e, 'Could not save customer'),
         variant: 'error',
       })
     }
@@ -177,7 +183,7 @@ export function CustomerFormDialog({
             label="Type"
             value={form.customerType}
             onChange={(v) => set('customerType', v as CustomerFormState['customerType'])}
-            options={['residential', 'commercial', 'walk_in']}
+            options={Object.entries(CUSTOMER_TYPE_LABEL).map(([code, label]) => `${code}:${label}`)}
           />
           <Field
             label="Joining date"
@@ -189,7 +195,9 @@ export function CustomerFormDialog({
             label="Status"
             value={form.status}
             onChange={(v) => set('status', v as CustomerFormState['status'])}
-            options={['active', 'paused', 'inactive']}
+            options={Object.entries(CUSTOMER_STATUS_LABEL).map(
+              ([code, label]) => `${code}:${label}`,
+            )}
           />
         </Section>
         <Section title="Contact">
@@ -198,13 +206,13 @@ export function CustomerFormDialog({
             value={form.phonePrimary}
             onChange={(v) => {
               set('phonePrimary', v)
-              if (!form.whatsappNumber) set('whatsappNumber', v)
             }}
           />
           <Field
             label="WhatsApp"
             value={form.whatsappNumber}
             onChange={(v) => set('whatsappNumber', v)}
+            hint="Leave blank to use the primary phone"
           />
           <Field
             label="Secondary phone"
@@ -239,7 +247,7 @@ export function CustomerFormDialog({
             label="Billing mode"
             value={form.billingMode}
             onChange={(v) => set('billingMode', v as CustomerFormState['billingMode'])}
-            options={['per_bottle', 'monthly_package']}
+            options={Object.entries(BILLING_MODE_LABEL).map(([code, label]) => `${code}:${label}`)}
           />
           {form.billingMode === 'per_bottle' ? (
             !editing ? (
@@ -289,7 +297,7 @@ export function CustomerFormDialog({
             type="number"
           />
         </Section>
-        <Section title="Opening balances">
+        <Section title="Starting figures">
           <Field
             label="Security deposit (Rs)"
             value={form.securityDepositHeld}
@@ -298,14 +306,14 @@ export function CustomerFormDialog({
             disabled={openingsLocked}
           />
           <Field
-            label="Opening bottles"
+            label="Bottles already with them"
             value={form.openingBottles}
             onChange={(v) => set('openingBottles', v)}
             type="number"
             disabled={openingsLocked}
           />
           <Field
-            label="Opening balance (Rs)"
+            label="Money they already owed (Rs)"
             value={form.openingBalance}
             onChange={(v) => set('openingBalance', v)}
             type="number"
@@ -389,12 +397,14 @@ function Field({
   onChange,
   type = 'text',
   disabled,
+  hint,
 }: {
   label: string
   value: string | number | null | undefined
   onChange: (v: string) => void
   type?: string
   disabled?: boolean
+  hint?: string
 }) {
   return (
     <div className="space-y-1.5">
@@ -405,6 +415,7 @@ function Field({
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
       />
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   )
 }

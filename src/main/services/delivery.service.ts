@@ -293,8 +293,13 @@ export function createDeliveryService(
     const employeeId =
       input.employeeId !== undefined ? input.employeeId : (existing?.employeeId ?? null)
 
-    // Auto-link open trip for employee+date when trips are used (optional feature).
-    const openTrip = trips?.findOpenTripForEmployeeDate(employeeId, input.date) ?? null
+    // Auto-link an open trip so stock comes from the van, not a second plant hit.
+    const openTrip =
+      trips?.findOpenTripForDelivery({
+        employeeId,
+        routeId: customer.routeId,
+        date: input.date,
+      }) ?? null
     const tripId = existing?.tripId ?? openTrip?.id ?? null
     const tripVehicleId = openTrip?.vehicleId ?? null
 

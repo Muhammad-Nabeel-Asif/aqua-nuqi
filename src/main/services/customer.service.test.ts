@@ -46,7 +46,7 @@ describe('customerService', () => {
       password: 'secret12',
       role: 'owner',
     })
-    return { db, customers, balances, owner, audit }
+    return { db, customers, balances, owner, audit, period }
   }
 
   it('list of 1000 customers completes under 500ms', async () => {
@@ -176,6 +176,74 @@ describe('customerService', () => {
     expect(after.name).toBe('Audit Me Updated')
     expect(after.phonePrimary).toBe('03003334444')
     expect(after.code).toBe(c.code)
+  })
+
+  it('phone-only update does not void or re-post deposit and openings', async () => {
+    const { db, customers, owner } = await setup()
+    const c = customers.create(
+      {
+        name: 'Phone Edit',
+        phonePrimary: '03001112222',
+        openingBalance: Number(toPaisa(0)),
+        openingBottles: 2,
+        openingAsOf: '2026-07-01',
+        securityDepositHeld: Number(toPaisa(500)),
+        rate: Number(toPaisa(60)),
+      },
+      owner.id,
+    )
+    const before = db.select().from(ledgerEntries).where(eq(ledgerEntries.customerId, c.id)).all()
+    expect(before.some((r) => r.entryType === 'deposit_received')).toBe(true)
+
+    customers.update(
+      {
+        id: c.id,
+        phonePrimary: '03009998888',
+        openingBalance: c.openingBalance,
+        openingBottles: c.openingBottles,
+        openingAsOf: c.openingAsOf,
+        securityDepositHeld: c.securityDepositHeld,
+      },
+      owner.id,
+    )
+
+    const after = db.select().from(ledgerEntries).where(eq(ledgerEntries.customerId, c.id)).all()
+    expect(after).toHaveLength(before.length)
+    expect(after.some((r) => r.entryType === 'void_reversal')).toBe(false)
+    expect(after.filter((r) => r.entryType === 'deposit_received')).toHaveLength(1)
+    expect(customers.getById(c.id).phonePrimary).toBe('03009998888')
+    expect(customers.getById(c.id).securityDepositHeld).toBe(Number(toPaisa(500)))
+  })
+
+  it('creating a customer with zero openings is allowed in a locked month', async () => {
+    const { customers, owner, period } = await setup()
+    period.close('2026-08', owner.id)
+    const c = customers.create(
+      {
+        name: 'After Lock',
+        rate: Number(toPaisa(60)),
+        openingAsOf: '2026-08-16',
+      },
+      owner.id,
+    )
+    expect(c.id).toBeGreaterThan(0)
+    expect(c.name).toBe('After Lock')
+  })
+
+  it('creating a customer with openings in a locked month is still refused', async () => {
+    const { customers, owner, period } = await setup()
+    period.close('2026-08', owner.id)
+    expect(() =>
+      customers.create(
+        {
+          name: 'Opening After Lock',
+          rate: Number(toPaisa(60)),
+          openingBalance: Number(toPaisa(100)),
+          openingAsOf: '2026-08-01',
+        },
+        owner.id,
+      ),
+    ).toThrow(/locked/)
   })
 
   it('export writes an export audit entry', async () => {

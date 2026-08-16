@@ -4,6 +4,7 @@ import {
   buildPdfPageFooterTemplate,
   pdfPageNumbersEnabled,
   preferCssPageSize,
+  printWindowHash,
   toElectronPageSize,
 } from './print-page-size'
 
@@ -53,5 +54,12 @@ describe('print page size helpers', () => {
       expect(html).toContain('Ali &amp; Sons &lt;Water&gt;')
       expect(html).not.toContain('<Water>')
     })
+  })
+
+  it('keeps a leading slash so HashRouter can match /print/:template', () => {
+    expect(printWindowHash('/print/customer-statement?jobId=abc')).toBe(
+      '/print/customer-statement?jobId=abc',
+    )
+    expect(printWindowHash('print/invoice?jobId=1')).toBe('/print/invoice?jobId=1')
   })
 })

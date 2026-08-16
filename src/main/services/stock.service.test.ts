@@ -377,6 +377,48 @@ describe('stockService (Phase 7)', () => {
     void product
   })
 
+  it('delivery without employee still takes stock from the only open van (no scrap on honest close)', async () => {
+    const { stock, deliveries, trips, vehicles, customer, owner } = await setup()
+    stock.recordOpeningStock({
+      date: '2026-07-01',
+      bottleState: 'filled',
+      quantity: 200,
+      userId: owner.id,
+    })
+    const ownedAtStart = stock.getBalances().totals.totalOwned
+    const vehicle = vehicles.create({ name: 'Van Unlinked', vehicleType: 'van' }, owner.id)
+    const trip = trips.startTrip({
+      tripDate: '2026-07-20',
+      vehicleId: vehicle.id,
+      filledLoaded: 20,
+      userId: owner.id,
+    })
+
+    deliveries.upsertDelivery({
+      customerId: customer.id,
+      date: '2026-07-20',
+      quantity: 7,
+      emptiesCollected: 6,
+      userId: owner.id,
+    })
+
+    const recon = trips.getReconciliation(trip.id)
+    expect(recon.reconciliation.filledExpected).toBe(13)
+
+    const closed = trips.closeTrip({
+      id: trip.id,
+      filledReturned: 13,
+      emptiesReturned: 6,
+      cashSubmitted: 0,
+      userId: owner.id,
+    })
+    expect(closed.bottleVariance).toBe(0)
+    const bal = stock.getBalances().totals
+    expect(bal.scrapped).toBe(0)
+    expect(bal.filledInVans).toBe(0)
+    expect(bal.totalOwned).toBe(ownedAtStart)
+  })
+
   it('voidTrip after shortfall close restores van/scrap/owned (no ghost −2)', async () => {
     const { stock, deliveries, trips, vehicles, customer, owner, employees } = await setup()
     stock.recordOpeningStock({

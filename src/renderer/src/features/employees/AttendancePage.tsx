@@ -1,11 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { promptDialog } from '@renderer/components/ConfirmDialog'
 import { PageHeader } from '@renderer/components/PageHeader'
 import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
+import { ATTENDANCE_LABEL } from '@renderer/lib/plain-labels'
 import type { AttendanceStatus } from '@shared/contracts'
 import { todayBusinessDate } from '@shared/date'
 import { AppError } from '@shared/errors'
@@ -112,7 +114,13 @@ export function AttendancePage() {
     }
   }
   async function markHoliday() {
-    const date = window.prompt('Holiday date (YYYY-MM-DD)', today)
+    const date = await promptDialog({
+      title: 'Mark a holiday',
+      description: 'Every employee will be marked Off on this date.',
+      label: 'Date (YYYY-MM-DD)',
+      defaultValue: today,
+      confirmLabel: 'Mark holiday',
+    })
     if (!date) return
     try {
       const result = await api.attendance.markHoliday({ date })
@@ -134,7 +142,7 @@ export function AttendancePage() {
     <div>
       <PageHeader
         title="Attendance"
-        subtitle="Click a cell to cycle — → P → A → H → L → U → O. Drag to fill a range."
+        subtitle="Click a cell to cycle: Present (P), Absent (A), Half day (H), Leave (L), Unpaid (U), Off (O). Drag to fill a range."
         actions={
           <Button variant="outline" asChild>
             <Link to="/employees">Employees</Link>
@@ -235,7 +243,7 @@ export function AttendancePage() {
                           <button
                             type="button"
                             disabled={closed}
-                            title={`${cell.date}: ${status ?? 'not set'}`}
+                            title={`${cell.date}: ${status ? (ATTENDANCE_LABEL[status] ?? status) : 'not set'}`}
                             onMouseDown={(e) => {
                               if (closed || e.button !== 0) return
                               e.preventDefault()

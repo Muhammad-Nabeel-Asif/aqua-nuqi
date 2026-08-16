@@ -74,7 +74,8 @@ export const api = {
   },
   setup: {
     status: () => invoke<SetupStatusOutput>('setup:status', {}),
-    complete: (input: SetupCompleteInput) => invoke<{ user: UserDto }>('setup:complete', input),
+    complete: (input: SetupCompleteInput) =>
+      invoke<{ user: UserDto; recoveryCode: string }>('setup:complete', input),
     restore: (input: SetupRestoreInput) => invoke<{ ok: true }>('setup:restore', input),
   },
   dialog: {

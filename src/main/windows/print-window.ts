@@ -7,6 +7,7 @@ import {
   PDF_EMPTY_HEADER_TEMPLATE,
   pdfPageNumbersEnabled,
   preferCssPageSize,
+  printWindowHash,
   toElectronPageSize,
 } from '@shared/print-page-size'
 
@@ -95,8 +96,7 @@ async function loadPrintRoute(win: BrowserWindow, hashPath: string): Promise<voi
     return
   }
   const file = join(__dirname, '../renderer/index.html')
-  const hash = hashPath.startsWith('/') ? hashPath.slice(1) : hashPath
-  await win.loadFile(file, { hash })
+  await win.loadFile(file, { hash: printWindowHash(hashPath) })
 }
 
 async function getPoolWindow(): Promise<BrowserWindow> {

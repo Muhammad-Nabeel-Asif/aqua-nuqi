@@ -202,7 +202,7 @@ describe('expense Phase 5 acceptance', () => {
         { expenseDate: '2026-06-15', categoryId: fuel.id, amount: 100_00, paymentMethod: 'cash' },
         owner.id,
       ),
-    ).toThrowError(/PERIOD_LOCKED|closed/i)
+    ).toThrowError(/PERIOD_LOCKED|closed|locked/i)
 
     const forced = expensesSvc.createExpense(
       {
@@ -218,7 +218,7 @@ describe('expense Phase 5 acceptance', () => {
 
     expect(() =>
       expensesSvc.updateExpense({ id: forced.id, amount: 200_00 }, owner.id),
-    ).toThrowError(/PERIOD_LOCKED|closed/i)
+    ).toThrowError(/PERIOD_LOCKED|closed|locked/i)
   })
 
   it('recurring due appears then disappears after recording', async () => {

@@ -18,9 +18,9 @@ const groups: Array<{ title: string; items: ReportItem[] }> = [
   {
     title: 'Money',
     items: [
-      { label: 'Profit & Loss', path: 'profit-loss', ownerOnly: true },
-      { label: 'Receivables ageing', path: 'receivables-ageing' },
-      { label: 'Collection', path: 'collection', ownerOnly: true },
+      { label: 'Profit (income minus costs)', path: 'profit-loss', ownerOnly: true },
+      { label: 'How long bills have been unpaid', path: 'receivables-ageing' },
+      { label: 'Money collected', path: 'collection', ownerOnly: true },
       { label: 'Customer statements', path: 'customer-statements' },
       { label: 'Expense report', path: 'expenses', ownerOnly: true },
       { label: 'Cost per bottle', path: 'cost-per-bottle', ownerOnly: true },
@@ -31,8 +31,8 @@ const groups: Array<{ title: string; items: ReportItem[] }> = [
     items: [
       { label: 'Bottles out', path: '/inventory/bottles-out' },
       { label: 'Bottle loss', path: 'bottle-loss' },
-      { label: 'Trip variance', path: 'trip-variance' },
-      { label: 'Stock movements', path: 'stock-movements' },
+      { label: 'Trip difference', path: 'trip-variance' },
+      { label: 'Bottle stock history', path: 'stock-movements' },
     ],
   },
   {
@@ -45,7 +45,7 @@ export function ReportsHubPage() {
   const owner = useSessionStore((s) => s.user?.role === 'owner')
   return (
     <div>
-      <PageHeader title="Reports" subtitle="Operational and financial views for Aqua Nuqi" />
+      <PageHeader title="Reports" subtitle="Numbers for the business" />
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         {groups.map((group) => {
           const items = group.items.filter((item) => owner || !item.ownerOnly)

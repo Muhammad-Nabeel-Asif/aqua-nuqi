@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { promptDialog } from '@renderer/components/ConfirmDialog'
 import { Money } from '@renderer/components/Money'
 import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
@@ -105,7 +106,13 @@ export function DeliveryDetailDialog({ open, onClose, deliveryId, defaults }: Pr
 
   const voidMut = useMutation({
     mutationFn: async () => {
-      const reason = window.prompt('Reason for voiding this delivery:')
+      const reason = await promptDialog({
+        title: 'Cancel this delivery?',
+        description: 'Use only if this row was entered by mistake. It stays in history.',
+        label: 'Reason',
+        confirmLabel: 'Cancel delivery',
+        danger: true,
+      })
       if (!reason?.trim()) throw new AppError('VALIDATION_FAILED', 'Reason required')
       if (!deliveryId) throw new AppError('NOT_FOUND', 'No delivery to void')
       return api.deliveries.void(deliveryId, reason.trim())

@@ -66,12 +66,13 @@ export function ReallocatePaymentDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div className="max-h-[90vh] w-full max-w-lg space-y-4 overflow-auto rounded-lg bg-white p-6 shadow-lg">
-        <h2 className="text-lg font-semibold">Reallocate {payment.receiptNo}</h2>
+        <h2 className="text-lg font-semibold">Apply {payment.receiptNo} to other bills</h2>
         <p className="text-sm text-muted-foreground">
-          {payment.customerCode} — {payment.customerName} · payment <Money value={payment.amount} />
+          The money is real — choose which bills it should pay. {payment.customerCode} —{' '}
+          {payment.customerName} · payment <Money value={payment.amount} />
         </p>
         <div className="space-y-2">
-          <Label>Allocate to invoices (Rs)</Label>
+          <Label>Which bills this money pays (Rs)</Label>
           {openInvoices.length === 0 ? (
             <p className="text-sm text-muted-foreground">No open invoices for this customer.</p>
           ) : (
@@ -110,11 +111,11 @@ export function ReallocatePaymentDialog({
                 setBusy(true)
                 try {
                   await api.payments.reallocate(payment.id, planned)
-                  toast({ title: 'Payment reallocated', variant: 'success' })
+                  toast({ title: 'Bills updated', variant: 'success' })
                   onSaved()
                 } catch (e) {
                   toast({
-                    title: 'Reallocate failed',
+                    title: 'Could not apply this payment to other bills',
                     description: e instanceof Error ? e.message : 'Error',
                     variant: 'error',
                   })

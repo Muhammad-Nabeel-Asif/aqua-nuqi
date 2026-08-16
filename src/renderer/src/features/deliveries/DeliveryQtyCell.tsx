@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@renderer/lib/utils'
+import { qtyCellMayTakeFocus } from './qty-cell-focus'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -44,7 +45,9 @@ export function DeliveryQtyCell({
   }, [value, editing])
 
   useEffect(() => {
-    if (autoFocus) inputRef.current?.focus()
+    if (!autoFocus) return
+    if (!qtyCellMayTakeFocus(document.activeElement, inputRef.current)) return
+    inputRef.current?.focus()
   }, [autoFocus])
 
   // Debounced autosave (~400 ms) while typing — stays in edit mode so "1"+"2" can become 12.

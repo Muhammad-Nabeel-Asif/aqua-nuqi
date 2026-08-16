@@ -13,7 +13,7 @@ export function CustomerCardPage() {
     <div>
       <PageHeader
         title="Monthly delivery card"
-        subtitle="Paper-card digital twin"
+        subtitle="Same as the paper delivery card"
         actions={
           <Button
             variant="outline"

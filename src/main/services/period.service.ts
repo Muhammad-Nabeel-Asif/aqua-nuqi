@@ -21,7 +21,10 @@ export function createPeriodService(db: AppDatabase, audit: AuditService) {
     if (dateOrPeriod.length === 10) assertBusinessDate(dateOrPeriod)
     else assertPeriod(dateOrPeriod)
     if (isClosed(period)) {
-      throw new AppError('PERIOD_LOCKED', `Period ${period} is closed and cannot be modified.`)
+      throw new AppError(
+        'PERIOD_LOCKED',
+        `This billing month (${period}) is locked and cannot be changed. Unlock it under Billing → Billing months if you need to edit.`,
+      )
     }
   }
 

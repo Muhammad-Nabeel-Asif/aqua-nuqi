@@ -61,7 +61,7 @@ export function ProfitLossPage() {
       const filters = [
         { label: 'From', value: resolved.from },
         { label: 'To', value: resolved.to },
-        { label: 'Basis', value: basis },
+        { label: 'Basis', value: basis === 'accrual' ? 'What we billed' : 'What we collected' },
         {
           label: 'Net revenue',
           value: paisaToDecimalString(data.revenue.netRevenue),
@@ -71,7 +71,7 @@ export function ProfitLossPage() {
           value: paisaToDecimalString(data.netProfit),
         },
       ]
-      const title = `Profit & Loss (${basis})`
+      const title = `Profit (income minus costs) (${basis === 'accrual' ? 'billed' : 'collected'})`
       const fileName = `profit-loss-${basis}-${resolved.from}-${resolved.to}.${kind === 'pdf' ? 'pdf' : 'xlsx'}`
       if (kind === 'pdf') {
         await api.pdf.exportTable({
@@ -104,11 +104,15 @@ export function ProfitLossPage() {
 
   return (
     <ReportShell
-      title="Profit & Loss"
+      title="Profit (income minus costs)"
       subtitle="The headline report — billed vs received, with deposits kept out of income"
       range={range}
       setRange={setRange}
-      filters={[`From: ${resolved.from}`, `To: ${resolved.to}`, `Basis: ${basis}`]}
+      filters={[
+        `From: ${resolved.from}`,
+        `To: ${resolved.to}`,
+        `View: ${basis === 'accrual' ? 'What we billed' : 'What we collected'}`,
+      ]}
       onExportPdf={() => void exportData('pdf')}
       onExportExcel={() => void exportData('excel')}
       columns={[
@@ -124,8 +128,8 @@ export function ProfitLossPage() {
             value={basis}
             onChange={(e) => setBasis(e.target.value as typeof basis)}
           >
-            <option value="accrual">Accrual (billed)</option>
-            <option value="cash">Cash (received)</option>
+            <option value="accrual">What we billed</option>
+            <option value="cash">What we collected</option>
           </select>
         </div>
       }
@@ -157,7 +161,7 @@ export function ProfitLossPage() {
                 label="Less: discounts & write-offs"
                 value={-data.revenue.discountsAndWriteOffs}
               />
-              <Row label="Walk-in sales (included)" value={data.revenue.walkInSales} muted />
+              <Row label="Counter sales (included)" value={data.revenue.walkInSales} muted />
               <Row label="Net revenue" value={data.revenue.netRevenue} bold />
               <div className="mt-3 rounded border border-amber-100 bg-amber-50 p-2 text-xs text-amber-950">
                 <p className="font-medium">Excluded from revenue (liability / not earned)</p>
@@ -187,7 +191,7 @@ export function ProfitLossPage() {
                 >
                   <span>
                     {e.categoryName}
-                    {e.isSalaries || e.isEmployeeAdvance ? (
+                    {e.isSalaries ? (
                       <span className="ml-2 text-xs text-muted-foreground">(payroll)</span>
                     ) : null}
                   </span>
@@ -195,6 +199,16 @@ export function ProfitLossPage() {
                 </button>
               ))}
               <Row label="Total expenses" value={data.totalExpenses} bold />
+              <div className="mt-3 rounded border border-amber-100 bg-amber-50 p-2 text-xs text-amber-950">
+                <p className="font-medium">Excluded from cost (not an operating expense)</p>
+                <p>
+                  Salary advances: <Money value={data.excluded.employeeAdvances ?? 0} />
+                </p>
+                <p className="mt-1 text-amber-900">
+                  Advances are money already given to staff. They settle when you run monthly
+                  salaries — they do not reduce this month&apos;s profit on their own.
+                </p>
+              </div>
             </div>
           </div>
 

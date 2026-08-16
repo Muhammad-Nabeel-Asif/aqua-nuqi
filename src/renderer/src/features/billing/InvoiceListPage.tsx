@@ -9,12 +9,13 @@ import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
-import { previousPeriod, currentPeriod } from '@shared/date'
+import { INVOICE_STATUS_LABEL } from '@renderer/lib/plain-labels'
+import { currentPeriod } from '@shared/date'
 import { useBatchPdfExport } from './useBatchPdfExport'
 
 export function InvoiceListPage() {
   const qc = useQueryClient()
-  const [period, setPeriod] = useState(previousPeriod(currentPeriod()))
+  const [period, setPeriod] = useState(currentPeriod())
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
   const [overdueOnly, setOverdueOnly] = useState(false)
@@ -47,20 +48,21 @@ export function InvoiceListPage() {
               <Link to="/billing/generate">Generate bills</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link to="/billing/periods">Periods</Link>
+              <Link to="/billing/periods">Billing months</Link>
             </Button>
             <Button
               disabled={!selected.size}
               onClick={() =>
                 void (async () => {
                   const r = await api.invoices.issueAll([...selected])
-                  toast({ title: `Issued ${r.issued}`, variant: 'success' })
+                  toast({ title: `Sent ${r.issued}`, variant: 'success' })
                   setSelected(new Set())
                   await qc.invalidateQueries({ queryKey: ['invoices'] })
+                  await qc.invalidateQueries({ queryKey: ['receivables'] })
                 })()
               }
             >
-              Issue selected
+              Send selected bills
             </Button>
             <Button
               disabled={!selected.size && !period}
@@ -101,10 +103,10 @@ export function InvoiceListPage() {
         >
           <option value="">All statuses</option>
           <option value="draft">Draft</option>
-          <option value="issued">Issued</option>
+          <option value="issued">Sent</option>
           <option value="partially_paid">Partially paid</option>
           <option value="paid">Paid</option>
-          <option value="void">Void</option>
+          <option value="void">Cancelled</option>
         </select>
         <Input
           className="w-56"
@@ -175,7 +177,9 @@ export function InvoiceListPage() {
                 <td className="p-2 text-right">
                   <Money value={inv.balanceDue} />
                 </td>
-                <td className="p-2 capitalize">{inv.status.replace(/_/g, ' ')}</td>
+                <td className="p-2">
+                  {INVOICE_STATUS_LABEL[inv.status] ?? inv.status.replace(/_/g, ' ')}
+                </td>
                 <td className="p-2">
                   {inv.lastSharedAt ? (
                     <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800">

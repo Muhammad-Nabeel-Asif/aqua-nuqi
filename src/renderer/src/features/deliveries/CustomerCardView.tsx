@@ -21,7 +21,7 @@ type Props = {
 export function CustomerCardView({ customerId, period: periodProp, showHeader = true }: Props) {
   const qc = useQueryClient()
   const [period, setPeriod] = useState(periodProp ?? currentPeriod())
-  const [focusDay, setFocusDay] = useState(1)
+  const [focusDay, setFocusDay] = useState<number | null>(null)
   const [detail, setDetail] = useState<{
     deliveryId?: number | null
     date: string
@@ -139,7 +139,7 @@ export function CustomerCardView({ customerId, period: periodProp, showHeader = 
                       <DeliveryQtyCell
                         value={day.quantity}
                         disabled={day.locked}
-                        autoFocus={focusDay === day.day}
+                        autoFocus={focusDay != null && focusDay === day.day}
                         className="h-7 w-12"
                         onSave={(v) => saveDay(day.date, v)}
                         onMove={(dir) => {

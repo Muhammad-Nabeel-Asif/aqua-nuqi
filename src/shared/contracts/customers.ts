@@ -115,7 +115,7 @@ const optionalPhone = z
     z
       .string()
       .trim()
-      .regex(/^[\d+\-\s()]{7,20}$/, 'Invalid phone format'),
+      .regex(/^[\d+\-\s()]{7,20}$/, 'enter a full number (7–20 digits)'),
   ])
   .optional()
   .nullable()

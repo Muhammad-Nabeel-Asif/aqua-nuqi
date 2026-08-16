@@ -2,7 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { BrandLockup } from './brand'
-import { ConfirmDialogHost } from './components/ConfirmDialog'
+import { ConfirmDialogHost, PromptDialogHost } from './components/ConfirmDialog'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Skeleton } from './components/Skeleton'
 import { ToastViewport } from './components/Toast'
@@ -49,6 +49,7 @@ export function App() {
         <RouterProvider router={router} />
         <ToastViewport />
         <ConfirmDialogHost />
+        <PromptDialogHost />
       </QueryClientProvider>
     </ErrorBoundary>
   )

@@ -228,7 +228,7 @@ export function TripsPage() {
     <div>
       <PageHeader
         title="Trips"
-        subtitle="Daily van load-out and reconciliation — variance highlighted in red"
+        subtitle="Daily van load-out and check — difference highlighted in red"
         actions={
           <>
             <Button variant="outline" asChild>
@@ -396,7 +396,7 @@ export function TripsPage() {
         <div className="rounded-lg border bg-white p-4">
           {!selectedId && (
             <p className="text-sm text-muted-foreground">
-              Select a trip to reconcile. Expected vs actual variance is the control signal.
+              Select a trip to check the van. Expected vs actual difference is highlighted.
             </p>
           )}
           {selectedId && detailQ.isLoading && (
@@ -422,7 +422,7 @@ export function TripsPage() {
                       <th className="px-3 py-2 text-left">Line</th>
                       <th className="px-3 py-2 text-right">Expected</th>
                       <th className="px-3 py-2 text-right">Actual</th>
-                      <th className="px-3 py-2 text-right">Variance</th>
+                      <th className="px-3 py-2 text-right">Difference</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -510,16 +510,16 @@ export function TripsPage() {
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-slate-600">
-                      Notes{anyLiveVariance ? ' (required — variance ≠ 0)' : ''}
+                      Notes{anyLiveVariance ? ' (required — difference ≠ 0)' : ''}
                     </label>
                     <Input
                       value={clNotes}
                       onChange={(e) => setClNotes(e.target.value)}
-                      placeholder={anyLiveVariance ? 'Explain the variance…' : 'Optional notes'}
+                      placeholder={anyLiveVariance ? 'Explain the difference…' : 'Optional notes'}
                     />
                     {anyLiveVariance && (
                       <p className="mt-1 text-xs font-medium text-red-700">
-                        Variance detected — a note is required before closing.
+                        Difference found — a note is required before closing.
                       </p>
                     )}
                   </div>

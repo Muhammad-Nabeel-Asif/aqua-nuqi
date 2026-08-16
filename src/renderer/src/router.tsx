@@ -1,5 +1,6 @@
 import { Navigate, createHashRouter } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
+import { NotFoundPage } from './components/NotFoundPage'
 import { LoginPage } from './features/auth/LoginPage'
 import { GenerateBillsPage } from './features/billing/GenerateBillsPage'
 import { InvoiceDetailPage } from './features/billing/InvoiceDetailPage'
@@ -62,7 +63,17 @@ function RequireSetup({ children }: { children: React.ReactNode }) {
 
 function RequireOwner({ children }: { children: React.ReactNode }) {
   const user = useSessionStore((s) => s.user)
-  if (user?.role !== 'owner') return <Navigate to="/" replace />
+  if (user?.role !== 'owner') {
+    return (
+      <div className="p-8">
+        <h1 className="text-lg font-semibold">Owner only</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This screen is only for the owner account. Ask the owner if you need something changed
+          here.
+        </p>
+      </div>
+    )
+  }
   return <>{children}</>
 }
 
@@ -224,6 +235,8 @@ export const router = createHashRouter([
         ),
       },
       { path: 'help', element: <HelpPage /> },
+      { path: '*', element: <NotFoundPage /> },
     ],
   },
+  { path: '*', element: <NotFoundPage /> },
 ])

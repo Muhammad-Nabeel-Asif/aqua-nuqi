@@ -8,6 +8,7 @@ import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
+import { VEHICLE_TYPE_LABEL, plainLabel } from '@renderer/lib/plain-labels'
 import type { VehicleDto } from '@shared/contracts'
 import { currentPeriod, periodEnd, periodStart, todayBusinessDate } from '@shared/date'
 import { AppError } from '@shared/errors'
@@ -153,7 +154,7 @@ export function VehiclesPage() {
             >
               {VEHICLE_TYPES.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {plainLabel(VEHICLE_TYPE_LABEL, t)}
                 </option>
               ))}
             </select>
@@ -205,7 +206,9 @@ export function VehiclesPage() {
                 >
                   <td className="px-3 py-2 font-medium">{v.name}</td>
                   <td className="px-3 py-2 text-slate-600">{v.registrationNo ?? '—'}</td>
-                  <td className="px-3 py-2 capitalize text-slate-600">{v.vehicleType ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {plainLabel(VEHICLE_TYPE_LABEL, v.vehicleType)}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">{v.capacityBottles ?? '—'}</td>
                   <td className="px-3 py-2">
                     <span
@@ -244,7 +247,7 @@ export function VehiclesPage() {
                   <h2 className="text-lg font-semibold text-slate-900">{detail.item.name}</h2>
                   <p className="text-sm text-muted-foreground">
                     {detail.item.registrationNo ?? 'No registration'} ·{' '}
-                    {detail.item.vehicleType ?? 'type n/a'} · capacity{' '}
+                    {plainLabel(VEHICLE_TYPE_LABEL, detail.item.vehicleType)} · capacity{' '}
                     {detail.item.capacityBottles ?? '—'}
                   </p>
                 </div>

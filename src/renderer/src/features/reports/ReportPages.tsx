@@ -5,39 +5,21 @@ import { Money } from '@renderer/components/Money'
 import { toast } from '@renderer/components/Toast'
 import { api } from '@renderer/lib/api'
 import { paisaToDecimalString } from '@shared/money'
+import { isMoneyColumn } from './money-columns'
+import {
+  ageingAsOf,
+  asRows,
+  humanHeader,
+  reportTableRows,
+  visibleReportKeys,
+  type ReportRow,
+  type ReportTableKey,
+} from './report-rows'
 import { defaultMonthPeriod, resolveLocalRange, type RangeKind } from './reportRange'
 import { ReportShell, type ReportExportRow } from './ReportShell'
 
-export type ReportKey =
-  | 'salesSummary'
-  | 'customerWiseSales'
-  | 'areaRoutePerformance'
-  | 'employeeDelivery'
-  | 'customerActivity'
-  | 'collection'
-  | 'expenses'
-  | 'costPerBottle'
-  | 'bottleLoss'
-  | 'tripVariance'
-  | 'stockMovements'
-  | 'receivablesAgeing'
-  | 'profitAndLoss'
-type Row = Record<string, unknown>
-const asRows = (value: unknown): Row[] =>
-  Array.isArray(value) ? value.filter((v): v is Row => typeof v === 'object' && v !== null) : []
-const moneyKeys = new Set([
-  'value',
-  'revenue',
-  'total',
-  'amount',
-  'expenses',
-  'netProfit',
-  'cashCollected',
-  'paymentsTotal',
-  'costPerBottle',
-  'averageRevenuePerBottle',
-  'marginPerBottle',
-])
+export type ReportKey = ReportTableKey
+type Row = ReportRow
 
 export function ReportListPage({
   report,
@@ -67,20 +49,21 @@ export function ReportListPage({
     queryFn: () => fetchReport(report, resolved.from, resolved.to, basis),
   })
   const data = (q.data ?? {}) as Row
-  const source = asRows(data.items ?? data.byCategory ?? data.outstanding ?? data.trips)
+  const source = reportTableRows(report, data)
+  const tableKeys = visibleReportKeys(source)
   const rows: ReportExportRow[] = source.map((row) =>
     Object.fromEntries(
-      Object.entries(row).map(([key, value]) => [
+      tableKeys.map((key) => [
         key,
-        typeof value === 'number' && moneyKeys.has(key)
-          ? paisaToDecimalString(value)
-          : String(value ?? ''),
+        typeof row[key] === 'number' && isMoneyColumn(key)
+          ? paisaToDecimalString(row[key] as number)
+          : String(row[key] ?? ''),
       ]),
     ),
   )
-  const columns = Object.keys(rows[0] ?? {}).map((key) => ({
+  const columns = tableKeys.map((key) => ({
     key,
-    header: key.replace(/[A-Z]/g, (m) => ` ${m}`).replace(/^./, (m) => m.toUpperCase()),
+    header: humanHeader(key),
   }))
   const exportData = async (kind: 'pdf' | 'excel') => {
     try {
@@ -129,13 +112,17 @@ export function ReportListPage({
             value={basis}
             onChange={(e) => setBasis(e.target.value as typeof basis)}
           >
-            <option value="accrual">Accrual</option>
-            <option value="cash">Cash</option>
+            <option value="accrual">What we billed</option>
+            <option value="cash">What we collected</option>
           </select>
         ) : undefined
       }
     >
-      {isProfitLoss ? <ProfitLossSummary data={data} /> : <Summary data={data} report={report} />}
+      {isProfitLoss ? (
+        <ProfitLossSummary data={data} />
+      ) : (
+        <Summary data={data} loading={q.isLoading} />
+      )}
       {chartData.length > 1 && (
         <div className="my-4 h-64 rounded-lg border bg-white p-4">
           <ResponsiveContainer width="100%" height="100%">
@@ -149,7 +136,7 @@ export function ReportListPage({
           </ResponsiveContainer>
         </div>
       )}
-      <ReportTable rows={source} />
+      <ReportTable rows={source} keys={tableKeys} />
     </ReportShell>
   )
 }
@@ -186,29 +173,35 @@ async function fetchReport(
     case 'stockMovements':
       return api.reports.stockMovements({ from, to })
     case 'receivablesAgeing':
-      return api.reports.receivablesAgeing(to)
+      return api.reports.receivablesAgeing(ageingAsOf(to))
   }
 }
 
-function Summary({ data, report }: { data: Row; report: ReportKey }) {
+function Summary({ data, loading }: { data: Row; loading: boolean }) {
   const entries = Object.entries(data).filter(
     ([key, value]) =>
       typeof value === 'number' &&
-      (moneyKeys.has(key) || key.includes('Count') || key === 'units' || key === 'bottles'),
+      (isMoneyColumn(key) ||
+        key.includes('Count') ||
+        key === 'count' ||
+        key === 'units' ||
+        key === 'bottles' ||
+        key === 'scrapped' ||
+        key === 'lostAtCustomers'),
   )
   return (
     <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {entries.slice(0, 6).map(([key, value]) => (
         <div key={key} className="rounded-lg border bg-white p-4">
-          <p className="text-xs capitalize text-muted-foreground">
-            {key.replace(/[A-Z]/g, (m) => ` ${m}`)}
-          </p>
+          <p className="text-xs text-muted-foreground">{humanHeader(key)}</p>
           <p className="mt-1 text-xl font-semibold tabular-nums">
-            {moneyKeys.has(key) ? <Money value={Number(value)} /> : String(value)}
+            {isMoneyColumn(key) ? <Money value={Number(value)} /> : String(value)}
           </p>
         </div>
       ))}
-      {!entries.length && <p className="text-sm text-muted-foreground">Loading {report} report…</p>}
+      {loading && !entries.length ? (
+        <p className="text-sm text-muted-foreground">Loading this report…</p>
+      ) : null}
     </div>
   )
 }
@@ -230,12 +223,19 @@ function ProfitLossSummary({ data }: { data: Row }) {
           <h2 className="mb-2 font-semibold">Revenue breakdown</h2>
           {Object.entries(revenue).map(([k, v]) => (
             <p className="flex justify-between border-b py-2 text-sm last:border-0" key={k}>
-              <span>{k}</span>
+              <span>{humanHeader(k)}</span>
               <Money value={Number(v)} />
             </p>
           ))}
           <p className="mt-2 text-xs text-muted-foreground">
             Excluded deposits: <Money value={Number(excluded.depositsReceived ?? 0)} />
+            {Number(excluded.employeeAdvances ?? 0) > 0 ? (
+              <>
+                {' '}
+                · Salary advances (not a cost):{' '}
+                <Money value={Number(excluded.employeeAdvances ?? 0)} />
+              </>
+            ) : null}
           </p>
         </div>
         <div className="rounded-lg border bg-white p-4">
@@ -265,19 +265,15 @@ function Metric({ label, value, suffix }: { label: string; value: unknown; suffi
     </div>
   )
 }
-function ReportTable({ rows }: { rows: Row[] }) {
-  const keys = Object.keys(rows[0] ?? {})
+function ReportTable({ rows, keys }: { rows: Row[]; keys: string[] }) {
   return (
     <div className="overflow-x-auto rounded-lg border bg-white">
       <table className="w-full text-sm">
         <thead className="bg-slate-50">
           <tr>
             {keys.map((key) => (
-              <th
-                className="whitespace-nowrap px-3 py-2 text-left font-medium capitalize"
-                key={key}
-              >
-                {key.replace(/[A-Z]/g, (m) => ` ${m}`)}
+              <th className="whitespace-nowrap px-3 py-2 text-left font-medium" key={key}>
+                {humanHeader(key)}
               </th>
             ))}
           </tr>
@@ -287,7 +283,7 @@ function ReportTable({ rows }: { rows: Row[] }) {
             <tr className="border-t" key={i}>
               {keys.map((key) => (
                 <td className="whitespace-nowrap px-3 py-2" key={key}>
-                  {typeof row[key] === 'number' && moneyKeys.has(key) ? (
+                  {typeof row[key] === 'number' && isMoneyColumn(key) ? (
                     <Money value={Number(row[key])} />
                   ) : (
                     String(row[key] ?? '—')

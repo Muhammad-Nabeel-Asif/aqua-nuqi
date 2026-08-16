@@ -85,7 +85,7 @@ export function AuditPanel() {
       await api.settings.setMany({ values: { 'audit.retentionYears': Math.floor(years) } })
       await qc.invalidateQueries({ queryKey: ['settings'] })
       toast({
-        title: years === 0 ? 'Retention: keep forever' : `Retention: ${Math.floor(years)} years`,
+        title: years === 0 ? 'Keep the log forever' : `Keep the log for ${Math.floor(years)} years`,
         variant: 'success',
       })
     } catch (err) {
@@ -110,7 +110,7 @@ export function AuditPanel() {
       await api.settings.setMany({ values: { 'audit.retentionYears': Math.floor(years) } })
       const result = await api.audit.applyRetention()
       toast({
-        title: 'Retention applied',
+        title: 'Old log entries cleaned up',
         description:
           result.archivedCount === 0
             ? 'Nothing older than the retention window'
@@ -121,7 +121,7 @@ export function AuditPanel() {
       await query.refetch()
     } catch (err) {
       toast({
-        title: 'Retention failed',
+        title: 'Could not clean up the log',
         description: err instanceof AppError ? err.message : 'Error',
         variant: 'error',
       })
@@ -215,7 +215,7 @@ export function AuditPanel() {
           Export Excel
         </Button>
         <div className="space-y-1">
-          <Label className="text-xs">Retention years (0 = keep forever)</Label>
+          <Label className="text-xs">How long to keep the log (years, 0 = forever)</Label>
           <Input
             className="w-28"
             type="number"
@@ -225,10 +225,10 @@ export function AuditPanel() {
           />
         </div>
         <Button variant="outline" onClick={() => void saveRetentionSetting()}>
-          Save retention
+          Save how long to keep
         </Button>
         <Button variant="outline" onClick={() => void applyRetention()}>
-          Apply retention now
+          Apply now
         </Button>
         <Button variant="outline" onClick={() => void archiveOnce()}>
           Archive to chosen folder…

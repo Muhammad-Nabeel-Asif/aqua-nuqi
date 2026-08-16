@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { promptDialog } from '@renderer/components/ConfirmDialog'
 import { DateText } from '@renderer/components/DateText'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
@@ -8,6 +9,7 @@ import { toast } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { api } from '@renderer/lib/api'
+import { formatAppError } from '@renderer/lib/app-error-message'
 import type { PaymentDto } from '@shared/contracts'
 import { formatMoney, type Paisa } from '@shared/money'
 import { ReallocatePaymentDialog } from './ReallocatePaymentDialog'
@@ -145,69 +147,97 @@ export function PaymentsPage() {
                 <td className="p-2 text-right">
                   <Money value={p.unallocated} />
                 </td>
-                <td className="p-2 space-x-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      void api.pdf
-                        .generateReceipt(p.id, 'a5', true)
-                        .then((r) =>
-                          toast({ title: 'Receipt PDF', description: r.path, variant: 'success' }),
-                        )
-                        .catch((e) =>
-                          toast({
-                            title: 'Receipt failed',
-                            description: e instanceof Error ? e.message : 'Error',
-                            variant: 'error',
-                          }),
-                        )
-                    }
-                  >
-                    Receipt A5
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      void api.pdf
-                        .generateReceipt(p.id, 'thermal', true)
-                        .then((r) =>
-                          toast({
-                            title: 'Thermal receipt',
-                            description: r.path,
-                            variant: 'success',
-                          }),
-                        )
-                        .catch((e) =>
-                          toast({
-                            title: 'Receipt failed',
-                            description: e instanceof Error ? e.message : 'Error',
-                            variant: 'error',
-                          }),
-                        )
-                    }
-                  >
-                    80 mm
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setReallocate(p)}>
-                    Reallocate
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      void (async () => {
-                        const reason = window.prompt('Reason to void this payment:')
-                        if (!reason?.trim()) return
-                        await api.payments.void(p.id, reason.trim())
-                        toast({ title: 'Payment voided', variant: 'success' })
-                        await qc.invalidateQueries({ queryKey: ['payments'] })
-                      })()
-                    }
-                  >
-                    Void
-                  </Button>
+                <td className="p-2">
+                  <span className="inline-flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void api.pdf
+                          .generateReceipt(p.id, 'a5', true)
+                          .then((r) =>
+                            toast({
+                              title: 'Receipt PDF',
+                              description: r.path,
+                              variant: 'success',
+                            }),
+                          )
+                          .catch((e) =>
+                            toast({
+                              title: 'Receipt failed',
+                              description: e instanceof Error ? e.message : 'Error',
+                              variant: 'error',
+                            }),
+                          )
+                      }
+                    >
+                      Receipt A5
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void api.pdf
+                          .generateReceipt(p.id, 'thermal', true)
+                          .then((r) =>
+                            toast({
+                              title: 'Thermal receipt',
+                              description: r.path,
+                              variant: 'success',
+                            }),
+                          )
+                          .catch((e) =>
+                            toast({
+                              title: 'Receipt failed',
+                              description: e instanceof Error ? e.message : 'Error',
+                              variant: 'error',
+                            }),
+                          )
+                      }
+                    >
+                      80 mm
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      title="The money is real; put it on different bills"
+                      onClick={() => setReallocate(p)}
+                    >
+                      Apply to other bills
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      title="Use only if this money was never received or was entered by mistake"
+                      onClick={() =>
+                        void (async () => {
+                          const reason = await promptDialog({
+                            title: 'Cancel this payment?',
+                            description:
+                              'Use only if the money was never received or was entered by mistake. The payment is kept in history, not deleted.',
+                            label: 'Reason',
+                            placeholder: 'e.g. Typed the wrong customer',
+                            confirmLabel: 'Cancel payment',
+                            danger: true,
+                          })
+                          if (!reason) return
+                          try {
+                            await api.payments.void(p.id, reason)
+                            toast({ title: 'Payment cancelled', variant: 'success' })
+                            await qc.invalidateQueries({ queryKey: ['payments'] })
+                          } catch (e) {
+                            toast({
+                              title: 'Could not cancel this payment',
+                              description: formatAppError(e),
+                              variant: 'error',
+                            })
+                          }
+                        })()
+                      }
+                    >
+                      Cancel payment
+                    </Button>
+                  </span>
                 </td>
               </tr>
             ))}

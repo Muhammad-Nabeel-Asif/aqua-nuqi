@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { AppLogo, BRAND_NAME, BRAND_TAGLINE } from '@renderer/brand'
+import { promptDialog } from '@renderer/components/ConfirmDialog'
 import { DateText } from '@renderer/components/DateText'
 import { PageHeader } from '@renderer/components/PageHeader'
 import { toast } from '@renderer/components/Toast'
@@ -9,6 +11,7 @@ import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { api } from '@renderer/lib/api'
+import { ROLE_LABEL } from '@renderer/lib/plain-labels'
 import { useSessionStore } from '@renderer/stores/session'
 import { AppError } from '@shared/errors'
 import { AuditPanel } from './AuditPanel'
@@ -17,9 +20,33 @@ import { InvoiceSettingsPanel } from './InvoiceSettingsPanel'
 import { MaintenancePanel } from './MaintenancePanel'
 import { MasterDataPanel } from './MasterDataPanel'
 
+const SETTINGS_TABS = [
+  'business',
+  'locale',
+  'invoice',
+  'billing',
+  'master',
+  'backup',
+  'users',
+  'maintenance',
+  'audit',
+  'about',
+] as const
+
+function settingsTabFromPath(pathname: string): (typeof SETTINGS_TABS)[number] {
+  const part = pathname.replace(/\/+$/, '').split('/').filter(Boolean)[1]
+  if (part && (SETTINGS_TABS as readonly string[]).includes(part)) {
+    return part as (typeof SETTINGS_TABS)[number]
+  }
+  return 'business'
+}
+
 export function SettingsPage() {
   const user = useSessionStore((s) => s.user)
   const qc = useQueryClient()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const tab = settingsTabFromPath(location.pathname)
 
   const settingsQuery = useQuery({
     queryKey: ['settings', 'all'],
@@ -64,12 +91,6 @@ export function SettingsPage() {
   const [recoveryShown, setRecoveryShown] = useState<string | null>(null)
   const [period, setPeriod] = useState('2026-06')
   const [reopenReason, setReopenReason] = useState('')
-  const [tab, setTab] = useState(() => {
-    const hash = window.location.hash
-    if (hash.includes('/settings/backup')) return 'backup'
-    if (hash.includes('/settings/audit')) return 'audit'
-    return 'business'
-  })
 
   useEffect(() => {
     const v = settingsQuery.data?.values
@@ -129,7 +150,7 @@ export function SettingsPage() {
           'payroll.workingDaysBasis': locale.workingDaysBasis,
         },
       })
-      toast({ title: 'Localisation saved', variant: 'success' })
+      toast({ title: 'Language, money and dates saved', variant: 'success' })
     } catch (err) {
       toast({
         title: 'Save failed',
@@ -194,17 +215,22 @@ export function SettingsPage() {
   return (
     <div>
       <PageHeader title="Settings" subtitle="Business profile, backup, users and maintenance." />
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs
+        value={tab}
+        onValueChange={(next) => {
+          navigate(next === 'business' ? '/settings' : `/settings/${next}`)
+        }}
+      >
         <TabsList className="flex h-auto flex-wrap">
           <TabsTrigger value="business">Business</TabsTrigger>
-          <TabsTrigger value="locale">Localisation</TabsTrigger>
+          <TabsTrigger value="locale">Language, money and dates</TabsTrigger>
           <TabsTrigger value="invoice">Invoice</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
-          <TabsTrigger value="master">Master data</TabsTrigger>
+          <TabsTrigger value="master">Lists</TabsTrigger>
           <TabsTrigger value="backup">Backup</TabsTrigger>
           <TabsTrigger value="users">Users & security</TabsTrigger>
-          <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
-          <TabsTrigger value="audit">Audit</TabsTrigger>
+          <TabsTrigger value="maintenance">Check data</TabsTrigger>
+          <TabsTrigger value="audit">Activity log</TabsTrigger>
           <TabsTrigger value="about">About</TabsTrigger>
         </TabsList>
 
@@ -319,7 +345,7 @@ export function SettingsPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Payroll working-days basis</Label>
+            <Label>Monthly salary working-days basis</Label>
             <select
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={locale.workingDaysBasis}
@@ -446,7 +472,7 @@ export function SettingsPage() {
                   <span>
                     {u.displayName}{' '}
                     <span className="text-muted-foreground">
-                      (@{u.username}) · {u.role}
+                      (@{u.username}) · {ROLE_LABEL[u.role] ?? u.role}
                       {!u.isActive ? ' · inactive' : ''}
                     </span>
                   </span>
@@ -465,7 +491,13 @@ export function SettingsPage() {
                       size="sm"
                       variant="outline"
                       onClick={async () => {
-                        const pwd = window.prompt('New password (min 8 characters)')
+                        const pwd = await promptDialog({
+                          title: 'Reset password',
+                          description: 'New password must be at least 8 characters.',
+                          label: 'New password',
+                          inputType: 'password',
+                          confirmLabel: 'Reset password',
+                        })
                         if (!pwd) return
                         await api.auth.resetPassword({ userId: u.id, newPassword: pwd })
                         toast({ title: 'Password reset', variant: 'success' })
@@ -489,8 +521,20 @@ export function SettingsPage() {
                         size="sm"
                         variant="outline"
                         onClick={async () => {
-                          const pin = window.prompt('New 4–6 digit PIN')
-                          const pwd = window.prompt('Your password to confirm')
+                          const pin = await promptDialog({
+                            title: 'Set PIN',
+                            description: '4–6 digits. Used for a quick unlock.',
+                            label: 'PIN',
+                            inputType: 'password',
+                            confirmLabel: 'Continue',
+                          })
+                          if (!pin) return
+                          const pwd = await promptDialog({
+                            title: 'Confirm with your password',
+                            label: 'Your password',
+                            inputType: 'password',
+                            confirmLabel: 'Set PIN',
+                          })
                           if (!pin || !pwd) return
                           await api.auth.setPin({ pin, password: pwd })
                           await qc.invalidateQueries({ queryKey: ['users'] })
@@ -504,7 +548,12 @@ export function SettingsPage() {
                       size="sm"
                       variant="outline"
                       onClick={async () => {
-                        const name = window.prompt('Display name', u.displayName)
+                        const name = await promptDialog({
+                          title: 'Edit display name',
+                          label: 'Display name',
+                          defaultValue: u.displayName,
+                          confirmLabel: 'Save',
+                        })
                         if (!name) return
                         await api.auth.updateUser({ userId: u.id, displayName: name })
                         await qc.invalidateQueries({ queryKey: ['users'] })
@@ -569,8 +618,8 @@ export function SettingsPage() {
                 }
               >
                 <option value="owner">Owner</option>
-                <option value="operator">Operator</option>
-                <option value="viewer">Viewer</option>
+                <option value="operator">Data entry staff</option>
+                <option value="viewer">View only</option>
               </select>
             </div>
             <Button onClick={() => void createUser()}>Create user</Button>
@@ -669,7 +718,7 @@ export function SettingsPage() {
 
           {user?.role === 'owner' ? (
             <div className="rounded-lg border bg-white p-4">
-              <h3 className="font-semibold">Period lock (owner)</h3>
+              <h3 className="font-semibold">Lock a billing month (owner)</h3>
               <div className="mt-3 flex flex-wrap items-end gap-2">
                 <div className="space-y-1.5">
                   <Label>Period (YYYY-MM)</Label>
@@ -690,7 +739,7 @@ export function SettingsPage() {
                       )
                   }
                 >
-                  Close period
+                  Close this month
                 </Button>
                 <div className="space-y-1.5">
                   <Label>Reopen reason</Label>
@@ -719,7 +768,7 @@ export function SettingsPage() {
           ) : null}
 
           <div className="rounded-lg border bg-white p-4">
-            <h3 className="font-semibold">Recent audit entries</h3>
+            <h3 className="font-semibold">Recent activity</h3>
             <ul className="mt-3 space-y-2 text-sm">
               {(aboutQuery.data?.recentAudit ?? []).map((a) => (
                 <li key={a.id} className="flex justify-between gap-4 border-b pb-2">

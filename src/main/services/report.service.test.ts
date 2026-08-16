@@ -49,19 +49,19 @@ import { createVehicleService } from './vehicle.service'
  * Expenses (active):
  *   Fuel Rs 10,000 → 1_000_000
  *   Electricity Rs 5,000 → 500_000
- *   Employee Advance Rs 2,000 → 200_000  (source payroll)
+ *   Employee Advance Rs 2,000 → 200_000  (source payroll; not a P&L cost)
  *   Salaries Rs 8,000 → 800_000         (net after advance; source payroll)
  *   Voided Fuel Rs 3,000 → excluded
- * Total expenses = 2_500_000
- * Salary-related (Advance+Salaries) = 1_000_000 (= gross once)
+ * Operating expenses = 2_300_000 (advance excluded)
+ * Salary-related listed (Advance+Salaries) = 1_000_000 (= gross once)
  *
  * Accrual revenue = 60_000 + 25_000 + 21_000 = 106_000
  * Cash revenue    = 40_000 + 21_000 = 61_000
- * Profit accrual  = 106_000 − 2_500_000 = −2_394_000
- * Profit cash     = 61_000 − 2_500_000 = −2_439_000
+ * Profit accrual  = 106_000 − 2_300_000 = −2_194_000
+ * Profit cash     = 61_000 − 2_300_000 = −2_239_000
  *
  * Bottles delivered = 10 + 5 + 3 = 18
- * Cost/bottle = floor(2_500_000 / 18) = 138_889 (Math.round)
+ * Cost/bottle = floor(2_300_000 / 18) = 127_778 (Math.round)
  * Bottles with customers = A: 10−8 = 2; B: 0; walk-in ignored in balances typically
  * Receivables outstanding = B only 25_000 (A is in credit after deposit adjustment)
  */
@@ -73,12 +73,12 @@ const RATE_WALK = Number(toPaisa(70))
 const EXPECT = {
   accrualRevenue: 106_000,
   cashRevenue: 61_000,
-  totalExpenses: 2_500_000,
-  profitAccrual: 106_000 - 2_500_000,
-  profitCash: 61_000 - 2_500_000,
+  totalExpenses: 2_300_000,
+  profitAccrual: 106_000 - 2_300_000,
+  profitCash: 61_000 - 2_300_000,
   salaryRelated: 1_000_000,
   bottlesDelivered: 18,
-  costPerBottle: Math.round(2_500_000 / 18),
+  costPerBottle: Math.round(2_300_000 / 18),
   outstanding: 25_000,
   bottlesWithCustomers: 2,
   depositExcludedFromAccrual: 100_000, // Rs 1000
@@ -352,10 +352,10 @@ describe('report Phase 8 acceptance', () => {
     expect(pl.excluded.depositsReceived).toBe(EXPECT.depositExcludedFromAccrual)
     expect(pl.excluded.depositPaymentsTagged).toBe(EXPECT.depositPaymentExcluded)
     expect(pl.revenue.netRevenue).toBe(EXPECT.accrualRevenue)
-    // Advance + Salaries = gross once
-    const salaryRelated = pl.expenses
-      .filter((e) => e.isSalaries || e.isEmployeeAdvance)
-      .reduce((s, e) => s + e.total, 0)
+    expect(pl.excluded.employeeAdvances).toBe(200_000)
+    const salaryRelated =
+      pl.excluded.employeeAdvances +
+      pl.expenses.filter((e) => e.isSalaries).reduce((s, e) => s + e.total, 0)
     expect(salaryRelated).toBe(EXPECT.salaryRelated)
     expect(pl.netProfit).toBe(EXPECT.profitAccrual)
   })
@@ -364,7 +364,7 @@ describe('report Phase 8 acceptance', () => {
     const { reports, expenses } = await seedFixture()
     const pl = reports.profitAndLoss(july, 'accrual', { compare: false })
     const list = expenses.listExpenses({ from: july.from, to: july.to, limit: 5000 })
-    expect(pl.totalExpenses).toBe(list.totalAmount)
+    expect(pl.totalExpenses).toBe(list.totalAmount - pl.excluded.employeeAdvances)
     expect(pl.totalExpenses).toBe(EXPECT.totalExpenses)
     const salaryRows = pl.expenses.filter((e) => e.isSalaries)
     expect(salaryRows).toHaveLength(1)

@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { confirmDialog, promptDialog } from '@renderer/components/ConfirmDialog'
 import { Money } from '@renderer/components/Money'
 import { PageHeader } from '@renderer/components/PageHeader'
 import { toast } from '@renderer/components/Toast'
@@ -50,7 +51,7 @@ export function PayrollPage() {
     try {
       const result = await api.payroll.generate(period)
       setSelectedId(result.run.id)
-      toast({ title: `Payroll generated for ${period}`, variant: 'success' })
+      toast({ title: `Salaries generated for ${period}`, variant: 'success' })
       await refresh()
     } catch (err) {
       toast({
@@ -60,7 +61,14 @@ export function PayrollPage() {
     }
   }
   async function finalize() {
-    if (!run || !window.confirm(`Finalize payroll for ${run.period}? This posts salary expenses.`))
+    if (
+      !run ||
+      !(await confirmDialog({
+        title: `Confirm salaries for ${run.period}?`,
+        description: 'This posts salary expenses for the month.',
+        confirmLabel: 'Confirm salaries',
+      }))
+    )
       return
     try {
       const result = await api.payroll.finalize({
@@ -69,7 +77,7 @@ export function PayrollPage() {
         paymentMethod,
       })
       toast({
-        title: 'Payroll finalized',
+        title: 'Salaries confirmed',
         description: `Salary expense: ${result.salariesExpenseTotal / 100}. Record payments when cash is paid.`,
         variant: 'success',
       })
@@ -83,7 +91,13 @@ export function PayrollPage() {
   }
   async function voidRun() {
     if (!run) return
-    const reason = window.prompt('Reason for voiding this payroll run:')
+    const reason = await promptDialog({
+      title: 'Cancel this payroll run?',
+      description: 'Use only if this run was created by mistake. It stays in history.',
+      label: 'Reason',
+      confirmLabel: 'Cancel payroll',
+      danger: true,
+    })
     if (!reason?.trim()) return
     try {
       await api.payroll.void(run.id, reason.trim())
@@ -97,7 +111,13 @@ export function PayrollPage() {
     }
   }
   async function payAll() {
-    if (!run || !window.confirm(`Record payment for all unpaid salaries in ${run.period}?`)) return
+    if (!run) return
+    const ok = await confirmDialog({
+      title: 'Record all unpaid salaries?',
+      description: `This records payment for every unpaid salary in ${run.period}.`,
+      confirmLabel: 'Record payments',
+    })
+    if (!ok) return
     try {
       const result = await api.payroll.payAll({
         runId: run.id,
@@ -132,8 +152,8 @@ export function PayrollPage() {
   return (
     <div>
       <PageHeader
-        title="Payroll"
-        subtitle="Generate, review, finalize and pay monthly salaries."
+        title="Monthly salaries"
+        subtitle="Generate, review, confirm and pay monthly salaries."
         actions={
           <Button variant="outline" asChild>
             <Link to="/employees/advances">Advances</Link>
@@ -142,12 +162,12 @@ export function PayrollPage() {
       />
       <div className="grid gap-4 xl:grid-cols-[260px_1fr]">
         <aside className="rounded-lg border bg-white p-3">
-          <h2 className="font-semibold">Generate payroll</h2>
+          <h2 className="font-semibold">Generate salaries</h2>
           <div className="mt-3 flex gap-2">
             <Input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} />
             <Button onClick={() => void generate()}>Generate</Button>
           </div>
-          <h2 className="mt-6 font-semibold">Payroll runs</h2>
+          <h2 className="mt-6 font-semibold">Salary runs</h2>
           <div className="mt-2 space-y-1">
             {(runsQ.data?.items ?? []).map((item) => (
               <button
@@ -217,7 +237,7 @@ export function PayrollPage() {
                   </select>
                 </label>
                 {run.status === 'draft' ? (
-                  <Button onClick={() => void finalize()}>Finalize</Button>
+                  <Button onClick={() => void finalize()}>Confirm salaries</Button>
                 ) : null}
                 {run.status === 'finalized' ? (
                   <Button onClick={() => void payAll()}>Pay all</Button>
@@ -468,10 +488,13 @@ function PayrollRow({
   async function pay() {
     const remaining = item.netPayable - item.paidAmount
     if (remaining <= 0) return
-    const raw = window.prompt(
-      `Pay amount for ${item.employeeCode} (remaining ${paisaToDecimalString(remaining)} Rs)`,
-      paisaToDecimalString(remaining),
-    )
+    const raw = await promptDialog({
+      title: `Pay ${item.employeeCode}`,
+      description: `Remaining ${paisaToDecimalString(remaining)} Rs`,
+      label: 'Amount (Rs)',
+      defaultValue: paisaToDecimalString(remaining),
+      confirmLabel: 'Record payment',
+    })
     if (raw == null) return
     try {
       setSaving(true)
