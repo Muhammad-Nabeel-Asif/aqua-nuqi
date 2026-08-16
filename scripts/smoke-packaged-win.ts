@@ -1,17 +1,19 @@
 /**
- * Launch Windows portable exe with an isolated AQUA_NUQI_USER_DATA tree and assert
- * first-run setup is shown. Never touches %AppData%\Aqua Nuqi.
+ * Launch the Windows packaged app with an isolated AQUA_NUQI_USER_DATA tree and
+ * assert first-run setup is shown. Never touches %AppData%\Aqua Nuqi.
  *
- * Run after `npm run dist:win`. Not a PR CI gate.
+ * Playwright cannot attach to Aqua-Nuqi-Portable.exe (7-Zip SFX wrapper), so this
+ * launches release/win-unpacked/Aqua Nuqi.exe after checking the portable artifact
+ * exists. Run after `npm run dist:win`. Not a PR CI gate.
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron } from '@playwright/test'
 
-function findPortableExe(): string {
+function requirePortableArtifact(): void {
   const preferred = path.join(process.cwd(), 'release', 'Aqua-Nuqi-Portable.exe')
-  if (fs.existsSync(preferred)) return preferred
+  if (fs.existsSync(preferred)) return
   const release = path.join(process.cwd(), 'release')
   if (!fs.existsSync(release)) {
     throw new Error('release/ is missing — run npm run dist:win first')
@@ -20,7 +22,14 @@ function findPortableExe(): string {
   if (matches.length === 0) {
     throw new Error('Aqua-Nuqi-Portable.exe not found under release/')
   }
-  return path.join(release, matches[0]!)
+}
+
+function findUnpackedExe(): string {
+  const exe = path.join(process.cwd(), 'release', 'win-unpacked', 'Aqua Nuqi.exe')
+  if (!fs.existsSync(exe)) {
+    throw new Error(`Packaged Electron binary missing: ${exe}`)
+  }
+  return exe
 }
 
 function envRecord(): Record<string, string> {
@@ -37,7 +46,8 @@ async function main(): Promise<void> {
   if (process.platform !== 'win32') {
     throw new Error('test:smoke:win must run on Windows after dist:win')
   }
-  const exe = findPortableExe()
+  requirePortableArtifact()
+  const exe = findUnpackedExe()
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aqua-smoke-win-'))
   const userData = path.join(root, 'Aqua Nuqi')
   fs.mkdirSync(userData, { recursive: true })
@@ -50,7 +60,7 @@ async function main(): Promise<void> {
     executablePath: exe,
     args: ['--no-sandbox'],
     env,
-    timeout: 60_000,
+    timeout: 90_000,
   })
 
   try {
@@ -62,7 +72,7 @@ async function main(): Promise<void> {
     if (!hash.includes('#/setup') && !body.includes('Set up a new business')) {
       throw new Error(`Expected first-run setup, hash=${hash} body=${body.slice(0, 400)}`)
     }
-    console.log('✓ Portable exe launched with isolated userData; first-run setup visible')
+    console.log('✓ Packaged Windows app launched with isolated userData; first-run setup visible')
   } finally {
     await app.close()
     fs.rmSync(root, { recursive: true, force: true })

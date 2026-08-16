@@ -83,6 +83,7 @@ describe('CI release safety (Phase 0B review)', () => {
     const windows = yml.slice(yml.indexOf('build-windows:'), yml.indexOf('build-linux:'))
     expect(windows).toMatch(/npm run dist:win/)
     expect(windows).toMatch(/npm run test:smoke:win/)
+    expect(windows).toMatch(/continue-on-error:\s*true/)
 
     const check = readCheckWorkflow()
     expect(check).not.toMatch(/test:smoke:win/)
