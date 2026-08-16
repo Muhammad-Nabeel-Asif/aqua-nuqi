@@ -2,12 +2,16 @@ import { cn } from '@renderer/lib/utils'
 import { formatMoney, type Paisa } from '@shared/money'
 
 type Props = {
-  value: number
+  value: number | null
   className?: string
   creditSuffix?: boolean
 }
 
 export function Money({ value, className, creditSuffix }: Props) {
+  if (value === null) {
+    return <span className={cn('tabular-nums text-right', className)}>—</span>
+  }
+
   const paisa = value as Paisa
   const formatted = formatMoney(paisa)
   const isCredit = value < 0

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppLogo, BrandLockup } from '@renderer/brand'
+import { useToastStore } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import {
   Card,
@@ -20,6 +21,9 @@ type Path = 'choose' | 'new' | 'restore'
 
 export function SetupWizard() {
   const navigate = useNavigate()
+  useEffect(() => {
+    useToastStore.getState().clearAll()
+  }, [])
   const [path, setPath] = useState<Path>('choose')
   const [step, setStep] = useState(0)
   const [error, setError] = useState<string | null>(null)

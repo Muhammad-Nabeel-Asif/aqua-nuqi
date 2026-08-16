@@ -13,6 +13,8 @@ type ToastState = {
   items: ToastItem[]
   push: (item: Omit<ToastItem, 'id'>) => void
   dismiss: (id: string) => void
+  clearErrors: () => void
+  clearAll: () => void
 }
 
 export const useToastStore = create<ToastState>((set) => ({
@@ -27,6 +29,8 @@ export const useToastStore = create<ToastState>((set) => ({
     }
   },
   dismiss: (id) => set((s) => ({ items: s.items.filter((t) => t.id !== id) })),
+  clearErrors: () => set((s) => ({ items: s.items.filter((t) => t.variant !== 'error') })),
+  clearAll: () => set({ items: [] }),
 }))
 
 export function toast(item: Omit<ToastItem, 'id'>): void {

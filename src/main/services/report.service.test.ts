@@ -433,6 +433,24 @@ describe('report Phase 8 acceptance', () => {
     expect(op.assets.bottlesWithCustomers).toBe(EXPECT.bottlesWithCustomers)
   })
 
+  it('viewer dashboard masks financial values but keeps operational counts', async () => {
+    const { reports } = await seedFixture()
+    const owner = reports.dashboard('2026-07-31')
+    const viewer = reports.dashboardForRole('viewer', '2026-07-31')
+
+    expect(viewer.today.cashCollected).toBeNull()
+    expect(viewer.assets.totalOutstanding).toBeNull()
+    expect(viewer.assets.totalCredit).toBeNull()
+    expect(Object.values(viewer.assets.ageingBuckets).every((value) => value === null)).toBe(true)
+    expect(viewer.actions.topOverdue.every((item) => item.balance === null)).toBe(true)
+    expect(viewer.actions.tripVariancesThisWeek.every((trip) => trip.cashVariance === null)).toBe(
+      true,
+    )
+    expect(viewer.assets.customersInCredit).toBe(owner.assets.customersInCredit)
+    expect(viewer.assets.bottlesWithCustomers).toBe(owner.assets.bottlesWithCustomers)
+    expect(viewer.assets.filledStockAtPlant).toBe(owner.assets.filledStockAtPlant)
+  })
+
   it('report cache returns same object until a write bumps the counter', async () => {
     const { reports, expenses, owner } = await seedFixture()
     const a = reports.profitAndLoss(july, 'accrual', { compare: false })

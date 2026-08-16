@@ -52,4 +52,21 @@ describe('settingsService', () => {
     expect(settings.get('tax.enabled')).toBe(true)
     expect(settings.get('audit.retentionYears')).toBe(3)
   })
+
+  it('persists lock settings for the active session', () => {
+    const db = getDb()
+    const settings = createSettingsService(db, createAuditService(db))
+    settings.setMany(
+      {
+        'security.autoLockMinutes': 1,
+        'security.lockOnMinimise': true,
+      },
+      { allowOwnerOnly: true },
+    )
+
+    expect(settings.getMany(['security.autoLockMinutes', 'security.lockOnMinimise'])).toEqual({
+      'security.autoLockMinutes': 1,
+      'security.lockOnMinimise': true,
+    })
+  })
 })

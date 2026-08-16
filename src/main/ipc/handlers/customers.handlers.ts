@@ -248,6 +248,7 @@ export function registerCustomerHandlers(): void {
         period: ctxApp.period,
         rate: ctxApp.rates,
         balance: ctxApp.balances,
+        stock: ctxApp.stock,
         userId: ctx.userId,
       })
     },

@@ -14,6 +14,7 @@ import { createEmployeeService } from '@main/services/employee.service'
 import { createMasterDataService } from '@main/services/master-data.service'
 import type { PeriodService } from '@main/services/period.service'
 import type { RateService } from '@main/services/rate.service'
+import type { StockService } from '@main/services/stock.service'
 import { addBusinessDays, todayBusinessDate } from '@shared/date'
 import { toPaisa } from '@shared/money'
 
@@ -93,6 +94,9 @@ export async function seedDemoCustomers(
     period: PeriodService
     rate: RateService
     balance: BalanceService
+    stock: StockService
+    customerCount?: number
+    deliveryEnd?: string
     userId?: number | null
   },
 ): Promise<{ areas: number; routes: number; customers: number; deliveries: number }> {
@@ -103,6 +107,8 @@ export async function seedDemoCustomers(
     deps.period,
     deps.rate,
     deps.balance,
+    undefined,
+    deps.stock,
   )
   const deliveryService = createDeliveryService(
     db,
@@ -110,6 +116,8 @@ export async function seedDemoCustomers(
     deps.period,
     deps.rate,
     deps.balance,
+    undefined,
+    deps.stock,
   )
 
   // Ensure default product has a sensible default rate
@@ -160,7 +168,7 @@ export async function seedDemoCustomers(
 
   if (existing < 150) {
     const asOf = '2026-03-01'
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < (deps.customerCount ?? 200); i++) {
       const first = FIRST[i % FIRST.length]!
       const last = LAST[Math.floor(i / FIRST.length) % LAST.length]!
       const name = `${first} ${last} ${Math.floor(i / (FIRST.length * LAST.length)) + 1}`
@@ -228,7 +236,7 @@ export async function seedDemoCustomers(
     }
   }
 
-  const deliveryCount = await seedDemoDeliveries(db, deliveryService, deps.userId)
+  const deliveryCount = await seedDemoDeliveries(db, deliveryService, deps.userId, deps.deliveryEnd)
   seedDemoEmployees(db, deps)
 
   return {
@@ -278,6 +286,7 @@ async function seedDemoDeliveries(
   db: AppDatabase,
   deliveryService: ReturnType<typeof createDeliveryService>,
   userId?: number | null,
+  end = '2026-07-31',
 ): Promise<number> {
   const existingCount = db
     .select({ c: sql<number>`count(*)` })
@@ -298,7 +307,6 @@ async function seedDemoDeliveries(
 
   // Seed window: 2026-03-01 → 2026-07-31 (5 months) so Phase 2 month boundaries are stable
   const start = '2026-03-01'
-  const end = '2026-07-31'
   let created = 0
 
   for (let i = 0; i < active.length; i++) {

@@ -79,6 +79,18 @@ if (!gotLock) {
     }
 
     registerAllHandlers()
+    app.on('browser-window-created', (_event, win) => {
+      win.on('minimize', () => {
+        try {
+          const live = tryGetAppContext()
+          if (!live?.settings.get('security.lockOnMinimise')) return
+          if (live.auth.getSession().user) live.auth.lock()
+          win.webContents.send('auth:locked', {})
+        } catch {
+          // ignore
+        }
+      })
+    })
     createMainWindow()
     startBackupScheduler(() => tryGetAppContext())
 
@@ -117,19 +129,6 @@ if (!gotLock) {
       } catch {
         // ignore
       }
-    })
-
-    app.on('browser-window-created', (_event, win) => {
-      win.on('minimize', () => {
-        try {
-          const live = tryGetAppContext()
-          if (!live?.settings.get('security.lockOnMinimise')) return
-          if (live.auth.getSession().user) live.auth.lock()
-          win.webContents.send('auth:locked', {})
-        } catch {
-          // ignore
-        }
-      })
     })
   })
 

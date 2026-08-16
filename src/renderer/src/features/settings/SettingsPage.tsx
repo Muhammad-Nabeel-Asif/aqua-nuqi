@@ -406,6 +406,10 @@ export function SettingsPage() {
                     'updates.automatic': autoUpdates,
                   },
                 })
+                await Promise.all([
+                  qc.invalidateQueries({ queryKey: ['settings', 'all'] }),
+                  qc.invalidateQueries({ queryKey: ['settings', 'security'] }),
+                ])
                 toast({ title: 'Security settings saved', variant: 'success' })
               }}
             >

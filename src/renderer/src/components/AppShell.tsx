@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import {
   Boxes,
@@ -27,6 +27,7 @@ import { useSessionStore } from '@renderer/stores/session'
 import { useUiStore } from '@renderer/stores/ui'
 import { CommandPalette } from './CommandPalette'
 import { LockOverlay } from './LockOverlay'
+import { useToastStore } from './Toast'
 import { Button } from './ui/button'
 import { UpdateBanner } from './UpdateBanner'
 
@@ -112,13 +113,31 @@ export function AppShell() {
   const collapsed = useUiStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
   const setCommandOpen = useUiStore((s) => s.setCommandOpen)
+  const clearErrors = useToastStore((s) => s.clearErrors)
   const navigate = useNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
   const [idleMs, setIdleMs] = useState(0)
 
   useEffect(() => {
     pushNavHistory(`${location.pathname}${location.search}`)
   }, [location.pathname, location.search])
+
+  useEffect(() => {
+    clearErrors()
+  }, [clearErrors, location.pathname, location.search])
+
+  useEffect(() => {
+    return window.api.on('auth:locked', () => {
+      const session = useSessionStore.getState()
+      if (!session.user || session.locked) return
+      session.setSession({
+        user: session.user,
+        locked: true,
+        setupRequired: session.setupRequired,
+      })
+    })
+  }, [])
 
   const backupQuery = useQuery({
     queryKey: ['backup', 'status'],
@@ -128,7 +147,7 @@ export function AppShell() {
   })
 
   const settingsQuery = useQuery({
-    queryKey: ['settings', 'security'],
+    queryKey: ['settings', 'security', user?.role],
     queryFn: () => api.settings.get({ keys: ['security.autoLockMinutes'] }),
     enabled: Boolean(user),
   })
@@ -159,7 +178,7 @@ export function AppShell() {
     const timer = window.setInterval(() => {
       const idle = Date.now() - last
       setIdleMs(idle)
-      if (idle >= autoLockMinutes * 60_000) {
+      if (autoLockMinutes > 0 && idle >= autoLockMinutes * 60_000) {
         void api.auth.lock().then(() => {
           useSessionStore.getState().setSession({
             user,
@@ -189,6 +208,8 @@ export function AppShell() {
 
   async function logout() {
     await api.auth.logout()
+    useToastStore.getState().clearAll()
+    queryClient.clear()
     useSessionStore.getState().setSession({ user: null, locked: false, setupRequired: false })
     navigate('/login')
   }

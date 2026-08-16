@@ -9,6 +9,25 @@ import { AppError } from '@shared/errors'
 import { isOwnerOnlySetting, type SettingKey } from '@shared/settings-keys'
 import { defineHandler } from '../router'
 
+const READABLE_SECURITY_SETTINGS = new Set<SettingKey>([
+  'security.autoLockMinutes',
+  'security.lockOnMinimise',
+])
+
+export function filterSettingsForRole(
+  values: Record<string, unknown>,
+  role: 'owner' | 'operator' | 'viewer',
+): Record<string, unknown> {
+  if (role === 'owner') return values
+  const filtered = { ...values }
+  for (const key of Object.keys(filtered)) {
+    if (isOwnerOnlySetting(key) && !READABLE_SECURITY_SETTINGS.has(key as SettingKey)) {
+      delete filtered[key]
+    }
+  }
+  return filtered
+}
+
 export function registerSettingsHandlers(): void {
   defineHandler({
     channel: 'settings:get',
@@ -17,12 +36,7 @@ export function registerSettingsHandlers(): void {
     roles: 'authenticated',
     handler: (input, ctx) => {
       const values = getAppContext().settings.getMany(input.keys as SettingKey[] | undefined)
-      if (ctx.role !== 'owner') {
-        for (const key of Object.keys(values)) {
-          if (isOwnerOnlySetting(key)) delete values[key]
-        }
-      }
-      return { values }
+      return { values: filterSettingsForRole(values, ctx.role ?? 'viewer') }
     },
   })
 

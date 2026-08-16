@@ -82,6 +82,7 @@ async function main(): Promise<void> {
     period: ctx.period,
     rate: ctx.rates,
     balance: ctx.balances,
+    stock: ctx.stock,
     userId: null,
   })
   console.log('[timed-daily-entry] seed', seed)

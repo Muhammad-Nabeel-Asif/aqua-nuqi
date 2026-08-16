@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BrandLockup } from '@renderer/brand'
+import { useToastStore } from '@renderer/components/Toast'
 import { Button } from '@renderer/components/ui/button'
 import {
   Card,
@@ -18,6 +19,9 @@ import { AppError } from '@shared/errors'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  useEffect(() => {
+    useToastStore.getState().clearAll()
+  }, [])
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)

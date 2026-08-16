@@ -26,7 +26,7 @@ export function DashboardPage() {
   const [basis, setBasis] = useState<'accrual' | 'cash'>('accrual')
   const today = todayBusinessDate()
   const q = useQuery({
-    queryKey: ['reports', 'dashboard', today],
+    queryKey: ['reports', 'dashboard', today, role],
     queryFn: () => api.reports.dashboard(today),
   })
   const d = q.data
@@ -246,7 +246,9 @@ export function DashboardPage() {
           items={d.actions.tripVariancesThisWeek.map((t) => ({
             key: t.tripId,
             primary: t.employeeName ?? `Trip #${t.tripId}`,
-            secondary: `${t.tripDate} · cash Rs ${paisaToDecimalString(t.cashVariance)} · bottles ${t.bottleVariance}`,
+            secondary: `${t.tripDate} · cash ${
+              t.cashVariance === null ? '—' : `Rs ${paisaToDecimalString(t.cashVariance)}`
+            } · bottles ${t.bottleVariance}`,
             to: '/inventory/trips',
           }))}
         />
@@ -344,7 +346,7 @@ function DashStat({
   return link ? <Link to={link}>{body}</Link> : body
 }
 
-function AgeingBar({ buckets, total }: { buckets: Record<string, number>; total: number }) {
+function AgeingBar({ buckets, total }: { buckets: Record<string, number | null>; total: number }) {
   if (total <= 0) return null
   const parts = [
     { key: 'current', color: 'bg-emerald-500' },
@@ -374,7 +376,7 @@ function ActionList({
     key: string | number
     primary: string
     secondary: string
-    money?: number
+    money?: number | null
     to: string
   }>
 }) {
@@ -396,7 +398,7 @@ function ActionList({
                 {item.primary}
               </Link>
               <span className="text-muted-foreground">{item.secondary}</span>
-              {item.money != null && <Money value={item.money} />}
+              {item.money !== undefined && <Money value={item.money} />}
             </li>
           ))}
         </ul>

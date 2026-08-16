@@ -8,6 +8,7 @@ import { backfillStockMovements } from '@main/db/backfill-stock-movements'
 import { closeDatabase, getDb, getRawDb, openDatabase } from '@main/db/client'
 import { customerBalances, expenses, products, stockMovements } from '@main/db/schema'
 import { seedDefaults } from '@main/db/seed'
+import { seedDemoCustomers } from '@main/db/seed-demo'
 import { toPaisa } from '@shared/money'
 import { createAuditService } from './audit.service'
 import { createAuthService } from './auth.service'
@@ -99,6 +100,9 @@ describe('stockService (Phase 7)', () => {
       customer,
       settings,
       balances,
+      audit,
+      period,
+      rates,
     }
   }
 
@@ -253,6 +257,23 @@ describe('stockService (Phase 7)', () => {
     expect(row?.bottlesWithCustomer).toBe(7)
     expect(withCust).toBe(7)
   })
+
+  it('demo seed keeps stock movements aligned with customer bottle balances', async () => {
+    const { db, stock, owner, audit, period, rates, balances } = await setup()
+
+    await seedDemoCustomers(db, {
+      audit,
+      period,
+      rate: rates,
+      balance: balances,
+      stock,
+      customerCount: 10,
+      deliveryEnd: '2026-03-10',
+      userId: owner.id,
+    })
+
+    expect(stock.getBalances().totals.withCustomers).toBe(stock.sumCustomerBottles())
+  }, 30_000)
 
   it('AC6: purchase 100 @ Rs 350 → empty+100 and Bottle purchase expense Rs 35,000', async () => {
     const { stock, owner, db } = await setup()

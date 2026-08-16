@@ -78,7 +78,7 @@ export type DashboardSnapshot = {
   today: {
     bottlesDelivered: number
     customersServed: number
-    cashCollected: number
+    cashCollected: number | null
     missedScheduled: number
   }
   month: {
@@ -95,10 +95,10 @@ export type DashboardSnapshot = {
     pctChangeProfitAccrual: number | null
   }
   assets: {
-    totalOutstanding: number
-    ageingBuckets: Record<'current' | '1-30' | '31-60' | '60+', number>
+    totalOutstanding: number | null
+    ageingBuckets: Record<'current' | '1-30' | '31-60' | '60+', number | null>
     customersInCredit: number
-    totalCredit: number
+    totalCredit: number | null
     bottlesWithCustomers: number
     filledStockAtPlant: number
   }
@@ -118,7 +118,7 @@ export type DashboardSnapshot = {
       customerId: number
       code: string
       name: string
-      balance: number
+      balance: number | null
       daysOverdue: number
     }>
     noDeliveryDays: Array<{
@@ -138,7 +138,7 @@ export type DashboardSnapshot = {
       tripId: number
       tripDate: string
       employeeName: string | null
-      cashVariance: number
+      cashVariance: number | null
       bottleVariance: number
     }>
     backupStale: boolean
@@ -1446,14 +1446,14 @@ export function createReportService(
     })
   }
 
-  /** Operator-safe dashboard: strips profit/expense/salary figures. */
+  /** Role-safe dashboard: strips owner figures and masks viewer-sensitive money. */
   function dashboardForRole(
     role: 'owner' | 'operator' | 'viewer',
     asOf?: string,
   ): DashboardSnapshot {
     const snap = dashboard(asOf)
     if (role === 'owner') return snap
-    return {
+    const operatorSnapshot: DashboardSnapshot = {
       ...snap,
       month: {
         ...snap.month,
@@ -1484,6 +1484,37 @@ export function createReportService(
       // Keep receivables / bottles — operator may see operational money owed
       assets: {
         ...snap.assets,
+      },
+    }
+    if (role === 'operator') return operatorSnapshot
+
+    return {
+      ...operatorSnapshot,
+      today: {
+        ...operatorSnapshot.today,
+        cashCollected: null,
+      },
+      assets: {
+        ...operatorSnapshot.assets,
+        totalOutstanding: null,
+        ageingBuckets: {
+          current: null,
+          '1-30': null,
+          '31-60': null,
+          '60+': null,
+        },
+        totalCredit: null,
+      },
+      actions: {
+        ...operatorSnapshot.actions,
+        topOverdue: operatorSnapshot.actions.topOverdue.map((item) => ({
+          ...item,
+          balance: null,
+        })),
+        tripVariancesThisWeek: operatorSnapshot.actions.tripVariancesThisWeek.map((trip) => ({
+          ...trip,
+          cashVariance: null,
+        })),
       },
     }
   }
