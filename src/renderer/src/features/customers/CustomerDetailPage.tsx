@@ -12,6 +12,7 @@ import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { api } from '@renderer/lib/api'
+import { formatAppError } from '@renderer/lib/app-error-message'
 import { CUSTOMER_STATUS_LABEL, CUSTOMER_TYPE_LABEL } from '@renderer/lib/plain-labels'
 import { todayBusinessDate, firstOfNextMonth } from '@shared/date'
 import { AppError } from '@shared/errors'
@@ -36,6 +37,48 @@ export function CustomerDetailPage() {
   const c = q.data?.item
   if (!c) return <div className="p-8">Loading…</div>
   const customer = c
+  async function refreshCustomer() {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['customer', id] }),
+      qc.invalidateQueries({ queryKey: ['customers'] }),
+    ])
+  }
+  async function applyStatus(
+    status: 'active' | 'paused' | 'inactive',
+    reason?: string,
+  ): Promise<boolean> {
+    try {
+      await api.customers.setStatus({
+        id,
+        status,
+        reason,
+        ...(status === 'paused' ? { pausedFrom: todayBusinessDate() } : {}),
+      })
+      await refreshCustomer()
+      toast({
+        title:
+          status === 'inactive'
+            ? 'Customer deactivated'
+            : status === 'paused'
+              ? 'Customer paused'
+              : 'Customer activated',
+        variant: 'success',
+      })
+      return true
+    } catch (e) {
+      toast({
+        title:
+          status === 'inactive'
+            ? 'Could not deactivate customer'
+            : status === 'paused'
+              ? 'Could not pause customer'
+              : 'Could not activate customer',
+        description: formatAppError(e, 'Could not change customer status'),
+        variant: 'error',
+      })
+      return false
+    }
+  }
   async function deactivate() {
     const warnings: string[] = []
     if (customer.balance > 0) warnings.push(`outstanding balance`)
@@ -55,13 +98,30 @@ export function CustomerDetailPage() {
       toast({ title: 'A reason is required', variant: 'error' })
       return
     }
-    await api.customers.setStatus({
-      id,
-      status: 'inactive',
-      reason: reason.trim(),
+    await applyStatus('inactive', reason.trim())
+  }
+  async function activate() {
+    const ok = await confirmDialog({
+      title: customer.status === 'paused' ? 'Resume this customer?' : 'Activate this customer?',
+      description:
+        customer.status === 'paused'
+          ? 'They will show up again on the daily delivery list.'
+          : 'They will show up again in delivery pickers and billing runs.',
+      confirmLabel: customer.status === 'paused' ? 'Resume' : 'Activate',
     })
-    await qc.invalidateQueries({ queryKey: ['customer', id] })
-    toast({ title: 'Customer deactivated', variant: 'success' })
+    if (!ok) return
+    await applyStatus('active')
+  }
+  async function pause() {
+    const reason = await promptDialog({
+      title: 'Pause this customer?',
+      description:
+        'Paused customers stay on the books but are hidden from the daily delivery list.',
+      label: 'Reason',
+      confirmLabel: 'Pause',
+    })
+    if (reason == null) return
+    await applyStatus('paused', reason.trim())
   }
   return (
     <div>
@@ -82,9 +142,24 @@ export function CustomerDetailPage() {
             <Button variant="outline" onClick={() => setRateOpen(true)}>
               Change rate
             </Button>
-            <Button variant="destructive" onClick={() => void deactivate()}>
-              Deactivate
-            </Button>
+            {c.status === 'inactive' ? (
+              <Button onClick={() => void activate()}>Activate</Button>
+            ) : (
+              <>
+                {c.status === 'paused' ? (
+                  <Button variant="outline" onClick={() => void activate()}>
+                    Resume
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={() => void pause()}>
+                    Pause
+                  </Button>
+                )}
+                <Button variant="destructive" onClick={() => void deactivate()}>
+                  Deactivate
+                </Button>
+              </>
+            )}
           </>
         }
       />
@@ -134,7 +209,10 @@ export function CustomerDetailPage() {
                   {c.areaName ?? '—'} / {c.routeName ?? '—'}
                 </dd>
                 <dt className="text-muted-foreground">Status</dt>
-                <dd>{CUSTOMER_STATUS_LABEL[c.status] ?? c.status}</dd>
+                <dd>
+                  {CUSTOMER_STATUS_LABEL[c.status] ?? c.status}
+                  {c.statusReason ? ` — ${c.statusReason}` : ''}
+                </dd>
                 <dt className="text-muted-foreground">Schedule</dt>
                 <dd>
                   {c.schedule

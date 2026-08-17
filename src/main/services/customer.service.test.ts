@@ -283,4 +283,43 @@ describe('customerService', () => {
       db.select().from(customerSchedules).where(isNull(customerSchedules.deletedAt)).all(),
     ).toHaveLength(0)
   })
+
+  it('deactivates and reactivates a customer, clearing pause fields on activate', async () => {
+    const { customers, owner } = await setup()
+    const c = customers.create({ name: 'Status Cust', rate: Number(toPaisa(60)) }, owner.id)
+
+    expect(() => customers.setStatus({ id: c.id, status: 'inactive' }, owner.id)).toThrow(
+      /reason is required/i,
+    )
+
+    const paused = customers.setStatus(
+      {
+        id: c.id,
+        status: 'paused',
+        reason: 'Gone for a month',
+        pausedFrom: '2026-08-01',
+        pausedTo: '2026-08-31',
+      },
+      owner.id,
+    )
+    expect(paused.status).toBe('paused')
+    expect(paused.statusReason).toBe('Gone for a month')
+    expect(paused.pausedFrom).toBe('2026-08-01')
+    expect(paused.pausedTo).toBe('2026-08-31')
+
+    const inactive = customers.setStatus(
+      { id: c.id, status: 'inactive', reason: 'Left the area' },
+      owner.id,
+    )
+    expect(inactive.status).toBe('inactive')
+    expect(inactive.statusReason).toBe('Left the area')
+    expect(inactive.pausedFrom).toBeNull()
+    expect(inactive.pausedTo).toBeNull()
+
+    const active = customers.setStatus({ id: c.id, status: 'active' }, owner.id)
+    expect(active.status).toBe('active')
+    expect(active.statusReason).toBeNull()
+    expect(active.pausedFrom).toBeNull()
+    expect(active.pausedTo).toBeNull()
+  })
 })

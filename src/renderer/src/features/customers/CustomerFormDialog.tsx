@@ -113,7 +113,7 @@ export function CustomerFormDialog({
         code,
         customerType: form.customerType,
         joinedOn: form.joinedOn || null,
-        status: form.status,
+        ...(editing ? {} : { status: form.status }),
         phonePrimary: form.phonePrimary || null,
         phoneSecondary: form.phoneSecondary || null,
         whatsappNumber: form.whatsappNumber || null,
@@ -203,6 +203,12 @@ export function CustomerFormDialog({
             options={Object.entries(CUSTOMER_STATUS_LABEL).map(
               ([code, label]) => `${code}:${label}`,
             )}
+            disabled={editing}
+            hint={
+              editing
+                ? 'Use Activate, Resume, Pause, or Deactivate on the customer page.'
+                : undefined
+            }
           />
         </Section>
         <Section title="Contact">
@@ -435,18 +441,23 @@ function Select({
   value,
   onChange,
   options,
+  disabled,
+  hint,
 }: {
   label: string
   value: string | number | null | undefined
   onChange: (v: string) => void
   options: string[]
+  disabled?: boolean
+  hint?: string
 }) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
       <select
-        className="h-9 w-full rounded-md border px-3 text-sm"
+        className="h-9 w-full rounded-md border px-3 text-sm disabled:opacity-60"
         value={value ?? ''}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
       >
         <option value="">None</option>
@@ -459,6 +470,7 @@ function Select({
           )
         })}
       </select>
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   )
 }

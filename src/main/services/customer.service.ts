@@ -40,6 +40,46 @@ function emptyToNull(v: string | null | undefined): string | null {
   return t === '' ? null : t
 }
 
+/** Active customers never keep pause dates; inactive customers are not paused. */
+function statusFields(
+  status: CustomerDto['status'],
+  opts: {
+    reason?: string | null
+    pausedFrom?: string | null
+    pausedTo?: string | null
+    existing?: {
+      pausedFrom: string | null
+      pausedTo: string | null
+      statusReason: string | null
+    }
+  } = {},
+): {
+  status: CustomerDto['status']
+  pausedFrom: string | null
+  pausedTo: string | null
+  statusReason: string | null
+} {
+  const reason = opts.reason?.trim() ? opts.reason.trim() : null
+  if (status === 'active') {
+    return { status, pausedFrom: null, pausedTo: null, statusReason: reason }
+  }
+  if (status === 'inactive') {
+    return {
+      status,
+      pausedFrom: null,
+      pausedTo: null,
+      statusReason: reason ?? opts.existing?.statusReason ?? null,
+    }
+  }
+  return {
+    status,
+    pausedFrom:
+      opts.pausedFrom !== undefined ? opts.pausedFrom : (opts.existing?.pausedFrom ?? null),
+    pausedTo: opts.pausedTo !== undefined ? opts.pausedTo : (opts.existing?.pausedTo ?? null),
+    statusReason: reason ?? opts.existing?.statusReason ?? null,
+  }
+}
+
 function validatePhone(phone: string | null | undefined, field: string): void {
   if (!phone) return
   if (!/^[\d+\-\s()]{7,20}$/.test(phone)) {
@@ -792,13 +832,21 @@ export function createCustomerService(
           openingBottles: nextOpeningBottles,
           openingBalance: nextOpeningBalance,
           openingAsOf: nextOpeningAsOf,
-          status: input.status ?? existing.status,
-          pausedFrom: input.pausedFrom !== undefined ? input.pausedFrom : existing.pausedFrom,
-          pausedTo: input.pausedTo !== undefined ? input.pausedTo : existing.pausedTo,
-          statusReason:
-            input.statusReason !== undefined
-              ? emptyToNull(input.statusReason)
-              : existing.statusReason,
+          ...(input.status !== undefined
+            ? statusFields(input.status, {
+                reason: input.statusReason,
+                pausedFrom: input.pausedFrom,
+                pausedTo: input.pausedTo,
+                existing,
+              })
+            : {
+                pausedFrom: input.pausedFrom !== undefined ? input.pausedFrom : existing.pausedFrom,
+                pausedTo: input.pausedTo !== undefined ? input.pausedTo : existing.pausedTo,
+                statusReason:
+                  input.statusReason !== undefined
+                    ? emptyToNull(input.statusReason)
+                    : existing.statusReason,
+              }),
           joinedOn: input.joinedOn !== undefined ? input.joinedOn : existing.joinedOn,
           notes: input.notes !== undefined ? emptyToNull(input.notes) : existing.notes,
           updatedAt: nowIsoUtc(),
@@ -880,6 +928,13 @@ export function createCustomerService(
       throw new AppError('VALIDATION_FAILED', 'A reason is required when deactivating a customer')
     }
 
+    const next = statusFields(input.status, {
+      reason: input.reason,
+      pausedFrom: input.pausedFrom,
+      pausedTo: input.pausedTo,
+      existing,
+    })
+
     const bal = db
       .select()
       .from(customerBalances)
@@ -890,10 +945,7 @@ export function createCustomerService(
     db.transaction((tx) => {
       tx.update(customers)
         .set({
-          status: input.status,
-          statusReason: input.reason?.trim() ?? existing.statusReason,
-          pausedFrom: input.pausedFrom !== undefined ? input.pausedFrom : existing.pausedFrom,
-          pausedTo: input.pausedTo !== undefined ? input.pausedTo : existing.pausedTo,
+          ...next,
           updatedAt: nowIsoUtc(),
           updatedBy: userId ?? null,
         })
@@ -915,7 +967,7 @@ export function createCustomerService(
               : ''
           }`,
           before,
-          after: { status: input.status, reason: input.reason },
+          after: next,
         },
         tx,
       )
@@ -1148,7 +1200,7 @@ export function createCustomerService(
         const next = {
           areaId: input.areaId !== undefined ? input.areaId : existing.areaId,
           routeId: input.routeId !== undefined ? input.routeId : existing.routeId,
-          status: input.status ?? existing.status,
+          ...(input.status !== undefined ? statusFields(input.status, { existing }) : {}),
         }
         tx.update(customers)
           .set({
